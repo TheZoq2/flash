@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8"></meta>
+
+        <link rel=stylesheet type="text/css" href="css/reset.css"></style>
+        <link rel=stylesheet type="text/css" href="css/style.css"></style>
+
+        <script src="js/main.js"></script>
+    </head>
+    <body>
+        <div id=main>
+            <div id="content">
+                <img src="screenshot.png" alt="" id="img_display"/>
+            </div>
+
+            <div id="controls">
+                <h4>
+                    Tags:
+                </h4>
+                <form id="tag_form">
+                    <input type="text" id="tag_input" value="" placeholder="Tags..."/>
+                </form>
+
+                <!--The list where the current tags are displayed-->
+                <ul id="tag_list">
+                </ul>
+
+                <button id="button_prev">Prev</button>
+                <button id="button_next">Next</button>
+            </div>
+        </div>
+
+        <script>
+            main();
+        </script>
+    </body>
+</html>

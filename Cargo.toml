@@ -1,0 +1,14 @@
+[package]
+name = "webtest"
+version = "0.1.0"
+authors = ["TheZoq2 <frans.skarman@gmail.com>"]
+
+[dependencies]
+iron = "*"
+staticfile = "*"
+mount = "*"
+persistent = "*"
+urlencoded = "*"
+
+glob = "*"
+

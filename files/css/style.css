@@ -1,0 +1,47 @@
+h4
+{
+    font-size: 110%;
+
+    margin: 0.5em 0;
+}
+body
+{
+    font-family: Arial;
+    background-color: #1c1c1c;
+}
+#main
+{
+    display: flex;
+
+    color: #fff;
+}
+
+#controls
+{
+    float: left;
+    margin: 0px auto;
+    padding: 12px;
+    width: 320px;
+    height: 1080px;
+
+    background-color: #1f1f1f;
+}
+#controls input
+{
+    width: 94%;
+}
+
+#content
+{
+    float:left;
+    margin: 0 auto;
+    padding: 1%
+}
+
+#content img
+{
+    margin: 0px auto;
+
+    max-width: 100%;
+}
+
