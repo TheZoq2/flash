@@ -58,11 +58,11 @@ ListRequestType = {
 }
 function list_request(request_type)
 {
-    call_ajax("list?action=" + request_type, set_current_image);
+    call_ajax("list?action=" + request_type, update_current_display);
 }
 function request_first_img()
 {
-    //call_ajax("list?action=current", set_current_image);
+    //call_ajax("list?action=current", update_current_display);
     list_request(ListRequestType.CURRENT);
 }
 function request_next_img()
@@ -74,11 +74,29 @@ function request_prev_img()
     list_request(ListRequestType.PREV);
 }
 
-function set_current_image(src)
+function update_current_display(server_response)
 {
-    var img_element = document.getElementById("img_display");
+    var content_div = document.getElementById("content");
 
-    img_element.setAttribute("src", src);
+    //clear the old stuff
+    content_div.innerHTML = "";
+
+    var json_response = JSON.parse(server_response);
+
+    if(json_response.status == "ok")
+    {
+        //Create a new img element
+        var img_element = document.createElement("img");
+
+        img_element.setAttribute("src", json_response.file_path);
+        img_element.setAttribute("id", "img_display")
+
+        content_div.insertBefore(img_element, content_div.firstChild);
+    }
+    else
+    {
+        content_div.inner_HTML = "No more images";
+    }
 }
 
 function call_ajax(url, callback)

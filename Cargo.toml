@@ -11,4 +11,5 @@ persistent = "*"
 urlencoded = "*"
 
 glob = "*"
+rustc-serialize = "*"
 
