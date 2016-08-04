@@ -1,115 +1,112 @@
-var tag_list = [];
-
-var tag_input_name = "tag_input";
-
-
 function setup()
 {
-    var tag_input_form = document.getElementById("tag_form");
+	var tag_input_form = document.getElementById("tag_form");
 
-    tag_input_form.addEventListener("submit", on_tag_submit, true);
+	tag_input_form.addEventListener("submit", on_tag_submit, true);
 
-    //Clear the tag input box
-    var input_box = document.getElementById(tag_input_name);
-    input_box.value = "";
+	//Clear the tag input box
+	var input_box = document.getElementById(tag_input_id);
+	input_box.value = "";
 
-    //Set up handlers for the buttons
-    document.getElementById("button_next").addEventListener("click", request_next_img, false);
-    document.getElementById("button_prev").addEventListener("click", request_prev_img, false);
-    
-    request_first_img();
+	//Set up handlers for the buttons
+	document.getElementById("button_next").addEventListener("click", request_next_img, false);
+	document.getElementById("button_prev").addEventListener("click", request_prev_img, false);
+	document.getElementById("button_save").addEventListener("click", send_save_request, false);
+
+	request_first_img();
 }
 
 function main()
 {
-    setup();
-}
-
-
-function add_tag(tag) 
-{
-    tag_list.push(tag);
-
-    var tag_list_element = document.getElementById("tag_list");
-    
-    var new_element = document.createElement("li");
-    new_element.innerHTML = tag;
-
-    tag_list_element.insertBefore(new_element, tag_list_element.firstChild)
-}
-
-function on_tag_submit(e)
-{
-    //Don't submit the form which would reload the page
-    e.preventDefault();
-
-    //Find the text input box
-    var input_box = document.getElementById(tag_input_name);
-
-    add_tag(input_box.value);
-    //reset the box to add more tags
-    input_box.value = "";
+	setup();
 }
 
 ListRequestType = {
-    CURRENT: "current",
-    NEXT: "next",
-    PREV: "prev",
+	CURRENT: "current",
+	NEXT: "next",
+	PREV: "prev",
+	SAVE: "save",
 }
-function list_request(request_type)
+function list_request(request_type, additional_variables = [])
 {
-    call_ajax("list?action=" + request_type, update_current_display);
+	request_string = "list?action=" + request_type;
+	for(var i = 0; i < additional_variables.length; i++)
+	{
+		request_string += "&" + additional_variables[i][0] + "=" + additional_variables[i][1];
+	}
+	call_ajax(request_string, update_current_display);
+
+	console.log(request_string);
 }
 function request_first_img()
 {
-    //call_ajax("list?action=current", update_current_display);
-    list_request(ListRequestType.CURRENT);
+	//call_ajax("list?action=current", update_current_display);
+	list_request(ListRequestType.CURRENT);
 }
 function request_next_img()
 {
-    list_request(ListRequestType.NEXT);
+	list_request(ListRequestType.NEXT);
 }
 function request_prev_img()
 {
-    list_request(ListRequestType.PREV);
+	list_request(ListRequestType.PREV);
+}
+
+function send_save_request()
+{
+	//Generate json for the tag list
+	var json_array = JSON.stringify(tag_list);
+
+	var variables = [["tags", json_array]];
+	
+	//send the request off to the server
+	list_request(ListRequestType.SAVE, variables);
 }
 
 function update_current_display(server_response)
 {
-    var content_div = document.getElementById("content");
+	var content_div = document.getElementById("content");
 
-    //clear the old stuff
-    content_div.innerHTML = "";
+	//clear the old stuff
+	content_div.innerHTML = "";
 
-    var json_response = JSON.parse(server_response);
+	var json_response = JSON.parse(server_response);
 
-    if(json_response.status == "ok")
-    {
-        //Create a new img element
-        var img_element = document.createElement("img");
+	if(json_response.status == "ok")
+	{
+		//Create a new img element
+		var img_element = document.createElement("img");
 
-        img_element.setAttribute("src", json_response.file_path);
-        img_element.setAttribute("id", "img_display")
+		img_element.setAttribute("src", json_response.file_path);
+		img_element.setAttribute("id", "img_display")
 
-        content_div.insertBefore(img_element, content_div.firstChild);
-    }
-    else
-    {
-        content_div.inner_HTML = "No more images";
-    }
+		content_div.insertBefore(img_element, content_div.firstChild);
+
+		//Update the cache thing
+		if(json_response.next_file != "")
+		{
+			var cache_element = document.getElementById("img_cache");
+
+			cache_element.setAttribute("src", json_response.next_file);
+		}
+	}
+	else
+	{
+		content_div.inner_HTML = "No more images";
+	}
 }
 
 function call_ajax(url, callback)
 {
-    var xmlhttp = new XMLHttpRequest();
+	var xmlhttp = new XMLHttpRequest();
 
-    xmlhttp.onreadystatechange = function(){
-        if(xmlhttp.readyState == XMLHttpRequest.DONE && xmlhttp.status == 200)
-        {
-            callback(xmlhttp.responseText);
-        }
-    }
+	xmlhttp.onreadystatechange = function(){
+		if(xmlhttp.readyState == XMLHttpRequest.DONE && xmlhttp.status == 200)
+		{
+			callback(xmlhttp.responseText);
+		}
+	}
 
-    xmlhttp.open("GET", url, true);
-    xmlhttp.send();
+	xmlhttp.open("GET", url, true);
+	xmlhttp.send();
 }

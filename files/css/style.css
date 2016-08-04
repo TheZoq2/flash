@@ -30,6 +30,11 @@ body
 {
     width: 94%;
 }
+#tag_list 
+{
+    margin: 12px 0;
+}
+
 
 #content
 {
@@ -45,3 +50,47 @@ body
     max-width: 100%;
 }
 
+#img_cache
+{
+    width:0;
+    height:0;
+    overflow:none;
+}
+
+
+.tag_display
+{
+    height:2em;
+}
+.tag_display p
+{
+    float:left;
+}
+.remove_button
+{
+    width: 1.5em;
+    height: 1.5em;
+    border-radius: 0.2em;
+    background-color: #a33;
+
+    float:right;
+
+    display: inline-block;
+    /* Permalink - use to edit and share this gradient: 
+    http://colorzilla.com/gradient-editor/#a90329+0,8f0222+44,6d0019+100;Brown+Red+3D */
+    background: linear-gradient(to bottom,  #a90329 0%,#8f0222 44%,#6d0019 100%); 
+}
+.remove_button img
+{
+    margin: auto auto;
+    width: 1.5em;
+    height: 1.5em;
+}
+
+.remove_button:hover
+{
+    /* Permalink - use to edit and share this gradient: 
+    http://colorzilla.com/gradient-editor/#c90407+0,aa0303+44,6d0019+100,db0404+100 */
+    background: #c90407; /* Old browsers */
+    background: linear-gradient(to bottom,  #c90407 0%,#aa0303 44%,#6d0019 100%,#db0404 100%);     
+}
