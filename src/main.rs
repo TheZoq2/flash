@@ -26,7 +26,7 @@ use std::vec::Vec;
 
 /**
   Returns a list of all the files in a directory
- */
+  */
 fn get_files_in_dir(dir: String) -> Vec<PathBuf> 
 {
     let mut result = Vec::<PathBuf>::new();
@@ -58,7 +58,7 @@ fn main() {
     println!("Running server on port 3000");
 
     let mut mount = Mount::new();
-    
+
     mount.mount("/hello", hello_world);
     mount.mount("/list", file_list::file_list_request_handler);
     mount.mount("/", Static::new(Path::new("files/")));
