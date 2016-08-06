@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 extern crate iron;
 extern crate staticfile;
 extern crate persistent;
@@ -8,6 +9,8 @@ extern crate glob;
 extern crate rustc_serialize;
 
 mod file_list;
+mod file_database;
+mod settings;
 
 //use std::env::args;
 
@@ -22,7 +25,7 @@ use persistent::Write;
 
 use std::vec::Vec;
 
-
+use file_database::{FileDatabase, FileDatabaseContainer};
 
 /**
   Returns a list of all the files in a directory
@@ -53,6 +56,13 @@ fn hello_world(_: &mut Request) -> IronResult<Response>
 fn main() {
     let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
     let file_list = get_files_in_dir(target_dir.clone());
+
+    let settings = settings::Settings::get_defaults();
+
+    //Loading or creating the database
+    //let database = FileDatabase::load_from_json(&settings);
+    let db = FileDatabaseContainer::new(&settings);
+    db.save();
 
     //let mut chain = Chain::new(hello_world);
     println!("Running server on port 3000");

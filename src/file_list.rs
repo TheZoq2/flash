@@ -72,9 +72,20 @@ impl FileList
 
 impl Key for FileList { type Value = FileList; }
 
-fn get_GET_variable(request: &Request, name: String) -> Option<String>
+fn get_get_variable(request: &mut Request, name: String) -> Option<String>
 {
-    return Some("".to_string());
+    //return Some("".to_string());
+    match request.get_ref::<UrlEncodedQuery>()
+    {
+        Ok(hash_map) => {
+            match hash_map.get(&name)
+            {
+                Some(val) => Some(val.first().unwrap().clone()),
+                None => None
+            }
+        },
+        _ => None
+    }
 }
 
 /**
@@ -85,7 +96,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
     //Get the current file list
     let mutex = request.get::<Write<FileList>>().unwrap();
 
-    let action = match get_GET_variable(request, "action".to_string())
+    let action = match get_get_variable(request, "action".to_string())
     {
         Some(val) => val,
         None => {
