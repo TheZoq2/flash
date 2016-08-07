@@ -6,8 +6,14 @@ use rustc_serialize::json;
 use std::io::prelude::*;
 use std::io;
 use std::fs::{File, OpenOptions};
+use std::thread;
+use std::fs;
+
+use std::path::Path;
 
 use settings::Settings;
+
+use iron::typemap::Key;
 
 /**
   A reference to a file stored in the file database
@@ -33,9 +39,12 @@ impl FileEntry
     }
 }
 
+//TODO: Move to list of free ids for id reusage
 #[derive(RustcEncodable, RustcDecodable)]
 pub struct FileDatabase
 {
+    version: u32,
+
     next_id: usize,
 
     //Map from file IDs to actual files
@@ -51,6 +60,8 @@ impl FileDatabase
     {
         FileDatabase
         {
+            version:0,
+
             next_id: 0,
 
             files: HashMap::new(),
@@ -103,6 +114,7 @@ impl FileDatabase
 
         let file_entry = FileEntry::new(new_id, path, tags);
         self.files.insert(self.next_id, file_entry);
+
         self.next_id += 1;
     }
 
@@ -127,6 +139,14 @@ impl FileDatabase
 
         files
     }
+    
+    /**
+      Returns all files with a specific tag
+     */
+    pub fn get_files_with_tags(&self, tags: Vec<String>) -> Vec<FileEntry>
+    {
+        unimplemented!();
+    }
     /**
       Returns paths to all file objects that are part of a tag
      */
@@ -140,6 +160,11 @@ impl FileDatabase
 
         result
     }
+
+    pub fn get_next_id(&self) -> usize
+    {
+        self.next_id
+    }
 }
 
 /**
@@ -152,6 +177,8 @@ pub struct FileDatabaseContainer
     file_path: String,
     db_path: String,
 }
+
+impl Key for FileDatabaseContainer { type Value = FileDatabaseContainer; }
 
 impl FileDatabaseContainer
 {
@@ -169,14 +196,37 @@ impl FileDatabaseContainer
         }
     }
 
-    pub fn get_mut_db(&mut self) -> &mut FileDatabase
+    pub fn add_file_to_db(&mut self, path: String, tags: Vec<String>)
     {
-        &mut self.db
+        let id = self.db.get_next_id().clone();
+
+        let filename = {
+            let path_obj = Path::new(&path);
+
+            let file_extension = match path_obj.extension(){
+                Some(val) => ".".to_string() + val.to_str().unwrap(),
+                None => "".to_string()
+            };
+
+            id.to_string() + &file_extension
+        };
+        
+        let full_fileame = self.file_path.clone() + "/" + &filename;
+        thread::spawn(move || {
+            //Create a path object from the file path.
+            //println!("Saving file to: {}", full_fileame);
+
+            fs::copy(path, full_fileame)
+            //TODO: Generate thumbnails
+        });
+
+        //Save the file into the database
+        self.db.add_new_file(filename, tags);
     }
 
     pub fn save(&self) -> Result<(), io::Error>
     {
-        let mut file = match OpenOptions::new().write(true).create_new(true).open(&self.db_path){
+        let mut file = match OpenOptions::new().write(true).create(true).open(&self.db_path){
             Ok(file) => file,
             Err(e) => 
             {

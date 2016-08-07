@@ -5,7 +5,9 @@ use rustc_serialize::json;
 
 use iron::*;
 use iron::typemap::Key;
-use persistent::Write;
+use persistent::{Write};
+
+use file_database::FileDatabaseContainer;
 
 #[derive(Clone)]
 pub struct FileList
@@ -128,7 +130,7 @@ pub fn handle_save_request(request: &mut Request, file_list: &FileList)
         Ok(hash_map) => {
             match hash_map.get("tags")
             {
-                Some(val) => val,
+                Some(val) => val.first().unwrap().clone(), //The request contains a vec each occurence of the variable
                 None => {
                     println!("Failed to save, tag list not included in the string");
                     return;
@@ -138,7 +140,32 @@ pub fn handle_save_request(request: &mut Request, file_list: &FileList)
         Err(e) => {println!("Failed to get GET variable: {:?}", e); return;}
     };
 
-    let file_path = file_list.get_current_file();
+    let tags = match json::decode::<Vec<String>>(&tag_string){
+        Ok(result) => result,
+        Err(e) => {
+            println!("Failed to decode tag list. Error: {}", e);
+            return;
+        }
+    };
+
+    //Get the original filename from the File list. 
+    let original_filename = match file_list.get_current_file()
+    {
+        Some(name) => name.into_os_string().into_string().unwrap(),
+        None => {
+            println!("Failed to save file.Crrent file is None");
+            return;
+        }
+    };
+    //TODO: Copy the file to the propper destination and stuff
+
+    //Store the file in the database
+    let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
+    let mut db = mutex.lock().unwrap();
+
+    db.add_file_to_db(original_filename, tags);
+    db.save();
+
 }
 
 /**

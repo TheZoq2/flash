@@ -21,11 +21,11 @@ use std::path::{Path, PathBuf};
 
 use glob::glob;
 
-use persistent::Write;
+use persistent::{Write};
 
 use std::vec::Vec;
 
-use file_database::{FileDatabase, FileDatabaseContainer};
+use file_database::{FileDatabaseContainer};
 
 /**
   Returns a list of all the files in a directory
@@ -62,7 +62,6 @@ fn main() {
     //Loading or creating the database
     //let database = FileDatabase::load_from_json(&settings);
     let db = FileDatabaseContainer::new(&settings);
-    db.save();
 
     //let mut chain = Chain::new(hello_world);
     println!("Running server on port 3000");
@@ -76,6 +75,7 @@ fn main() {
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileList>::both(file_list::FileList::new(file_list)));
+    chain.link(Write::<file_database::FileDatabaseContainer>::both(db));
     //mount.mount("/", Static::new(Path::new("files/index.html")));
     Iron::new(chain).http("localhost:3000").unwrap();
 }
