@@ -13,3 +13,4 @@ urlencoded = "*"
 glob = "*"
 rustc-serialize = "*"
 
+image = "*"

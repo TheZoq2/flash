@@ -1,3 +1,5 @@
+extern crate image;
+
 use std::vec::Vec;
 use std::collections::HashMap;
 
@@ -14,6 +16,8 @@ use std::path::Path;
 use settings::Settings;
 
 use iron::typemap::Key;
+
+use image::GenericImage;
 
 /**
   A reference to a file stored in the file database
@@ -109,7 +113,18 @@ impl FileDatabase
                 self.tags.insert(tag.clone(), vec!());
             }
 
-            self.tags.get_mut(tag).unwrap().push(new_id);
+            //self.tags.get_mut(tag).unwrap().push(new_id);
+            //Insert the new image using the binary search function.
+            let vec = self.tags.get_mut(tag).unwrap();
+            match vec.binary_search(&new_id){
+                Ok(_) => {
+                    //This shouldn't happen
+                    println!("ID {} is already part of tag {}. This is an error in FileDatabase::add_new_file", new_id, tag);
+                },
+                //If binary search returns Err, it means it didn't find an element and it returns
+                //the index where the element would be
+                Err(new_index) => {vec.insert(new_index, new_id)}
+            }
         }
 
         let file_entry = FileEntry::new(new_id, path, tags);
@@ -141,11 +156,48 @@ impl FileDatabase
     }
     
     /**
-      Returns all files with a specific tag
+      Returns all files that have all the tags in the list
      */
     pub fn get_files_with_tags(&self, tags: Vec<String>) -> Vec<FileEntry>
     {
-        unimplemented!();
+        let mut tags = tags.clone();
+
+        if tags.len() == 0
+        {
+            return vec!();
+        }
+
+        let possible_files = self.get_files_with_tag(tags.pop().unwrap());
+
+        let mut result = vec!();
+
+        for file in possible_files
+        {
+            let mut has_all_tags = true;
+            for tag in &tags
+            {
+                let mut has_tag = false;
+                for file_tag in &file.tags
+                {
+                    if tag == file_tag
+                    {
+                        has_tag = true;
+                    }
+                }
+
+                if !has_tag
+                {
+                    has_all_tags = false
+                }
+            }
+
+            if has_all_tags
+            {
+                result.push(file);
+            }
+        }
+
+        result
     }
     /**
       Returns paths to all file objects that are part of a tag
@@ -242,6 +294,18 @@ impl FileDatabaseContainer
 #[cfg(test)]
 mod db_tests
 {
+    fn get_file_paths(files: Vec<FileEntry>) -> Vec<String>
+    {
+        let mut result = vec!();
+
+        for file in files
+        {
+            result.push(file.path.clone());
+        }
+
+        result
+    }
+
     use file_database::*;
     #[test]
     fn add_test()
@@ -264,5 +328,33 @@ mod db_tests
 
         //Ensure that tags that don't exist don't return anything
         assert!(fdb.get_file_paths_with_tag("unused_tag".to_string()).is_empty());
+    }
+
+    #[test]
+    fn multi_tag_test()
+    {
+        let mut fdb = FileDatabase::new();
+
+        fdb.add_new_file("test1".to_string(), vec!("common_tag".to_string(), "only1_tag".to_string()));
+        fdb.add_new_file("test2".to_string(), vec!("common_tag".to_string(), "only2_3_tag".to_string()));
+        fdb.add_new_file("test3".to_string(), vec!("common_tag".to_string(), "only2_3_tag".to_string()));
+
+        let common_2_3 = fdb.get_files_with_tags(vec!("common_tag".to_string(), "only2_3_tag".to_string()));
+        assert!(get_file_paths(common_2_3.clone()).contains(&"test1".to_string()) == false);
+        assert!(get_file_paths(common_2_3.clone()).contains(&"test2".to_string()));
+        assert!(get_file_paths(common_2_3.clone()).contains(&"test3".to_string()));
+
+        let common_1 = fdb.get_files_with_tags(vec!("common_tag".to_string()));
+        assert!(get_file_paths(common_1.clone()).contains(&"test1".to_string()));
+        assert!(get_file_paths(common_1.clone()).contains(&"test2".to_string()));
+        assert!(get_file_paths(common_1.clone()).contains(&"test3".to_string()));
+
+        let only_1 = fdb.get_files_with_tags(vec!("only1_tag".to_string()));
+        assert!(get_file_paths(only_1.clone()).contains(&"test1".to_string()));
+        assert!(get_file_paths(only_1.clone()).contains(&"test2".to_string()) == false);
+        assert!(get_file_paths(only_1.clone()).contains(&"test3".to_string()) == false);
+
+        let none = fdb.get_files_with_tags(vec!());
+        assert!(none.len() == 0);
     }
 }

@@ -4,6 +4,7 @@ extern crate staticfile;
 extern crate persistent;
 extern crate mount;
 extern crate urlencoded;
+extern crate image;
 
 extern crate glob;
 extern crate rustc_serialize;
