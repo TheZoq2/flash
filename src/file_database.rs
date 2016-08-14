@@ -17,8 +17,6 @@ use settings::Settings;
 
 use iron::typemap::Key;
 
-use image::GenericImage;
-
 /**
   A reference to a file stored in the file database
  */

@@ -64,9 +64,6 @@ fn main() {
     //let database = FileDatabase::load_from_json(&settings);
     let db = FileDatabaseContainer::new(&settings);
 
-    //let mut chain = Chain::new(hello_world);
-    println!("Running server on port 3000");
-
     let mut mount = Mount::new();
 
     mount.mount("/hello", hello_world);
@@ -78,6 +75,10 @@ fn main() {
     chain.link(Write::<file_list::FileList>::both(file_list::FileList::new(file_list)));
     chain.link(Write::<file_database::FileDatabaseContainer>::both(db));
     //mount.mount("/", Static::new(Path::new("files/index.html")));
-    Iron::new(chain).http("localhost:3000").unwrap();
+    match Iron::new(chain).http("localhost:3000")
+    {
+        Ok(_) => println!("Server running on port 3000"),
+        Err(e) => println!("Failed to start iron: {}", e)
+    }
 }
 
