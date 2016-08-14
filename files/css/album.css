@@ -1,3 +1,8 @@
+.album_main
+{
+	display:flex;
+	flex-flow: row wrap;
+}
 #tag_search_form
 {
 	width: 100%;
