@@ -95,8 +95,6 @@ fn get_get_variable(request: &mut Request, name: String) -> Option<String>
 */
 pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 {
-    //Get the current file list
-    let mutex = request.get::<Write<FileList>>().unwrap();
 
     let action = match get_get_variable(request, "action".to_string())
     {
@@ -107,6 +105,8 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
         }
     };
 
+    //Get the current file list
+    let mutex = request.get::<Write<FileList>>().unwrap();
     let mut file_list = mutex.lock().unwrap();
     match action.as_str()
     {
@@ -124,7 +124,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 
 pub fn handle_save_request(request: &mut Request, file_list: &FileList)
 {
-    //Get the important from the request.
+    //Get the important information from the request.
     let tag_string = match request.get_ref::<UrlEncodedQuery>()
     {
         Ok(hash_map) => {
@@ -165,7 +165,6 @@ pub fn handle_save_request(request: &mut Request, file_list: &FileList)
 
     db.add_file_to_db(original_filename, tags);
     db.save();
-
 }
 
 /**

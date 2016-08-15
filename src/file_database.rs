@@ -202,13 +202,11 @@ impl FileDatabase
      */
     pub fn get_file_paths_with_tag(&self, tag: String) -> Vec<String>
     {
-        let mut result = Vec::<String>::new();
-        for file in &self.get_files_with_tag(tag)
-        {
-            result.push(file.path.clone());
-        }
-
-        result
+        get_file_paths_from_files(self.get_files_with_tag(tag))
+    }
+    pub fn get_file_paths_with_tags(&self, tag: Vec<String>) -> Vec<String>
+    {
+        get_file_paths_from_files(self.get_files_with_tags(tag))
     }
 
     pub fn get_next_id(&self) -> usize
@@ -274,6 +272,11 @@ impl FileDatabaseContainer
         self.db.add_new_file(filename, tags);
     }
 
+    pub fn get_db(&self) -> &FileDatabase
+    {
+        &self.db
+    }
+
     pub fn save(&self) -> Result<(), io::Error>
     {
         let mut file = match OpenOptions::new().write(true).create(true).open(&self.db_path){
@@ -289,21 +292,21 @@ impl FileDatabaseContainer
     }
 }
 
+pub fn get_file_paths_from_files(files: Vec<FileEntry>) -> Vec<String>
+{
+    let mut result = vec!();
+
+    for file in files
+    {
+        result.push(file.path.clone());
+    }
+
+    result
+}
+
 #[cfg(test)]
 mod db_tests
 {
-    fn get_file_paths(files: Vec<FileEntry>) -> Vec<String>
-    {
-        let mut result = vec!();
-
-        for file in files
-        {
-            result.push(file.path.clone());
-        }
-
-        result
-    }
-
     use file_database::*;
     #[test]
     fn add_test()
@@ -338,19 +341,19 @@ mod db_tests
         fdb.add_new_file("test3".to_string(), vec!("common_tag".to_string(), "only2_3_tag".to_string()));
 
         let common_2_3 = fdb.get_files_with_tags(vec!("common_tag".to_string(), "only2_3_tag".to_string()));
-        assert!(get_file_paths(common_2_3.clone()).contains(&"test1".to_string()) == false);
-        assert!(get_file_paths(common_2_3.clone()).contains(&"test2".to_string()));
-        assert!(get_file_paths(common_2_3.clone()).contains(&"test3".to_string()));
+        assert!(get_file_paths_from_files(common_2_3.clone()).contains(&"test1".to_string()) == false);
+        assert!(get_file_paths_from_files(common_2_3.clone()).contains(&"test2".to_string()));
+        assert!(get_file_paths_from_files(common_2_3.clone()).contains(&"test3".to_string()));
 
         let common_1 = fdb.get_files_with_tags(vec!("common_tag".to_string()));
-        assert!(get_file_paths(common_1.clone()).contains(&"test1".to_string()));
-        assert!(get_file_paths(common_1.clone()).contains(&"test2".to_string()));
-        assert!(get_file_paths(common_1.clone()).contains(&"test3".to_string()));
+        assert!(get_file_paths_from_files(common_1.clone()).contains(&"test1".to_string()));
+        assert!(get_file_paths_from_files(common_1.clone()).contains(&"test2".to_string()));
+        assert!(get_file_paths_from_files(common_1.clone()).contains(&"test3".to_string()));
 
         let only_1 = fdb.get_files_with_tags(vec!("only1_tag".to_string()));
-        assert!(get_file_paths(only_1.clone()).contains(&"test1".to_string()));
-        assert!(get_file_paths(only_1.clone()).contains(&"test2".to_string()) == false);
-        assert!(get_file_paths(only_1.clone()).contains(&"test3".to_string()) == false);
+        assert!(get_file_paths_from_files(only_1.clone()).contains(&"test1".to_string()));
+        assert!(get_file_paths_from_files(only_1.clone()).contains(&"test2".to_string()) == false);
+        assert!(get_file_paths_from_files(only_1.clone()).contains(&"test3".to_string()) == false);
 
         let none = fdb.get_files_with_tags(vec!());
         assert!(none.len() == 0);

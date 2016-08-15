@@ -12,6 +12,7 @@ extern crate rustc_serialize;
 mod file_list;
 mod file_database;
 mod settings;
+mod album_handler;
 
 //use std::env::args;
 
@@ -70,6 +71,7 @@ fn main() {
     mount.mount("/list", file_list::file_list_request_handler);
     mount.mount("/", Static::new(Path::new("files/")));
     mount.mount("/file", Static::new(Path::new(&target_dir)));
+    mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())));
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileList>::both(file_list::FileList::new(file_list)));
