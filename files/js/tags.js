@@ -65,6 +65,15 @@ function tag_manager(tag_list_element, tag_input_element)
 		//Add the new list element to the tag list
 		insert_element(li_element, this.tag_list_element);
 	}
+
+	this.on_tag_submit = function(e)
+	{
+		e.prevent_default();
+		
+		add_tag(this.tag_input_element.value);
+		this.tag_input_element.value = "";
+
+	}
 }
 //Clears the tag list display and adds all current tags
 function update_tag_dislpay()

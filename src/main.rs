@@ -55,6 +55,7 @@ fn hello_world(_: &mut Request) -> IronResult<Response>
     Ok(Response::with((status::Ok, "hello, world")))
 }
 
+
 fn main() {
     let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
     let file_list = get_files_in_dir(target_dir.clone());
