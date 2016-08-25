@@ -17,6 +17,8 @@ use settings::Settings;
 
 use iron::typemap::Key;
 
+use image::{GenericImage};
+
 /**
   A reference to a file stored in the file database
  */
@@ -248,15 +250,9 @@ impl FileDatabaseContainer
     {
         let id = self.db.get_next_id().clone();
 
+        //Figgure out the file extension
         let filename = {
-            let path_obj = Path::new(&path);
-
-            let file_extension = match path_obj.extension(){
-                Some(val) => ".".to_string() + val.to_str().unwrap(),
-                None => "".to_string()
-            };
-
-            id.to_string() + &file_extension
+            id.to_string() + &get_file_extention(&path)
         };
         
         let full_fileame = self.file_path.clone() + "/" + &filename;
@@ -304,6 +300,88 @@ pub fn get_file_paths_from_files(files: Vec<FileEntry>) -> Vec<String>
     result
 }
 
+
+pub struct ThumbnailInfo
+{
+    pub path: String,
+    pub dimensions: (u32, u32),
+}
+/**
+  Generates a thumbnail for the given source file and stores that file in a unique location which
+  is returned by the function. 
+
+  If the thumbnail generation fails for any reason it will return an error
+
+  The result_max_size variable is the biggest allowed size on either axis.
+  An image in portrait mode will be at most max_size tall and an image in 
+  landscape mode will be at most max_width tall
+ */
+pub fn generate_thumbnail(source_path: String, max_size: u32) -> Result<ThumbnailInfo, image::ImageError>
+{
+    let path_obj = &Path::new(&source_path);
+    //For now, we assume everything is an image
+
+    //Load the image file
+    let img = match image::open(path_obj)
+    {
+        Ok(val) => val,
+        Err(e) => {
+            return Err(e);
+        }
+    };
+
+    let thumb_data = generate_thumbnail_from_generic_image(img, max_size);
+
+    //Generate a filename for the image
+    let file_extention = get_file_extention(&source_path);
+    let filename = path_obj.file_stem().unwrap().to_str().unwrap();
+    let full_path = String::from("/tmp") + filename + &file_extention;
+
+    Ok(ThumbnailInfo
+    {
+        path: full_path,
+        dimensions: thumb_data.dimensions(),
+    })
+}
+
+
+fn get_file_extention(path: &String) -> String
+{
+    let path_obj = Path::new(&path);
+
+    match path_obj.extension(){
+        Some(val) => ".".to_string() + val.to_str().unwrap(),
+        None => "".to_string()
+    }
+}
+
+/**
+  Takes an image::GenericImage and generates a thumbnail image from that
+ */
+fn generate_thumbnail_from_generic_image(src: image::DynamicImage, max_size: u32) -> image::DynamicImage
+{
+    //Calculating the dimensions of the new image
+    let src_dimensions = src.dimensions();
+    let aspect_ratio = src_dimensions.0 as f32 / src_dimensions.1 as f32;
+
+    //If the image is in landscape mode
+    let new_dimensions = if aspect_ratio > 1.
+    {
+        (max_size, (max_size as f32 / aspect_ratio) as u32)
+    }
+    else
+    {
+        ((max_size as f32 * aspect_ratio) as u32, max_size)
+    };
+
+    //Resize the image
+    //image::imageops::resize(&src, new_dimensions.0, new_dimensions.1, image::FilterType::Triangle)
+    src.resize_exact(new_dimensions.0, new_dimensions.1, image::FilterType::Triangle)
+}
+
+/*
+   Tests
+ */
 #[cfg(test)]
 mod db_tests
 {
@@ -357,5 +435,41 @@ mod db_tests
 
         let none = fdb.get_files_with_tags(vec!());
         assert!(none.len() == 0);
+    }
+}
+
+#[cfg(test)]
+mod thumbnail_tests
+{
+    extern crate image;
+    use image::{GenericImage};
+
+    #[test]
+    fn thumbnail_test()
+    {
+        let img = image::DynamicImage::new_rgba8(500, 500);
+
+        let thumbnail = super::generate_thumbnail_from_generic_image(img, 300);
+
+        assert!(thumbnail.dimensions() == (300, 300));
+    }
+    #[test]
+    fn portrait_test()
+    {
+        let img = image::DynamicImage::new_rgba8(500, 250);
+
+        let thumbnail = super::generate_thumbnail_from_generic_image(img, 300);
+
+        assert!(thumbnail.dimensions() == (300, 150));
+    }
+    
+    #[test]
+    fn landscape_test()
+    {
+        let img = image::DynamicImage::new_rgba8(250, 500);
+
+        let thumbnail = super::generate_thumbnail_from_generic_image(img, 300);
+
+        assert!(thumbnail.dimensions() == (150, 300));
     }
 }
