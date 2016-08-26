@@ -7,7 +7,9 @@ use iron::*;
 use iron::typemap::Key;
 use persistent::{Write};
 
-use file_database::FileDatabaseContainer;
+use file_database::{FileDatabaseContainer, generate_thumbnail};
+
+use std::sync::Mutex;
 
 #[derive(Clone)]
 pub struct FileList
@@ -95,7 +97,6 @@ fn get_get_variable(request: &mut Request, name: String) -> Option<String>
 */
 pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 {
-
     let action = match get_get_variable(request, "action".to_string())
     {
         Some(val) => val,
@@ -107,22 +108,22 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 
     //Get the current file list
     let mutex = request.get::<Write<FileList>>().unwrap();
-    let mut file_list = mutex.lock().unwrap();
     match action.as_str()
     {
         "current" => {}
-        "next" => file_list.select_next_file(),
-        "prev" => file_list.select_prev_file(),
-        "save" => handle_save_request(request, &file_list),
+        "next" => mutex.lock().unwrap().select_next_file(),
+        "prev" => mutex.lock().unwrap().select_prev_file(),
+        "save" => handle_save_request(request, &mutex),
         other => println!("Unknown list action: {}", other),
     }
 
+    let file_list = mutex.lock().unwrap();
     let response = generate_file_list_response(file_list.get_current_file(), file_list.peak_next_file());
 
     Ok(Response::with((status::Ok, format!("{}", response))))
 }
 
-pub fn handle_save_request(request: &mut Request, file_list: &FileList)
+pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileList>)
 {
     //Get the important information from the request.
     let tag_string = match request.get_ref::<UrlEncodedQuery>()
@@ -149,21 +150,36 @@ pub fn handle_save_request(request: &mut Request, file_list: &FileList)
     };
 
     //Get the original filename from the File list. 
-    let original_filename = match file_list.get_current_file()
-    {
-        Some(name) => name.into_os_string().into_string().unwrap(),
-        None => {
-            println!("Failed to save file.Crrent file is None");
+    let original_filename = {
+        let file_list = file_list_mutex.lock().unwrap();
+
+        match file_list.get_current_file()
+        {
+            Some(name) => name.into_os_string().into_string().unwrap(),
+            None => {
+                println!("Failed to save file.Crrent file is None");
+                return;
+            }
+        }
+    };
+
+    //Generate the thumbnail
+    let thumbnail_filename = match generate_thumbnail(&original_filename, 300) {
+        Ok(val) => val,
+        Err(e) => {
+            //TODO: The user needs to be alerted when this happens
+            //TODO: Also, test this
+            println!("Failed to generate thumbnail: {}", e); 
             return;
         }
     };
-    //TODO: Copy the file to the propper destination and stuff
+
 
     //Store the file in the database
     let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
     let mut db = mutex.lock().unwrap();
 
-    db.add_file_to_db(original_filename, tags);
+    db.add_file_to_db(&original_filename, &thumbnail_filename.path, &tags);
     db.save();
 }
 

@@ -30,18 +30,26 @@ pub struct FileEntry
     //The path to the actual file
     pub path: String,
     pub tags: Vec<String>,
+
+    pub thumbnail_path: String,
 }
 impl FileEntry
 {
-    pub fn new(id: usize, path: String, tags: Vec<String>) -> FileEntry
+    pub fn new(id: usize, path: String, tags: Vec<String>, thumbnail_path: String) -> FileEntry
     {
         FileEntry {
             id: id,
             path: path,
             tags: tags,
+
+            thumbnail_path: thumbnail_path,
         }
     }
 }
+
+
+
+
 
 //TODO: Move to list of free ids for id reusage
 #[derive(RustcEncodable, RustcDecodable)]
@@ -101,12 +109,12 @@ impl FileDatabase
       file is added to the tags which it should be part of. If some of those tags don't 
       exist yet, then they are added
      */
-    pub fn add_new_file(&mut self, path: String, tags: Vec<String>)
+    pub fn add_new_file(&mut self, path: &String, tags: &Vec<String>, thumbnail_path: &String)
     {
         let new_id = self.next_id;
 
         //Add all the tags to the map
-        for tag in &tags
+        for tag in tags
         {
             if self.tags.get(tag) == None
             {
@@ -127,7 +135,7 @@ impl FileDatabase
             }
         }
 
-        let file_entry = FileEntry::new(new_id, path, tags);
+        let file_entry = FileEntry::new(new_id, path.clone(), tags.clone(), thumbnail_path.clone());
         self.files.insert(self.next_id, file_entry);
 
         self.next_id += 1;
@@ -217,6 +225,11 @@ impl FileDatabase
     }
 }
 
+
+
+
+
+
 /**
   Keeps track of the current file database and handles loading and saving of it
  */
@@ -246,26 +259,30 @@ impl FileDatabaseContainer
         }
     }
 
-    pub fn add_file_to_db(&mut self, path: String, tags: Vec<String>)
+    pub fn add_file_to_db(&mut self, path: &String, thumbnail_path: &String, tags: &Vec<String>)
     {
         let id = self.db.get_next_id().clone();
 
-        //Figgure out the file extension
-        let filename = {
-            id.to_string() + &get_file_extention(&path)
-        };
+        //Generating the new filenames
+        let filename = id.to_string() + &get_file_extention(&path);
+        let thumb_name = id.to_string() + &get_file_extention(&thumbnail_path);
         
+        //Generating the full path to the images
         let full_fileame = self.file_path.clone() + "/" + &filename;
-        thread::spawn(move || {
-            //Create a path object from the file path.
-            //println!("Saving file to: {}", full_fileame);
+        let full_thumb_filename = self.file_path.clone() + "/" + &thumb_name;
 
-            fs::copy(path, full_fileame)
-            //TODO: Generate thumbnails
+        //Create some clones of the references so we can use them in a separate thread without
+        //issues
+        let temp_path = path.clone();
+        let temp_thumb_path = thumbnail_path.clone();
+        //Spawn a thread to copy the files
+        thread::spawn(move || {
+            fs::copy(temp_path, full_fileame);
+            fs::copy(temp_thumb_path, full_thumb_filename);
         });
 
         //Save the file into the database
-        self.db.add_new_file(filename, tags);
+        self.db.add_new_file(&filename, tags, thumbnail_path);
     }
 
     pub fn get_db(&self) -> &FileDatabase
@@ -301,6 +318,10 @@ pub fn get_file_paths_from_files(files: Vec<FileEntry>) -> Vec<String>
 }
 
 
+
+
+
+
 pub struct ThumbnailInfo
 {
     pub path: String,
@@ -316,7 +337,7 @@ pub struct ThumbnailInfo
   An image in portrait mode will be at most max_size tall and an image in 
   landscape mode will be at most max_width tall
  */
-pub fn generate_thumbnail(source_path: String, max_size: u32) -> Result<ThumbnailInfo, image::ImageError>
+pub fn generate_thumbnail(source_path: &String, max_size: u32) -> Result<ThumbnailInfo, image::ImageError>
 {
     let path_obj = &Path::new(&source_path);
     //For now, we assume everything is an image
