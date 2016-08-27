@@ -7,9 +7,12 @@ use iron::*;
 use iron::typemap::Key;
 use persistent::{Write};
 
-use file_database::{FileDatabaseContainer, generate_thumbnail};
+use file_database::{FileDatabaseContainer};
+use file_util::{generate_thumbnail, get_file_extention, get_semi_unique_identifier};
 
 use std::sync::Mutex;
+
+use std::fs;
 
 #[derive(Clone)]
 pub struct FileList
@@ -162,9 +165,25 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
             }
         }
     };
+    let file_extention = get_file_extention(&original_filename);
+
+    //Get the folder where we want to place the stored file
+    let destination_dir = {
+        let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
+        let db = mutex.lock().unwrap();
+
+        db.get_saved_file_path()
+    };
+
+    let file_identifier = get_semi_unique_identifier();
+
+
+
+    let thumbnail_path_without_extention = destination_dir.clone() + "/thumb_" + &file_identifier;
+
 
     //Generate the thumbnail
-    let thumbnail_filename = match generate_thumbnail(&original_filename, 300) {
+    let thumbnail_filename = match generate_thumbnail(&original_filename, &thumbnail_path_without_extention, 300) {
         Ok(val) => val,
         Err(e) => {
             //TODO: The user needs to be alerted when this happens
@@ -174,12 +193,26 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
         }
     };
 
+    //Copy the file to the destination
+    //Get the name and path of the new file
+    let new_filename = destination_dir + "/" + &file_identifier + &file_extention;
+
+    match fs::copy(original_filename, &new_filename)
+    {
+        Ok(_) => {},
+        Err(e) => {
+            println!("Failed to copy file to destination: {}", e);
+            //TODO: Probably remove the thumbnail here
+            return
+        }
+    };
+
 
     //Store the file in the database
     let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
     let mut db = mutex.lock().unwrap();
 
-    db.add_file_to_db(&original_filename, &thumbnail_filename.path, &tags);
+    db.add_file_to_db(&new_filename, &thumbnail_filename.path, &tags);
     db.save();
 }
 

@@ -13,6 +13,7 @@ mod file_list;
 mod file_database;
 mod settings;
 mod album_handler;
+mod file_util;
 
 //use std::env::args;
 

@@ -10,6 +10,7 @@ mount = "*"
 persistent = "*"
 urlencoded = "*"
 
+rand = "*"
 glob = "*"
 rustc-serialize = "*"
 
