@@ -13,6 +13,7 @@ use file_util::{generate_thumbnail, get_file_extention, get_semi_unique_identifi
 use std::sync::Mutex;
 
 use std::fs;
+use std::path::Path;
 
 #[derive(Clone)]
 pub struct FileList
@@ -183,7 +184,7 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
 
 
     //Generate the thumbnail
-    let thumbnail_filename = match generate_thumbnail(&original_filename, &thumbnail_path_without_extention, 300) {
+    let thumbnail_file_path = match generate_thumbnail(&original_filename, &thumbnail_path_without_extention, 300) {
         Ok(val) => val,
         Err(e) => {
             //TODO: The user needs to be alerted when this happens
@@ -195,9 +196,9 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
 
     //Copy the file to the destination
     //Get the name and path of the new file
-    let new_filename = destination_dir + "/" + &file_identifier + &file_extention;
+    let new_file_path = destination_dir + "/" + &file_identifier + &file_extention;
 
-    match fs::copy(original_filename, &new_filename)
+    match fs::copy(original_filename, &new_file_path)
     {
         Ok(_) => {},
         Err(e) => {
@@ -206,13 +207,17 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
             return
         }
     };
+    
+
+    let thumbnail_filename = Path::new(&thumbnail_file_path.path).file_name().unwrap().to_str().unwrap();
+    let new_filename = Path::new(&new_file_path).file_name().unwrap().to_str().unwrap();
 
 
     //Store the file in the database
     let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
     let mut db = mutex.lock().unwrap();
 
-    db.add_file_to_db(&new_filename, &thumbnail_filename.path, &tags);
+    db.add_file_to_db(&new_filename.to_string(), &thumbnail_filename.to_string(), &tags);
     db.save();
 }
 
