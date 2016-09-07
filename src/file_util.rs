@@ -1,5 +1,6 @@
 extern crate image;
 extern crate rand;
+extern crate immeta;
 
 use image::{GenericImage};
 
@@ -102,6 +103,16 @@ pub fn get_semi_unique_identifier() -> String
 
 
 
+fn get_image_dimensions(filename: String) -> (u32, u32)
+{
+    let metadata = immeta::load_from_file(Path::new(&filename)).unwrap();
+
+    let dims = metadata.dimensions();
+    (dims.width, dims.height)
+}
+
+
+
 #[cfg(test)]
 mod thumbnail_tests
 {
@@ -135,5 +146,16 @@ mod thumbnail_tests
         let thumbnail = super::generate_thumbnail_from_generic_image(img, 300);
 
         assert!(thumbnail.dimensions() == (150, 300));
+    }
+
+    #[test]
+    fn metadata_test()
+    {
+        let dim = super::get_image_dimensions("test/media/512x512.png".to_string());
+
+        assert_eq!(dim, (512, 512));
+
+        let dim = super::get_image_dimensions("test/media/4000x4000.png".to_string());
+        assert_eq!(dim, (4000, 4000));
     }
 }

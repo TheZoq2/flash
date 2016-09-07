@@ -312,8 +312,14 @@ mod db_tests
     {
         let mut fdb = FileDatabase::new();
 
-        fdb.add_new_file("test1".to_string(), vec!("tag1".to_string(), "tag2".to_string()));
-        fdb.add_new_file("test2".to_string(), vec!("tag1".to_string(), "tag3".to_string()));
+        fdb.add_new_file(
+            &"test1".to_string(), 
+            &"thumb1".to_string(),
+            &vec!("tag1".to_string(), "tag2".to_string()));
+        fdb.add_new_file(
+            &"test2".to_string(),
+            &"thumb2".to_string(),
+            &vec!("tag1".to_string(), "tag3".to_string()));
 
         //Ensure both files are found when searching for tag1
         assert!(fdb.get_file_paths_with_tag("tag1".to_string()).contains(&"test1".to_string()));
@@ -335,9 +341,9 @@ mod db_tests
     {
         let mut fdb = FileDatabase::new();
 
-        fdb.add_new_file("test1".to_string(), vec!("common_tag".to_string(), "only1_tag".to_string()));
-        fdb.add_new_file("test2".to_string(), vec!("common_tag".to_string(), "only2_3_tag".to_string()));
-        fdb.add_new_file("test3".to_string(), vec!("common_tag".to_string(), "only2_3_tag".to_string()));
+        fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("common_tag".to_string(), "only1_tag".to_string()));
+        fdb.add_new_file(&"test2".to_string(), &"thumb2".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()));
+        fdb.add_new_file(&"test3".to_string(), &"thumb3".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()));
 
         let common_2_3 = fdb.get_files_with_tags(vec!("common_tag".to_string(), "only2_3_tag".to_string()));
         assert!(get_file_paths_from_files(common_2_3.clone()).contains(&"test1".to_string()) == false);
