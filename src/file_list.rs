@@ -8,7 +8,12 @@ use iron::typemap::Key;
 use persistent::{Write};
 
 use file_database::{FileDatabaseContainer};
-use file_util::{generate_thumbnail, get_file_extention, get_semi_unique_identifier};
+use file_util::{
+    generate_thumbnail,
+    get_file_extention,
+    get_semi_unique_identifier,
+    get_image_dimensions
+};
 
 use std::sync::Mutex;
 
@@ -238,6 +243,8 @@ fn generate_file_list_response(path: Option<PathBuf>, next_path: Option<PathBuf>
 
         next_file: String,
         next_type: String,
+
+        dimensions: (u32, u32)
     }
 
     let mut response = Response{
@@ -247,6 +254,8 @@ fn generate_file_list_response(path: Option<PathBuf>, next_path: Option<PathBuf>
 
         next_file: "".to_string(),
         next_type: "image".to_string(),
+
+        dimensions: (0, 0),
     };
 
     match path
@@ -257,6 +266,7 @@ fn generate_file_list_response(path: Option<PathBuf>, next_path: Option<PathBuf>
             response.status = "ok".to_string();
             response.file_path = "file/".to_string() + &filename;
             response.file_type = "image".to_string();
+            response.dimensions = get_image_dimensions(&path);
         },
         None => response.status = "no_file".to_string(),
     }

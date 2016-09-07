@@ -4,7 +4,7 @@ extern crate immeta;
 
 use image::{GenericImage};
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use std::fs::File;
 
@@ -103,7 +103,7 @@ pub fn get_semi_unique_identifier() -> String
 
 
 
-fn get_image_dimensions(filename: String) -> (u32, u32)
+pub fn get_image_dimensions(filename: &PathBuf) -> (u32, u32)
 {
     let metadata = immeta::load_from_file(Path::new(&filename)).unwrap();
 
