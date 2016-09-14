@@ -227,6 +227,28 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
 }
 
 /**
+  Checks a list of tags for unallowed characters and converts it into a storeable format,
+  which at the moment is just removal of capital letters
+ */
+pub fn sanitize_tag_names(tag_list: &Vec<String>) -> Result<Vec<String>, String>
+{
+    let mut new_list = vec!();
+
+    for tag in tag_list
+    {
+        if tag == ""
+        {
+            return Err(String::from("Tags can not be empty"));
+        }
+
+        new_list.push(tag.to_lowercase());
+    }
+
+    Ok(new_list)
+}
+
+
+/**
     Generates a json string as a reply to a request for a file
  */
 fn generate_file_list_response(path: Option<PathBuf>, next_path: Option<PathBuf>) -> String
@@ -282,4 +304,34 @@ fn generate_file_list_response(path: Option<PathBuf>, next_path: Option<PathBuf>
     }
 
     json::encode(&response).unwrap()
+}
+
+
+#[cfg(test)]
+mod file_handler_tests
+{
+    use super::*;
+
+    #[test]
+    fn sanitize_tests()
+    {
+        {
+            let vec = vec!(
+                String::from("abCde"), 
+                String::from("ABC"), 
+                String::from("abc"));
+
+            let expected = vec!(
+                String::from("abcde"),
+                String::from("abc"),
+                String::from("abc")
+                );
+
+            assert_eq!(sanitize_tag_names(&vec), Ok(expected));
+        }
+
+        {
+            assert_eq!(sanitize_tag_names(&vec!(String::from(""))), Err(String::from("Tags can not be empty")));
+        }
+    }
 }

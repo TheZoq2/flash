@@ -113,11 +113,13 @@ pub fn get_image_dimensions(filename: &PathBuf) -> (u32, u32)
 
 
 
+
 #[cfg(test)]
 mod thumbnail_tests
 {
     extern crate image;
     use image::{GenericImage};
+    use std::path::{PathBuf};
 
     #[test]
     fn thumbnail_test()
@@ -151,11 +153,11 @@ mod thumbnail_tests
     #[test]
     fn metadata_test()
     {
-        let dim = super::get_image_dimensions("test/media/512x512.png".to_string());
+        let dim = super::get_image_dimensions(&PathBuf::from("test/media/512x512.png"));
 
         assert_eq!(dim, (512, 512));
 
-        let dim = super::get_image_dimensions("test/media/4000x4000.png".to_string());
+        let dim = super::get_image_dimensions(&PathBuf::from("test/media/4000x4000.png".to_string()));
         assert_eq!(dim, (4000, 4000));
     }
 }
