@@ -219,6 +219,11 @@ impl FileDatabase
     {
         self.next_id
     }
+
+    pub fn get_file_with_id(&self, id: usize) -> Option<&FileEntry>
+    {
+        self.files.get(&id)
+    }
 }
 
 

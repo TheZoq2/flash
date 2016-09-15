@@ -151,7 +151,7 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
     };
 
     let tags = match json::decode::<Vec<String>>(&tag_string){
-        Ok(result) => result,
+        Ok(result) => sanitize_tag_names(&result).unwrap(),
         Err(e) => {
             println!("Failed to decode tag list. Error: {}", e);
             return;
