@@ -37,8 +37,14 @@ pub struct FileList
 
 impl FileList
 {
-    pub fn new(files: Vec<File>) -> FileList 
+    pub fn new(file_paths: Vec<PathBuf>) -> FileList 
     {
+        let mut files = vec!();
+        for path in file_paths
+        {
+            files.push(File{path:path, saved_index: None})
+        }
+        
         FileList {
             files: files,
             current_index: 0,
@@ -135,7 +141,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
     }
 
     let file_list = mutex.lock().unwrap();
-    let response = generate_file_list_response(file_list.get_current_file(), file_list.peak_next_file());
+    let response = generate_file_list_response(file_list.get_current_file());
 
     Ok(Response::with((status::Ok, format!("{}", response))))
 }
@@ -172,7 +178,7 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
 
         match file_list.get_current_file()
         {
-            Some(name) => name.into_os_string().into_string().unwrap(),
+            Some(file) => file.path.into_os_string().into_string().unwrap(),
             None => {
                 println!("Failed to save file.Crrent file is None");
                 return;
@@ -259,7 +265,7 @@ pub fn sanitize_tag_names(tag_list: &Vec<String>) -> Result<Vec<String>, String>
 /**
     Generates a json string as a reply to a request for a file
  */
-fn generate_file_list_response(path: Option<PathBuf>, next_path: Option<PathBuf>) -> String
+fn generate_file_list_response(file: Option<File>) -> String
 {
     /**
       Helper class for generating json data about the current files
@@ -271,9 +277,6 @@ fn generate_file_list_response(path: Option<PathBuf>, next_path: Option<PathBuf>
         file_path: String,
         file_type: String,
 
-        next_file: String,
-        next_type: String,
-
         dimensions: (u32, u32)
     }
 
@@ -282,15 +285,13 @@ fn generate_file_list_response(path: Option<PathBuf>, next_path: Option<PathBuf>
         file_path: "".to_string(),
         file_type: "image".to_string(),
 
-        next_file: "".to_string(),
-        next_type: "image".to_string(),
-
         dimensions: (0, 0),
     };
 
-    match path
+    match file
     {
-        Some(path) => {
+        Some(file_obj) => {
+            let path = file_obj.path;
             let filename = path.file_name().unwrap().to_str().unwrap();
             
             response.status = "ok".to_string();
@@ -299,16 +300,6 @@ fn generate_file_list_response(path: Option<PathBuf>, next_path: Option<PathBuf>
             response.dimensions = get_image_dimensions(&path);
         },
         None => response.status = "no_file".to_string(),
-    }
-
-    match next_path
-    {
-        Some(path) =>
-        {
-            let filename = path.file_name().unwrap().to_str().unwrap();
-            response.next_file = "file/".to_string() + &filename;
-        },
-        None => {}
     }
 
     json::encode(&response).unwrap()

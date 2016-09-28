@@ -51,11 +51,6 @@ fn get_files_in_dir(dir: String) -> Vec<PathBuf>
     result
 }
 
-fn hello_world(_: &mut Request) -> IronResult<Response>
-{
-    Ok(Response::with((status::Ok, "hello, world")))
-}
-
 
 fn main() {
     let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
@@ -70,12 +65,12 @@ fn main() {
 
     let mut mount = Mount::new();
 
-    mount.mount("/hello", hello_world);
     mount.mount("/list", file_list::file_list_request_handler);
     mount.mount("/", Static::new(Path::new("files/")));
     mount.mount("/file", Static::new(Path::new(&target_dir)));
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())));
     mount.mount("/album", album_handler::handle_album_list_request);
+    mount.mount("/album/file", album_handler::handle_album_image_request);
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileList>::both(file_list::FileList::new(file_list)));

@@ -81,5 +81,11 @@ pub fn handle_album_image_request(request: &mut Request) -> IronResult<Response>
             return Ok(Response::with(iron::status::NotFound));//This is a lie. TODO: Update response
         }
     };
-    unimplemented!();
+
+    let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
+    let db_container = mutex.lock().unwrap();
+
+    let file = db_container.get_db().get_file_with_id(id);
+
+    Ok(Response::with((status::Ok, format!("{}", json::encode(&file).unwrap()))))
 }
