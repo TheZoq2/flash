@@ -6,6 +6,7 @@ use rustc_serialize::json;
 use iron::*;
 use iron::typemap::Key;
 use persistent::{Write};
+use std::option::Option;
 
 use file_database::{FileDatabaseContainer};
 use file_util::{
@@ -21,15 +22,22 @@ use std::fs;
 use std::path::Path;
 
 #[derive(Clone)]
+pub struct File
+{
+    pub path: PathBuf,
+    pub saved_index: Option<usize>
+}
+
+#[derive(Clone)]
 pub struct FileList
 {
-    files: Vec<PathBuf>,
+    files: Vec<File>,
     current_index: usize,
 }
 
 impl FileList
 {
-    pub fn new(files: Vec<PathBuf>) -> FileList 
+    pub fn new(files: Vec<File>) -> FileList 
     {
         FileList {
             files: files,
@@ -37,7 +45,7 @@ impl FileList
         }
     }
 
-    pub fn get_current_file(&self) -> Option<PathBuf>
+    pub fn get_current_file(&self) -> Option<File>
     {
         if self.current_index < self.files.len()
         {
@@ -51,7 +59,7 @@ impl FileList
       Returns the file after the current file without incrementing the current index. This can
       be used to preload the images in order to prevent the small lag when loading new images.
      */
-    pub fn peak_next_file(&self) -> Option<PathBuf> 
+    pub fn peak_next_file(&self) -> Option<File> 
     {
         if self.current_index + 1 < self.files.len()
         {
