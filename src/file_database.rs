@@ -105,8 +105,10 @@ impl FileDatabase
       Adds a new file entry to the "database". It is given a new unique ID and the
       file is added to the tags which it should be part of. If some of those tags don't 
       exist yet, then they are added
+
+      Returns the ID of the added image
      */
-    pub fn add_new_file(&mut self, filename: &String, thumb_name: &String, tags: &Vec<String>)
+    pub fn add_new_file(&mut self, filename: &String, thumb_name: &String, tags: &Vec<String>) -> usize
     {
         let new_id = self.next_id;
 
@@ -135,6 +137,8 @@ impl FileDatabase
         self.files.insert(self.next_id, file_entry);
 
         self.next_id += 1;
+
+        self.next_id - 1
     }
 
     /**
@@ -262,10 +266,10 @@ impl FileDatabaseContainer
 
     /**
      */
-    pub fn add_file_to_db(&mut self, filename: &String, thumb_name: &String, tags: &Vec<String>)
+    pub fn add_file_to_db(&mut self, filename: &String, thumb_name: &String, tags: &Vec<String>) -> usize
     {
         //Save the file into the database
-        self.db.add_new_file(&filename, thumb_name, tags);
+        self.db.add_new_file(&filename, thumb_name, tags)
     }
 
     pub fn get_db(&self) -> &FileDatabase
@@ -317,14 +321,17 @@ mod db_tests
     {
         let mut fdb = FileDatabase::new();
 
-        fdb.add_new_file(
+        let id1 = fdb.add_new_file(
             &"test1".to_string(), 
             &"thumb1".to_string(),
             &vec!("tag1".to_string(), "tag2".to_string()));
-        fdb.add_new_file(
+        let id2 = fdb.add_new_file(
             &"test2".to_string(),
             &"thumb2".to_string(),
             &vec!("tag1".to_string(), "tag3".to_string()));
+
+        assert_eq!(id1, 0);
+        assert_eq!(id2, 1);
 
         //Ensure both files are found when searching for tag1
         assert!(fdb.get_file_paths_with_tag("tag1".to_string()).contains(&"test1".to_string()));

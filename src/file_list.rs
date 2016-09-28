@@ -25,7 +25,7 @@ use std::path::Path;
 pub struct File
 {
     pub path: PathBuf,
-    pub saved_index: Option<usize>
+    pub saved_id: Option<usize>
 }
 
 #[derive(Clone)]
@@ -42,7 +42,7 @@ impl FileList
         let mut files = vec!();
         for path in file_paths
         {
-            files.push(File{path:path, saved_index: None})
+            files.push(File{path:path, saved_id: None})
         }
         
         FileList {
@@ -93,6 +93,14 @@ impl FileList
         if self.current_index > 1
         {
             self.current_index -= 1;
+        }
+    }
+
+    pub fn mark_current_file_as_saved(&mut self, db_id: usize)
+    {
+        if self.current_index < self.files.len()
+        {
+            self.files[self.current_index].saved_id = Some(db_id);
         }
     }
 }
@@ -232,12 +240,21 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
     let new_filename = Path::new(&new_file_path).file_name().unwrap().to_str().unwrap();
 
 
+    let saved_id;
     //Store the file in the database
-    let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
-    let mut db = mutex.lock().unwrap();
+    {
+        let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
+        let mut db = mutex.lock().unwrap();
 
-    db.add_file_to_db(&new_filename.to_string(), &thumbnail_filename.to_string(), &tags);
-    db.save();
+        saved_id = db.add_file_to_db(&new_filename.to_string(), &thumbnail_filename.to_string(), &tags);
+        db.save();
+    }
+
+    //Remember that the current image has been saved
+    {
+        let mut file_list = file_list_mutex.lock().unwrap();
+        file_list.mark_current_file_as_saved(saved_id);
+    }
 }
 
 /**
@@ -298,6 +315,12 @@ fn generate_file_list_response(file: Option<File>) -> String
             response.file_path = "file/".to_string() + &filename;
             response.file_type = "image".to_string();
             response.dimensions = get_image_dimensions(&path);
+
+            match file_obj.saved_id
+            {
+                Some(id) => println!("File has already been saved with ID: {}", id),
+                None => {}
+            }
         },
         None => response.status = "no_file".to_string(),
     }
