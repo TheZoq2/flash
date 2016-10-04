@@ -8,13 +8,14 @@ use std::path::{Path, PathBuf};
 
 use std::fs::File;
 
+use std::thread;
+
 
 
 
 pub struct ThumbnailInfo
 {
     pub path: String,
-    pub dimensions: (u32, u32),
 }
 /**
   Generates a thumbnail for the given source file and stores that file in a unique location which
@@ -26,35 +27,64 @@ pub struct ThumbnailInfo
   An image in portrait mode will be at most max_size tall and an image in 
   landscape mode will be at most max_width tall
  */
-pub fn generate_thumbnail(source_path: &String, destination_path_without_extention: &String, max_size: u32)
-            -> Result<ThumbnailInfo, image::ImageError>
+//pub fn old_generate_thumbnail(source_path: &String, destination_path_without_extention: &String, max_size: u32)
+//            -> Result<ThumbnailInfo, image::ImageError>
+//{
+//    let path_obj = &Path::new(&source_path);
+//    //For now, we assume everything is an image
+//
+//    //Load the image file
+//    let img = match image::open(path_obj)
+//    {
+//        Ok(val) => val,
+//        Err(e) => {
+//            return Err(e);
+//        }
+//    };
+//
+//    let thumb_data = generate_thumbnail_from_generic_image(img, max_size);
+//
+//    //Generate a filename for the image
+//    let file_extention = get_file_extention(&source_path);
+//    let full_path = destination_path_without_extention.clone() + &file_extention;
+//
+//    //save the thumbnail
+//    let ref mut fout = File::create(&Path::new(&full_path)).unwrap();
+//    thumb_data.save(fout, image::PNG).unwrap();
+//
+//    Ok(ThumbnailInfo
+//    {
+//        path: full_path,
+//        dimensions: thumb_data.dimensions(),
+//    })
+//}
+
+pub fn generate_thumbnail(source_path: &String, destination_path_without_extention: &String, max_size: u32) -> Result<ThumbnailInfo, image::ImageError>
 {
-    let path_obj = &Path::new(&source_path);
-    //For now, we assume everything is an image
-
-    //Load the image file
-    let img = match image::open(path_obj)
-    {
-        Ok(val) => val,
-        Err(e) => {
-            return Err(e);
-        }
-    };
-
-    let thumb_data = generate_thumbnail_from_generic_image(img, max_size);
-
-    //Generate a filename for the image
+    //Generating the filenames
     let file_extention = get_file_extention(&source_path);
     let full_path = destination_path_without_extention.clone() + &file_extention;
 
-    //save the thumbnail
-    let ref mut fout = File::create(&Path::new(&full_path)).unwrap();
-    thumb_data.save(fout, image::PNG).unwrap();
+    let full_path_clone = full_path.clone();
+    let source_path_clone = source_path.clone();
+    thread::spawn(move || {
+        let path_obj = Path::new(&source_path_clone);
+
+        let img = match image::open(path_obj)
+        {
+            Ok(val) => val,
+            Err(_) => return
+        };
+
+        let thumb_data = generate_thumbnail_from_generic_image(img, max_size);
+        
+        let ref mut fout = File::create(&Path::new(&full_path_clone)).unwrap();
+        thumb_data.save(fout, image::PNG).unwrap();
+    });
 
     Ok(ThumbnailInfo
     {
-        path: full_path,
-        dimensions: thumb_data.dimensions(),
+        path:full_path
     })
 }
 

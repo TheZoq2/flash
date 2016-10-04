@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use urlencoded::UrlEncodedQuery;
 use rustc_serialize::json;
 
+use std::thread;
 use iron::*;
 use iron::typemap::Key;
 use persistent::{Write};
@@ -225,16 +226,18 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
     //Get the name and path of the new file
     let new_file_path = destination_dir + "/" + &file_identifier + &file_extention;
 
-    match fs::copy(original_filename, &new_file_path)
-    {
-        Ok(_) => {},
-        Err(e) => {
-            println!("Failed to copy file to destination: {}", e);
-            //TODO: Probably remove the thumbnail here
-            return
-        }
-    };
-    
+    let file_path_clone = new_file_path.clone();
+    thread::spawn(move ||{
+        match fs::copy(original_filename, &file_path_clone)
+        {
+            Ok(_) => {},
+            Err(e) => {
+                println!("Failed to copy file to destination: {}", e);
+                //TODO: Probably remove the thumbnail here
+                return
+            }
+        };
+    });
 
     let thumbnail_filename = Path::new(&thumbnail_file_path.path).file_name().unwrap().to_str().unwrap();
     let new_filename = Path::new(&new_file_path).file_name().unwrap().to_str().unwrap();

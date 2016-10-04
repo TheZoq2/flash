@@ -31,6 +31,15 @@ use std::vec::Vec;
 use file_database::{FileDatabaseContainer};
 
 /**
+    Process for saving an image:
+
+    Reserve an ID in the database and store the tags of the image in it.
+
+    Start a worker thread that generates the data that takes a lot of time and stores
+    that data in the database 
+ */
+
+/**
   Returns a list of all the files in a directory
   */
 fn get_files_in_dir(dir: String) -> Vec<PathBuf> 
@@ -53,8 +62,8 @@ fn get_files_in_dir(dir: String) -> Vec<PathBuf>
 
 
 fn main() {
-    let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
-    //let target_dir = "/home/frans/Pictures/imgtest".to_string();
+    //let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
+    let target_dir = "/home/frans/Pictures/imgtest".to_string();
     let file_list = get_files_in_dir(target_dir.clone());
 
     let settings = settings::Settings::get_defaults();
