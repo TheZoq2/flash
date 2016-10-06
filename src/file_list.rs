@@ -9,7 +9,7 @@ use iron::typemap::Key;
 use persistent::{Write};
 use std::option::Option;
 
-use file_database::{FileDatabaseContainer};
+use file_database::{FileDatabaseContainer, FileDatabase};
 use file_util::{
     generate_thumbnail,
     get_file_extention,
@@ -21,6 +21,8 @@ use std::sync::Mutex;
 
 use std::fs;
 use std::path::Path;
+
+use std::ops::Deref;
 
 #[derive(Clone)]
 pub struct File
@@ -149,38 +151,23 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
         other => println!("Unknown list action: {}", other),
     }
 
-    let file_list = mutex.lock().unwrap();
-    let response = generate_file_list_response(file_list.get_current_file());
+    let filename = {
+        let file_list = mutex.lock().unwrap();
+        file_list.get_current_file()
+    };
+
+    let response = {
+        let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
+        let db = mutex.lock().unwrap();
+        generate_file_list_response(filename, &db.deref().get_db())
+    };
 
     Ok(Response::with((status::Ok, format!("{}", response))))
+
 }
 
 pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileList>)
 {
-    //Get the important information from the request.
-    let tag_string = match request.get_ref::<UrlEncodedQuery>()
-    {
-        Ok(hash_map) => {
-            match hash_map.get("tags")
-            {
-                Some(val) => val.first().unwrap().clone(), //The request contains a vec each occurence of the variable
-                None => {
-                    println!("Failed to save, tag list not included in the string");
-                    return;
-                }
-            }
-        },
-        Err(e) => {println!("Failed to get GET variable: {:?}", e); return;}
-    };
-
-    let tags = match json::decode::<Vec<String>>(&tag_string){
-        Ok(result) => sanitize_tag_names(&result).unwrap(),
-        Err(e) => {
-            println!("Failed to decode tag list. Error: {}", e);
-            return;
-        }
-    };
-
     //Get the original filename from the File list. 
     let original_filename = {
         let file_list = file_list_mutex.lock().unwrap();
@@ -206,7 +193,7 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
 
     let file_identifier = get_semi_unique_identifier();
 
-
+    let tags = get_tags_from_request(request).unwrap();
 
     let thumbnail_path_without_extention = destination_dir.clone() + "/thumb_" + &file_identifier;
 
@@ -260,6 +247,35 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
     }
 }
 
+fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, String>
+{
+    //Get the important information from the request.
+    let tag_string = match request.get_ref::<UrlEncodedQuery>()
+    {
+        Ok(hash_map) => {
+            match hash_map.get("tags")
+            {
+                Some(val) => val.first().unwrap().clone(), //The request contains a vec each occurence of the variable
+                None => {
+                    return Err(String::from("Failed to decode tag list. 'tags' variable not
+                                        in GET ilist"));
+                }
+            }
+        },
+        Err(e) => {
+            return Err(String::from(format!("Failed to get GET variable: {:?}", e)));
+        }
+    };
+
+    match json::decode::<Vec<String>>(&tag_string){
+        Ok(result) => Ok(sanitize_tag_names(&result).unwrap()),
+        Err(e) => {
+            println!("Failed to decode tag list. Error: {}", e);
+            return Err(format!("{}", e));
+        }
+    }
+}
+
 /**
   Checks a list of tags for unallowed characters and converts it into a storeable format,
   which at the moment is just removal of capital letters
@@ -285,7 +301,7 @@ pub fn sanitize_tag_names(tag_list: &Vec<String>) -> Result<Vec<String>, String>
 /**
     Generates a json string as a reply to a request for a file
  */
-fn generate_file_list_response(file: Option<File>) -> String
+fn generate_file_list_response(file: Option<File>, db: &FileDatabase) -> String
 {
     /**
       Helper class for generating json data about the current files
@@ -297,7 +313,10 @@ fn generate_file_list_response(file: Option<File>) -> String
         file_path: String,
         file_type: String,
 
-        dimensions: (u32, u32)
+        dimensions: (u32, u32),
+
+        tags: Vec<String>,
+        old_id: Option<usize>
     }
 
     let mut response = Response{
@@ -306,6 +325,9 @@ fn generate_file_list_response(file: Option<File>) -> String
         file_type: "image".to_string(),
 
         dimensions: (0, 0),
+        
+        tags: vec!(),
+        old_id: None
     };
 
     match file
@@ -321,7 +343,11 @@ fn generate_file_list_response(file: Option<File>) -> String
 
             match file_obj.saved_id
             {
-                Some(id) => println!("File has already been saved with ID: {}", id),
+                Some(id) => {
+                    //Fetch the data about the image in the database
+                    response.tags = db.get_file_with_id(id).unwrap().tags.clone();
+                    response.old_id = Some(id);
+                },
                 None => {}
             }
         },

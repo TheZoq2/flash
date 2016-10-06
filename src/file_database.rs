@@ -162,6 +162,16 @@ impl FileDatabase
 
         files
     }
+
+    pub fn get_file_by_id(&self, id: usize) -> Option<FileEntry>
+    {
+        match self.files.get(&id){
+            Some(file) => {
+                Some(file.clone())
+            },
+            None => None
+        }
+    }
     
     /**
       Returns all files that have all the tags in the list
