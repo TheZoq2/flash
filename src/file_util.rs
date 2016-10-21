@@ -7,6 +7,8 @@ use image::{GenericImage};
 use std::path::{Path, PathBuf};
 
 use std::fs::File;
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use std::thread;
 
@@ -111,6 +113,36 @@ pub fn get_image_dimensions(filename: &PathBuf) -> (u32, u32)
 }
 
 
+pub fn system_time_as_unix_timestamp(time: SystemTime) -> u64
+{
+    let duration = time.duration_since(UNIX_EPOCH).unwrap();
+
+    duration.as_secs()
+}
+
+/**
+    Returns the unix timestamp of an image. 
+    
+    For now, this is the timestamp of the file
+    in the file system because there is no good library for reading EXIF data.
+    
+    If the file doesn't exist, an error is printed and SystemTime::now() is returned
+*/
+pub fn get_image_timestamp(filename: &PathBuf) -> u64
+{
+    let metadata = match fs::metadata(&filename)
+    {
+        Ok(val) => val,
+        Err(e) => {
+            println!("Failed to load image timestamp for file {:?}. {:?}", filename, e);
+            return system_time_as_unix_timestamp(SystemTime::now());
+        }
+    };
+
+    let timestamp = metadata.modified().unwrap();
+
+    return system_time_as_unix_timestamp(timestamp)
+}
 
 
 #[cfg(test)]

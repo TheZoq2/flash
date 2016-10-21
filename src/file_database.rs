@@ -28,16 +28,20 @@ pub struct FileEntry
     pub path: String,
     pub tags: Vec<String>,
 
+    pub timestamp: u64,
+
     pub thumbnail_path: String,
 }
 impl FileEntry
 {
-    pub fn new(id: usize, path: String, tags: Vec<String>, thumbnail_path: String) -> FileEntry
+    pub fn new(id: usize, path: String, tags: Vec<String>, thumbnail_path: String, timestamp: u64) -> FileEntry
     {
         FileEntry {
             id: id,
             path: path,
             tags: tags,
+
+            timestamp: timestamp,
 
             thumbnail_path: thumbnail_path,
         }
