@@ -27,37 +27,6 @@ pub struct ThumbnailInfo
   An image in portrait mode will be at most max_size tall and an image in 
   landscape mode will be at most max_width tall
  */
-//pub fn old_generate_thumbnail(source_path: &String, destination_path_without_extention: &String, max_size: u32)
-//            -> Result<ThumbnailInfo, image::ImageError>
-//{
-//    let path_obj = &Path::new(&source_path);
-//    //For now, we assume everything is an image
-//
-//    //Load the image file
-//    let img = match image::open(path_obj)
-//    {
-//        Ok(val) => val,
-//        Err(e) => {
-//            return Err(e);
-//        }
-//    };
-//
-//    let thumb_data = generate_thumbnail_from_generic_image(img, max_size);
-//
-//    //Generate a filename for the image
-//    let file_extention = get_file_extention(&source_path);
-//    let full_path = destination_path_without_extention.clone() + &file_extention;
-//
-//    //save the thumbnail
-//    let ref mut fout = File::create(&Path::new(&full_path)).unwrap();
-//    thumb_data.save(fout, image::PNG).unwrap();
-//
-//    Ok(ThumbnailInfo
-//    {
-//        path: full_path,
-//        dimensions: thumb_data.dimensions(),
-//    })
-//}
 
 pub fn generate_thumbnail(source_path: &String, destination_path_without_extention: &String, max_size: u32) -> Result<ThumbnailInfo, image::ImageError>
 {

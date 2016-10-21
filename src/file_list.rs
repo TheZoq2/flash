@@ -163,7 +163,6 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
     };
 
     Ok(Response::with((status::Ok, format!("{}", response))))
-
 }
 
 pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileList>)
