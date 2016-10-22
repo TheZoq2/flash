@@ -15,7 +15,6 @@ use settings::Settings;
 
 use iron::typemap::Key;
 
-use std::collections::BTreeMap;
 //use std::collections::Bound::{Included};
 
 
@@ -42,6 +41,8 @@ pub struct FileEntry
     pub timestamp: u64,
 
     pub thumbnail_path: String,
+
+    pub additional_data: HashMap<String, String>,
 }
 impl FileEntry
 {
@@ -55,6 +56,8 @@ impl FileEntry
             timestamp: timestamp,
 
             thumbnail_path: thumbnail_path,
+
+            additional_data: HashMap::new(),
         }
     }
 }
@@ -76,8 +79,6 @@ pub struct FileDatabase
 
     //Map from tags to file ids
     tags: HashMap<String, Vec<usize>>,
-
-    timestamps: BTreeMap<u64, Vec<usize>>
 }
 
 impl FileDatabase
@@ -92,8 +93,6 @@ impl FileDatabase
 
             files: HashMap::new(),
             tags: HashMap::new(),
-
-            timestamps: BTreeMap::new(),
         }
     }
     pub fn load_from_json(storage_path: String) -> FileDatabase
@@ -297,10 +296,11 @@ impl FileDatabaseContainer
 
     /**
      */
-    pub fn add_file_to_db(&mut self, filename: &String, thumb_name: &String, tags: &Vec<String>) -> usize
+    pub fn add_file_to_db(&mut self, filename: &String, thumb_name: &String, tags: &Vec<String>, 
+                            timestamp: u64) -> usize
     {
         //Save the file into the database
-        self.db.add_new_file(&filename, thumb_name, tags, 0)
+        self.db.add_new_file(&filename, thumb_name, tags, timestamp)
     }
 
     pub fn get_db(&self) -> &FileDatabase
@@ -421,8 +421,6 @@ mod db_tests
             fdb.add_new_file(&String::from("5"), &String::from("5"), &vec!(), 50),
             fdb.add_new_file(&String::from("6"), &String::from("6"), &vec!(), 200)
         );
-
-        
     }
 }
 

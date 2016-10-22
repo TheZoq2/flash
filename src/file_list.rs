@@ -14,7 +14,8 @@ use file_util::{
     generate_thumbnail,
     get_file_extention,
     get_semi_unique_identifier,
-    get_image_dimensions
+    get_image_dimensions,
+    get_file_timestamp,
 };
 
 use std::sync::Mutex;
@@ -213,8 +214,9 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
     let new_file_path = destination_dir + "/" + &file_identifier + &file_extention;
 
     let file_path_clone = new_file_path.clone();
+    let original_filename_clone = original_filename.clone();
     thread::spawn(move ||{
-        match fs::copy(original_filename, &file_path_clone)
+        match fs::copy(original_filename_clone, &file_path_clone)
         {
             Ok(_) => {},
             Err(e) => {
@@ -228,6 +230,8 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
     let thumbnail_filename = Path::new(&thumbnail_file_path.path).file_name().unwrap().to_str().unwrap();
     let new_filename = Path::new(&new_file_path).file_name().unwrap().to_str().unwrap();
 
+    let timestamp = get_file_timestamp(&PathBuf::from(&original_filename));
+
 
     let saved_id;
     //Store the file in the database
@@ -235,7 +239,7 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
         let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
         let mut db = mutex.lock().unwrap();
 
-        saved_id = db.add_file_to_db(&new_filename.to_string(), &thumbnail_filename.to_string(), &tags);
+        saved_id = db.add_file_to_db(&new_filename.to_string(), &thumbnail_filename.to_string(), &tags, timestamp);
         db.save();
     }
 
