@@ -1,3 +1,4 @@
+
 extern crate image;
 extern crate rand;
 
@@ -14,6 +15,16 @@ use settings::Settings;
 
 use iron::typemap::Key;
 
+use std::collections::BTreeMap;
+//use std::collections::Bound::{Included};
+
+
+
+pub enum TimestampRange
+{
+    Unbounded,
+    Bounded(u64)
+}
 
 
 /**
@@ -65,6 +76,8 @@ pub struct FileDatabase
 
     //Map from tags to file ids
     tags: HashMap<String, Vec<usize>>,
+
+    timestamps: BTreeMap<u64, Vec<usize>>
 }
 
 impl FileDatabase
@@ -79,6 +92,8 @@ impl FileDatabase
 
             files: HashMap::new(),
             tags: HashMap::new(),
+
+            timestamps: BTreeMap::new(),
         }
     }
     pub fn load_from_json(storage_path: String) -> FileDatabase
@@ -112,7 +127,8 @@ impl FileDatabase
 
       Returns the ID of the added image
      */
-    pub fn add_new_file(&mut self, filename: &String, thumb_name: &String, tags: &Vec<String>) -> usize
+    pub fn add_new_file(&mut self, filename: &String, thumb_name: &String, 
+                        tags: &Vec<String>, timestamp: u64) -> usize
     {
         let new_id = self.next_id;
 
@@ -137,7 +153,7 @@ impl FileDatabase
             }
         }
 
-        let file_entry = FileEntry::new(new_id, filename.clone(), tags.clone(), thumb_name.clone());
+        let file_entry = FileEntry::new(new_id, filename.clone(), tags.clone(), thumb_name.clone(), timestamp);
         self.files.insert(self.next_id, file_entry);
 
         self.next_id += 1;
@@ -186,7 +202,7 @@ impl FileDatabase
 
         if tags.len() == 0
         {
-            return vec!();
+            return self.files.values().map(|x|{x.clone()}).collect();
         }
 
         let possible_files = self.get_files_with_tag(tags.pop().unwrap());
@@ -221,6 +237,7 @@ impl FileDatabase
 
         result
     }
+
     /**
       Returns paths to all file objects that are part of a tag
      */
@@ -283,7 +300,7 @@ impl FileDatabaseContainer
     pub fn add_file_to_db(&mut self, filename: &String, thumb_name: &String, tags: &Vec<String>) -> usize
     {
         //Save the file into the database
-        self.db.add_new_file(&filename, thumb_name, tags)
+        self.db.add_new_file(&filename, thumb_name, tags, 0)
     }
 
     pub fn get_db(&self) -> &FileDatabase
@@ -338,11 +355,13 @@ mod db_tests
         let id1 = fdb.add_new_file(
             &"test1".to_string(), 
             &"thumb1".to_string(),
-            &vec!("tag1".to_string(), "tag2".to_string()));
+            &vec!("tag1".to_string(), "tag2".to_string()),
+            0);
         let id2 = fdb.add_new_file(
             &"test2".to_string(),
             &"thumb2".to_string(),
-            &vec!("tag1".to_string(), "tag3".to_string()));
+            &vec!("tag1".to_string(), "tag3".to_string()),
+            0);
 
         assert_eq!(id1, 0);
         assert_eq!(id2, 1);
@@ -367,9 +386,9 @@ mod db_tests
     {
         let mut fdb = FileDatabase::new();
 
-        fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("common_tag".to_string(), "only1_tag".to_string()));
-        fdb.add_new_file(&"test2".to_string(), &"thumb2".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()));
-        fdb.add_new_file(&"test3".to_string(), &"thumb3".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()));
+        fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("common_tag".to_string(), "only1_tag".to_string()), 0);
+        fdb.add_new_file(&"test2".to_string(), &"thumb2".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()), 0);
+        fdb.add_new_file(&"test3".to_string(), &"thumb3".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()), 0);
 
         let common_2_3 = fdb.get_files_with_tags(vec!("common_tag".to_string(), "only2_3_tag".to_string()));
         assert!(get_file_paths_from_files(common_2_3.clone()).contains(&"test1".to_string()) == false);
@@ -386,8 +405,24 @@ mod db_tests
         assert!(get_file_paths_from_files(only_1.clone()).contains(&"test2".to_string()) == false);
         assert!(get_file_paths_from_files(only_1.clone()).contains(&"test3".to_string()) == false);
 
-        let none = fdb.get_files_with_tags(vec!());
-        assert!(none.len() == 0);
+        let no_tags = fdb.get_files_with_tags(vec!());
+        assert!(no_tags.len() == 3);
+    }
+
+    fn timestamp_test()
+    {
+        let mut fdb = FileDatabase::new();
+
+        let files = vec!(
+            fdb.add_new_file(&String::from("1"), &String::from("1"), &vec!(), 0),
+            fdb.add_new_file(&String::from("2"), &String::from("2"), &vec!(), 100),
+            fdb.add_new_file(&String::from("3"), &String::from("3"), &vec!(), 150),
+            fdb.add_new_file(&String::from("4"), &String::from("4"), &vec!(), 150),
+            fdb.add_new_file(&String::from("5"), &String::from("5"), &vec!(), 50),
+            fdb.add_new_file(&String::from("6"), &String::from("6"), &vec!(), 200)
+        );
+
+        
     }
 }
 

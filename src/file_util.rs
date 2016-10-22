@@ -128,7 +128,7 @@ pub fn system_time_as_unix_timestamp(time: SystemTime) -> u64
     
     If the file doesn't exist, an error is printed and SystemTime::now() is returned
 */
-pub fn get_image_timestamp(filename: &PathBuf) -> u64
+pub fn get_file_timestamp(filename: &PathBuf) -> u64
 {
     let metadata = match fs::metadata(&filename)
     {
