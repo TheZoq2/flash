@@ -18,6 +18,9 @@ use iron::typemap::Key;
 //use std::collections::Bound::{Included};
 
 
+//use std::iter::Iterator;
+use std::vec::IntoIter;
+
 
 pub enum TimestampRange
 {
@@ -261,8 +264,20 @@ impl FileDatabase
 }
 
 
-
-
+pub fn multi_filter<T, P>(items: IntoIter<T>, filters: &Vec<Box<P>>) -> Vec<T>
+    where P: Fn(&T) -> bool
+{
+    items.filter(|x|{
+        for pred in filters
+        {
+            if pred(x)
+            {
+                return false;
+            }
+        }
+        true
+    }).collect()
+}
 
 
 /**
