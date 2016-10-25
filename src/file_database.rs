@@ -261,24 +261,27 @@ impl FileDatabase
     {
         self.files.get(&id)
     }
-}
 
+    pub fn get_files_with_tags_and_function(
+                &self, 
+                tags: Vec<String>,
+                filters: &Vec<Box<Fn(&FileEntry) -> bool>>
+            ) -> Vec<FileEntry>
+    {
+        let with_tags = self.get_files_with_tags(tags);
 
-pub fn multi_filter<T, P>(items: IntoIter<T>, filters: &Vec<Box<P>>) -> Vec<T>
-    where P: Fn(&T) -> bool
-{
-    items.filter(|x|{
-        for pred in filters
-        {
-            if pred(x)
+        with_tags.into_iter().filter(|x|{
+            for pred in filters
             {
-                return false;
+                if pred(x)
+                {
+                    return false;
+                }
             }
-        }
-        true
-    }).collect()
+            true
+        }).collect()
+    }
 }
-
 
 /**
   Keeps track of the current file database and handles loading and saving of it
@@ -436,6 +439,16 @@ mod db_tests
             fdb.add_new_file(&String::from("5"), &String::from("5"), &vec!(), 50),
             fdb.add_new_file(&String::from("6"), &String::from("6"), &vec!(), 200)
         );
+
+        let less_than_120 = Box::new(|x: &FileEntry|{x.timestamp < 120});
+        let more_than_50 = Box::new(|x: &FileEntry|{x.timestamp < 120});
+        let eq_0 = Box::new(|x: &FileEntry|{x.timestamp == 0});
+
+        assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(less_than_120)).len() == 3);
+        assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(eq_0)).len() == 1);
+
+        let less_than_120 = Box::new(|x: &FileEntry|{x.timestamp < 120});
+        assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(less_than_120, more_than_50)).len() == 1);
     }
 }
 
