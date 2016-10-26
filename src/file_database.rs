@@ -15,12 +15,6 @@ use settings::Settings;
 
 use iron::typemap::Key;
 
-//use std::collections::Bound::{Included};
-
-
-//use std::iter::Iterator;
-use std::vec::IntoIter;
-
 
 pub enum TimestampRange
 {
