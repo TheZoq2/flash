@@ -15,6 +15,7 @@ mod file_database;
 mod settings;
 mod album_handler;
 mod file_util;
+mod file_database_container;
 
 //use std::env::args;
 
@@ -29,7 +30,7 @@ use persistent::{Write};
 
 use std::vec::Vec;
 
-use file_database::{FileDatabaseContainer};
+use file_database_container::{FileDatabaseContainer};
 
 /**
     Process for saving an image:
@@ -84,7 +85,7 @@ fn main() {
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileList>::both(file_list::FileList::new(file_list)));
-    chain.link(Write::<file_database::FileDatabaseContainer>::both(db));
+    chain.link(Write::<FileDatabaseContainer>::both(db));
     //mount.mount("/", Static::new(Path::new("files/index.html")));
     match Iron::new(chain).http("localhost:3000")
     {

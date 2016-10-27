@@ -8,12 +8,8 @@ use std::collections::HashMap;
 use rustc_serialize::json;
 
 use std::io::prelude::*;
-use std::io;
-use std::fs::{File, OpenOptions};
+use std::fs::{File};
 
-use settings::Settings;
-
-use iron::typemap::Key;
 
 
 pub enum TimestampRange
@@ -60,10 +56,6 @@ impl FileEntry
 }
 
 
-
-
-
-//TODO: Move to list of free ids for id reusage
 #[derive(RustcEncodable, RustcDecodable)]
 pub struct FileDatabase
 {
@@ -157,6 +149,7 @@ impl FileDatabase
         self.next_id - 1
     }
 
+
     /**
       Returns all FileEntry objects which are part of a specific tag
      */
@@ -184,6 +177,16 @@ impl FileDatabase
         match self.files.get(&id){
             Some(file) => {
                 Some(file.clone())
+            },
+            None => None
+        }
+    }
+
+    fn get_mut_file_by_id(&mut self, id: usize) -> Option<&mut FileEntry>
+    {
+        match self.files.get_mut(&id){
+            Some(file) => {
+                Some(file)
             },
             None => None
         }
@@ -278,68 +281,8 @@ impl FileDatabase
 }
 
 /**
-  Keeps track of the current file database and handles loading and saving of it
+ * Returns a vector of paths from a vector of file entrys
  */
-pub struct FileDatabaseContainer
-{
-    db: FileDatabase,
-
-    file_path: String,
-    db_path: String,
-}
-
-impl Key for FileDatabaseContainer { type Value = FileDatabaseContainer; }
-
-impl FileDatabaseContainer
-{
-    pub fn new(settings_object: &Settings) -> FileDatabaseContainer
-    {
-        let db = FileDatabase::load_from_json(settings_object.get_database_save_path());
-
-        FileDatabaseContainer {
-            //The path to the directory where all the files should be saved
-            file_path: settings_object.get_file_storage_path(),
-            //The path to the database file
-            db_path: settings_object.get_database_save_path(),
-
-            db: db,
-        }
-    }
-
-    /**
-     */
-    pub fn add_file_to_db(&mut self, filename: &String, thumb_name: &String, tags: &Vec<String>, 
-                            timestamp: u64) -> usize
-    {
-        //Save the file into the database
-        self.db.add_new_file(&filename, thumb_name, tags, timestamp)
-    }
-
-    pub fn get_db(&self) -> &FileDatabase
-    {
-        &self.db
-    }
-
-    pub fn save(&self) -> Result<(), io::Error>
-    {
-        let mut file = match OpenOptions::new().write(true).create(true).open(&self.db_path){
-            Ok(file) => file,
-            Err(e) => 
-            {
-                println!("Database save to {} failed. {}", self.db_path, e);
-                return Err(e)
-            }
-        };
-
-        file.write_all(json::encode::<FileDatabase>(&self.db).unwrap().as_bytes())
-    }
-
-    pub fn get_saved_file_path(&self) -> String
-    {
-        self.file_path.clone()
-    }
-}
-
 pub fn get_file_paths_from_files(files: Vec<FileEntry>) -> Vec<String>
 {
     let mut result = vec!();
@@ -351,6 +294,7 @@ pub fn get_file_paths_from_files(files: Vec<FileEntry>) -> Vec<String>
 
     result
 }
+
 
 /*
    Tests

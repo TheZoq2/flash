@@ -9,7 +9,9 @@ use iron::typemap::Key;
 use persistent::{Write};
 use std::option::Option;
 
-use file_database::{FileDatabaseContainer, FileDatabase};
+use file_database::{FileDatabase};
+use file_database_container::{FileDatabaseContainer};
+
 use file_util::{
     generate_thumbnail,
     get_file_extention,
@@ -63,6 +65,14 @@ impl FileList
         }
 
         None
+    }
+    pub fn get_current_file_save_id(&self) -> Option<usize>
+    {
+        match self.get_current_file()
+        {
+            Some(val) => val.saved_id,
+            None => None
+        }
     }
 
     /**
@@ -169,18 +179,21 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileList>)
 {
     //Get the original filename from the File list. 
-    let original_filename = {
+    let (original_filename, old_id) = {
         let file_list = file_list_mutex.lock().unwrap();
 
-        match file_list.get_current_file()
+        let filename = match file_list.get_current_file()
         {
             Some(file) => file.path.into_os_string().into_string().unwrap(),
             None => {
                 println!("Failed to save file.Crrent file is None");
                 return;
             }
-        }
+        };
+
+        (filename, file_list.get_current_file_save_id())
     };
+
     let file_extention = get_file_extention(&original_filename);
 
     //Get the folder where we want to place the stored file
@@ -233,22 +246,39 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
     let timestamp = get_file_timestamp(&PathBuf::from(&original_filename));
 
 
-    let saved_id;
-    //Store the file in the database
-    {
-        let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
-        let mut db = mutex.lock().unwrap();
 
-        saved_id = db.add_file_to_db(&new_filename.to_string(), &thumbnail_filename.to_string(), &tags, timestamp);
-        db.save();
-    }
-
-    //Remember that the current image has been saved
+    match old_id
     {
-        let mut file_list = file_list_mutex.lock().unwrap();
-        file_list.mark_current_file_as_saved(saved_id);
+        Some(id) =>
+        {
+            //Modify the old image
+            let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
+            let mut db_container = mutex.lock().unwrap();
+        
+            db_container.save();
+        }
+        None =>
+        {
+            let saved_id;
+            //Store the file in the database
+            {
+                let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
+                let mut db_container = mutex.lock().unwrap();
+
+                saved_id = db_container.add_file_to_db(&new_filename.to_string(), &thumbnail_filename.to_string(), &tags, timestamp);
+                db_container.save();
+            }
+
+            //Remember that the current image has been saved
+            {
+                let mut file_list = file_list_mutex.lock().unwrap();
+                file_list.mark_current_file_as_saved(saved_id);
+            }
+        }
     }
 }
+
+
 
 fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, String>
 {

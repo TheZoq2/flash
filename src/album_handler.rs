@@ -6,7 +6,7 @@ use rustc_serialize::json;
 use iron::*;
 use persistent::{Write};
 
-use file_database::FileDatabaseContainer;
+use file_database_container::FileDatabaseContainer;
 use file_list::sanitize_tag_names;
 
 
