@@ -130,6 +130,7 @@ impl FileDatabase
         self.next_id - 1
     }
 
+    #[must_use]
     pub fn change_file_tags(&mut self, id: usize, tags: &Vec<String>) -> Result<(), String>
     {
         //First we need to find out what tags the file had before. 

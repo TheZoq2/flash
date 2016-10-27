@@ -77,4 +77,10 @@ impl FileDatabaseContainer
     {
         self.file_path.clone()
     }
+
+    #[must_use]
+    pub fn change_file_tags(&mut self, id: usize, tags: &Vec<String>) -> Result<(), String>
+    {
+        self.db.change_file_tags(id, tags)
+    }
 }

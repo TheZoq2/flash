@@ -148,6 +148,8 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
             //Modify the old image
             let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
             let mut db_container = mutex.lock().unwrap();
+
+            db_container.change_file_tags(id, &tags);
         
             db_container.save();
         }
