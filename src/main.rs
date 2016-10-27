@@ -16,6 +16,7 @@ mod settings;
 mod album_handler;
 mod file_util;
 mod file_database_container;
+mod file_request_handlers;
 
 //use std::env::args;
 
@@ -31,6 +32,7 @@ use persistent::{Write};
 use std::vec::Vec;
 
 use file_database_container::{FileDatabaseContainer};
+
 
 /**
     Process for saving an image:
@@ -76,7 +78,7 @@ fn main() {
 
     let mut mount = Mount::new();
 
-    mount.mount("/list", file_list::file_list_request_handler);
+    mount.mount("/list", file_request_handlers::file_list_request_handler);
     mount.mount("/", Static::new(Path::new("files/")));
     mount.mount("/file", Static::new(Path::new(&target_dir)));
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())));

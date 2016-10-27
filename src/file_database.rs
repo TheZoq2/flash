@@ -120,26 +120,7 @@ impl FileDatabase
     {
         let new_id = self.next_id;
 
-        //Add all the tags to the map
-        for tag in tags
-        {
-            if self.tags.get(tag) == None
-            {
-                self.tags.insert(tag.clone(), vec!());
-            }
-
-            //Insert the new image using the binary search function.
-            let vec = self.tags.get_mut(tag).unwrap();
-            match vec.binary_search(&new_id){
-                Ok(_) => {
-                    //This shouldn't happen
-                    println!("ID {} is already part of tag {}. This is an error in FileDatabase::add_new_file", new_id, tag);
-                },
-                //If binary search returns Err, it means it didn't find an element and it returns
-                //the index where the element would be
-                Err(new_index) => {vec.insert(new_index, new_id)}
-            }
-        }
+        self.set_file_tags(new_id, tags);
 
         let file_entry = FileEntry::new(new_id, filename.clone(), tags.clone(), thumb_name.clone(), timestamp);
         self.files.insert(self.next_id, file_entry);
@@ -148,6 +129,37 @@ impl FileDatabase
 
         self.next_id - 1
     }
+
+    pub fn change_file_tags(&mut self, id: usize, tags: &Vec<String>) -> Result<(), String>
+    {
+        //First we need to find out what tags the file had before. 
+        //We can not borrow the file object here because we are going to be
+        //modifying self later on
+        let file = match self.get_file_by_id(id)
+        {
+            Some(file) => file,
+            None =>
+            {
+                return Err(String::from(format!("Failed to modify file, ID {} doesn't exist", id)));
+            }
+        };
+
+        self.remove_tags_of_file(id, &file.tags);
+
+        self.set_file_tags(id, tags);
+
+
+
+        //This time we can just unwrap the value because we know that
+        //the last get_file_by_id operation succeded if we got here
+        let file = &mut self.get_mut_file_by_id(id).unwrap();
+
+        file.tags = tags.clone();
+
+        Ok(())
+    }
+
+
 
 
     /**
@@ -278,6 +290,55 @@ impl FileDatabase
             true
         }).collect()
     }
+
+    fn remove_tags_of_file(&mut self, file_id: usize, tags: &Vec<String>)
+    {
+        for tag in tags
+        {
+            let id_list = &mut self.tags.get_mut(tag).unwrap();
+
+            let mut index = 0;
+            for i in 0..id_list.len()
+            {
+                if id_list[i] == file_id
+                {
+                    index = i;
+                    break
+                }
+            }
+
+            id_list.swap_remove(index);
+        }
+    }
+
+    /**
+      Sets the tags of a file without removing old tags from it. This is dangerous
+      since it can cause the db tag list to desync with the file entry. Make sure you
+      only run this when you are sure that the file has no previous tags stored
+     */
+    fn set_file_tags(&mut self, file: usize, tags: &Vec<String>)
+    {
+        //Add all the tags to the map
+        for tag in tags
+        {
+            if self.tags.get(tag) == None
+            {
+                self.tags.insert(tag.clone(), vec!());
+            }
+
+            //Insert the new image using the binary search function.
+            let vec = self.tags.get_mut(tag).unwrap();
+            match vec.binary_search(&file){
+                Ok(_) => {
+                    //This shouldn't happen
+                    println!("ID {} is already part of tag {}. This is an error in FileDatabase::add_new_file", file, tag);
+                },
+                //If binary search returns Err, it means it didn't find an element and it returns
+                //the index where the element would be
+                Err(new_index) => {vec.insert(new_index, file)}
+            }
+        }
+    }
 }
 
 /**
@@ -363,6 +424,19 @@ mod db_tests
 
         let no_tags = fdb.get_files_with_tags(vec!());
         assert!(no_tags.len() == 3);
+    }
+
+    #[test]
+    fn modify_tags_test()
+    {
+        let mut fdb = FileDatabase::new();
+
+        let id = fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("old_tag".to_string()), 0);
+
+        fdb.change_file_tags(id, &vec!("new_tag".to_string()));
+
+        assert!(fdb.get_files_with_tags(vec!("new_tag".to_string())).len() == 1);
+        assert!(fdb.get_files_with_tags(vec!("old_tag".to_string())).len() == 0);
     }
 
     fn timestamp_test()
