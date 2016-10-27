@@ -145,6 +145,28 @@ pub fn get_file_timestamp(filename: &PathBuf) -> u64
 }
 
 
+/**
+  Checks a list of tags for unallowed characters and converts it into a storeable format,
+  which at the moment is just removal of capital letters
+ */
+pub fn sanitize_tag_names(tag_list: &Vec<String>) -> Result<Vec<String>, String>
+{
+    let mut new_list = vec!();
+
+    for tag in tag_list
+    {
+        if tag == ""
+        {
+            return Err(String::from("Tags can not be empty"));
+        }
+
+        new_list.push(tag.to_lowercase());
+    }
+
+    Ok(new_list)
+}
+
+
 #[cfg(test)]
 mod thumbnail_tests
 {
@@ -191,4 +213,30 @@ mod thumbnail_tests
         let dim = super::get_image_dimensions(&PathBuf::from("test/media/4000x4000.png".to_string()));
         assert_eq!(dim, (4000, 4000));
     }
+
+    use super::*;
+
+    #[test]
+    fn sanitize_tests()
+    {
+        {
+            let vec = vec!(
+                String::from("abCde"), 
+                String::from("ABC"), 
+                String::from("abc"));
+
+            let expected = vec!(
+                String::from("abcde"),
+                String::from("abc"),
+                String::from("abc")
+                );
+
+            assert_eq!(sanitize_tag_names(&vec), Ok(expected));
+        }
+
+        {
+            assert_eq!(sanitize_tag_names(&vec!(String::from(""))), Err(String::from("Tags can not be empty")));
+        }
+    }
 }
+

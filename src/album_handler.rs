@@ -7,7 +7,7 @@ use iron::*;
 use persistent::{Write};
 
 use file_database_container::FileDatabaseContainer;
-use file_list::sanitize_tag_names;
+use file_util::sanitize_tag_names;
 
 
 pub fn handle_album_list_request(request: &mut Request) -> IronResult<Response>
