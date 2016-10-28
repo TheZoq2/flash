@@ -434,7 +434,7 @@ mod db_tests
 
         let id = fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("old_tag".to_string()), 0);
 
-        fdb.change_file_tags(id, &vec!("new_tag".to_string()));
+        fdb.change_file_tags(id, &vec!("new_tag".to_string())).unwrap();
 
         assert!(fdb.get_files_with_tags(vec!("new_tag".to_string())).len() == 1);
         assert!(fdb.get_files_with_tags(vec!("old_tag".to_string())).len() == 0);
@@ -444,14 +444,12 @@ mod db_tests
     {
         let mut fdb = FileDatabase::new();
 
-        let files = vec!(
-            fdb.add_new_file(&String::from("1"), &String::from("1"), &vec!(), 0),
-            fdb.add_new_file(&String::from("2"), &String::from("2"), &vec!(), 100),
-            fdb.add_new_file(&String::from("3"), &String::from("3"), &vec!(), 150),
-            fdb.add_new_file(&String::from("4"), &String::from("4"), &vec!(), 150),
-            fdb.add_new_file(&String::from("5"), &String::from("5"), &vec!(), 50),
-            fdb.add_new_file(&String::from("6"), &String::from("6"), &vec!(), 200)
-        );
+        fdb.add_new_file(&String::from("1"), &String::from("1"), &vec!(), 0);
+        fdb.add_new_file(&String::from("2"), &String::from("2"), &vec!(), 100);
+        fdb.add_new_file(&String::from("3"), &String::from("3"), &vec!(), 150);
+        fdb.add_new_file(&String::from("4"), &String::from("4"), &vec!(), 150);
+        fdb.add_new_file(&String::from("5"), &String::from("5"), &vec!(), 50);
+        fdb.add_new_file(&String::from("6"), &String::from("6"), &vec!(), 200);
 
         let less_than_120 = |x: &FileEntry|{x.timestamp < 120};
         let more_than_50 = |x: &FileEntry|{x.timestamp < 120};
