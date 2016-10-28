@@ -1,0 +1,3 @@
+[submodule "Flash-Frontend"]
+	path = flash
+	url = git@github.com:TheZoq2/Flash-Frontend.git
