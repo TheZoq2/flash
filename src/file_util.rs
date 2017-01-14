@@ -109,6 +109,8 @@ pub fn get_image_dimensions(filename: &PathBuf) -> (u32, u32)
     let metadata = immeta::load_from_file(Path::new(&filename)).unwrap();
 
     let dims = metadata.dimensions();
+
+    println!("filename: {:?}, Dimensions: {:?}", filename, dims);
     (dims.width, dims.height)
 }
 
@@ -212,6 +214,9 @@ mod thumbnail_tests
 
         let dim = super::get_image_dimensions(&PathBuf::from("test/media/4000x4000.png".to_string()));
         assert_eq!(dim, (4000, 4000));
+
+        let dim = super::get_image_dimensions(&PathBuf::from("test/media/DSC_0001.JPG".to_string()));
+        assert_eq!(dim, (6000, 4000));
     }
 
     use super::*;

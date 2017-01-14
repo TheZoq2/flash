@@ -18,8 +18,6 @@ mod file_util;
 mod file_database_container;
 mod file_request_handlers;
 
-//use std::env::args;
-
 use iron::*;
 use staticfile::Static;
 use mount::Mount;
@@ -89,10 +87,12 @@ fn main()
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileList>::both(file_list::FileList::new(file_list)));
     chain.link(Write::<FileDatabaseContainer>::both(db));
-    //mount.mount("/", Static::new(Path::new("files/index.html")));
     match Iron::new(chain).http("localhost:3000")
     {
-        Ok(_) => println!("Server running on port 3000"),
+        Ok(_) => {
+            println!("Server running on port 3000");
+            println!("Open localhost/tag_editor.html or album.html")
+        },
         Err(e) => println!("Failed to start iron: {}", e)
     }
 }
