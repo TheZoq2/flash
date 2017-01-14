@@ -22,7 +22,7 @@ pub fn handle_album_list_request(request: &mut Request) -> IronResult<Response>
                 Some(val) => val.first().unwrap().clone(), 
                 None => {
                     println!("Failed to save, tag list not included in the string");
-                    
+
                     //This is a lie. TODO: Update response
                     return Ok(Response::with(iron::status::NotFound));
                 }
@@ -30,7 +30,9 @@ pub fn handle_album_list_request(request: &mut Request) -> IronResult<Response>
         },
         Err(e) => {
             println!("Failed to get GET variable: {:?}", e); 
-            return Ok(Response::with(iron::status::NotFound));//This is a lie. TODO: Update response
+
+            //This is a lie. TODO: Update response
+            return Ok(Response::with(iron::status::NotFound));
         }
     };
 
@@ -47,7 +49,7 @@ pub fn handle_album_list_request(request: &mut Request) -> IronResult<Response>
     //Store the file in the database
     let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
     let db_container = mutex.lock().unwrap();
-    
+
     //let filenames = db_container.get_db().get_file_paths_with_tags(tags);
     let files = db_container.get_db().get_files_with_tags(tags);
 
