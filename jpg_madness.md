@@ -122,7 +122,9 @@ The last part of the tiff header contains another piece of very usefull informat
 It contains the offset of the first `IFD` block, `IFD0`. IFD blocks are where the
 actual EXIF data are stored and aparently they don't have to be stored immeadietly
 after each other. The offset here is the amount of bytes it is offset from the
-first byte of the TIFF header. The specification is 4 bytes long
+first byte of the TIFF header. The specification is 4 bytes long.
+
+
 
 
 
@@ -135,3 +137,6 @@ A pretty good description of the JFIF metadata format
 http://vip.sugovica.hu/Sardi/kepnezo/JPEG%20File%20Layout%20and%20Format.htm
 
 http://www.exif.org/Exif2-2.PDF
+
+Really good description of the EXIF format
+https://www.media.mit.edu/pia/Research/deepview/exif.html

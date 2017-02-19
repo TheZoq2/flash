@@ -15,7 +15,6 @@ use file_util::{
     generate_thumbnail,
     get_file_extention,
     get_semi_unique_identifier,
-    get_image_dimensions,
     get_file_timestamp,
 };
 
@@ -235,8 +234,6 @@ fn generate_file_list_response(file: Option<File>, db: &FileDatabase) -> String
         file_path: String,
         file_type: String,
 
-        dimensions: (u32, u32),
-
         tags: Vec<String>,
         old_id: Option<usize>
     }
@@ -246,8 +243,6 @@ fn generate_file_list_response(file: Option<File>, db: &FileDatabase) -> String
         file_path: "".to_string(),
         file_type: "image".to_string(),
 
-        dimensions: (0, 0),
-        
         tags: vec!(),
         old_id: None
     };
@@ -261,7 +256,6 @@ fn generate_file_list_response(file: Option<File>, db: &FileDatabase) -> String
             response.status = "ok".to_string();
             response.file_path = "file/".to_string() + &filename;
             response.file_type = "image".to_string();
-            response.dimensions = get_image_dimensions(&path);
 
             match file_obj.saved_id
             {
@@ -276,5 +270,7 @@ fn generate_file_list_response(file: Option<File>, db: &FileDatabase) -> String
         None => response.status = "no_file".to_string(),
     }
 
-    json::encode(&response).unwrap()
+    let result = json::encode(&response).unwrap();
+
+    result
 }

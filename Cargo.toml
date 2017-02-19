@@ -16,3 +16,4 @@ rustc-serialize = "*"
 
 image = "*"
 immeta = "*"
+#immeta = { git = "https://github.com/tdryer/immeta", branch = "jpeg-exif" }

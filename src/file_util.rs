@@ -103,18 +103,6 @@ pub fn get_semi_unique_identifier() -> String
 }
 
 
-
-pub fn get_image_dimensions(filename: &PathBuf) -> (u32, u32)
-{
-    let metadata = immeta::load_from_file(Path::new(&filename)).unwrap();
-
-    let dims = metadata.dimensions();
-
-    println!("filename: {:?}, Dimensions: {:?}", filename, dims);
-    (dims.width, dims.height)
-}
-
-
 pub fn system_time_as_unix_timestamp(time: SystemTime) -> u64
 {
     let duration = time.duration_since(UNIX_EPOCH).unwrap();
