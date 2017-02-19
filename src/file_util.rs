@@ -13,7 +13,33 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::thread;
 
 
+/**
+  Enum for different types of media
+*/
+#[derive(RustcDecodable, RustcEncodable, Debug, Eq, PartialEq)]
+pub enum MediaType
+{
+    Image,
+    Video
+}
 
+/**
+  Returns the filetype of a specified file based on its extension
+*/
+pub fn get_mediatype(path: &str) -> MediaType
+{
+    let extension = get_file_extension(path);
+
+    match extension.to_lowercase().as_str()
+    {
+        ".jpg" | ".png" | ".gif" => MediaType::Image,
+        ".mov" | ".mp4" | ".webm" => MediaType::Video,
+        _ => {
+            println!("Unrecognised extension: {} assuming image", extension);
+            MediaType::Image
+        }
+    }
+}
 
 pub struct ThumbnailInfo
 {
@@ -30,14 +56,14 @@ pub struct ThumbnailInfo
   landscape mode will be at most max_width tall
  */
 
-pub fn generate_thumbnail(source_path: &String, destination_path_without_extention: &String, max_size: u32) -> Result<ThumbnailInfo, image::ImageError>
+pub fn generate_thumbnail(source_path: &str, destination_path_without_extension: &str, max_size: u32) -> Result<ThumbnailInfo, image::ImageError>
 {
     //Generating the filenames
-    let file_extention = get_file_extention(&source_path);
-    let full_path = destination_path_without_extention.clone() + &file_extention;
+    let file_extension = get_file_extension(&source_path);
+    let full_path = String::from(destination_path_without_extension) + &file_extension;
 
     let full_path_clone = full_path.clone();
-    let source_path_clone = source_path.clone();
+    let source_path_clone = String::from(source_path);
     thread::spawn(move || {
         let path_obj = Path::new(&source_path_clone);
 
@@ -60,7 +86,7 @@ pub fn generate_thumbnail(source_path: &String, destination_path_without_extenti
 }
 
 
-pub fn get_file_extention(path: &String) -> String
+pub fn get_file_extension(path: &str) -> String
 {
     let path_obj = Path::new(&path);
 
@@ -162,7 +188,6 @@ mod thumbnail_tests
 {
     extern crate image;
     use image::{GenericImage};
-    use std::path::{PathBuf};
 
     #[test]
     fn thumbnail_test()
@@ -193,20 +218,11 @@ mod thumbnail_tests
         assert!(thumbnail.dimensions() == (150, 300));
     }
 
-    #[test]
-    fn metadata_test()
-    {
-        let dim = super::get_image_dimensions(&PathBuf::from("test/media/512x512.png"));
+}
 
-        assert_eq!(dim, (512, 512));
-
-        let dim = super::get_image_dimensions(&PathBuf::from("test/media/4000x4000.png".to_string()));
-        assert_eq!(dim, (4000, 4000));
-
-        //let dim = super::get_image_dimensions(&PathBuf::from("test/media/DSC_0001.JPG".to_string()));
-        //assert_eq!(dim, (6000, 4000));
-    }
-
+#[cfg(test)]
+mod util_tests
+{
     use super::*;
 
     #[test]
@@ -230,6 +246,18 @@ mod thumbnail_tests
         {
             assert_eq!(sanitize_tag_names(&vec!(String::from(""))), Err(String::from("Tags can not be empty")));
         }
+    }
+
+    #[test]
+    fn file_type_test()
+    {
+        assert_eq!(get_mediatype("yolo.jpg"), MediaType::Image);
+        assert_eq!(get_mediatype("yolo.png"), MediaType::Image);
+        assert_eq!(get_mediatype("yolo.mov"), MediaType::Video);
+        assert_eq!(get_mediatype("yolo.mp4"), MediaType::Video);
+
+        assert_eq!(get_mediatype("yolo.MOV"), MediaType::Video);
+        assert_eq!(get_mediatype("some/path.yoloswag/1234/yolo.MOV"), MediaType::Video);
     }
 }
 

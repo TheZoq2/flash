@@ -13,7 +13,7 @@ use file_database_container::{FileDatabaseContainer};
 
 use file_util::{
     generate_thumbnail,
-    get_file_extention,
+    get_file_extension,
     get_semi_unique_identifier,
     get_file_timestamp,
 };
@@ -87,7 +87,7 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
         (filename, file_list.get_current_file_save_id())
     };
 
-    let file_extention = get_file_extention(&original_filename);
+    let file_extension = get_file_extension(&original_filename);
 
     //Get the folder where we want to place the stored file
     let destination_dir = {
@@ -101,11 +101,11 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
 
     let tags = get_tags_from_request(request).unwrap();
 
-    let thumbnail_path_without_extention = destination_dir.clone() + "/thumb_" + &file_identifier;
+    let thumbnail_path_without_extension = destination_dir.clone() + "/thumb_" + &file_identifier;
 
 
     //Generate the thumbnail
-    let thumbnail_file_path = match generate_thumbnail(&original_filename, &thumbnail_path_without_extention, 300) {
+    let thumbnail_file_path = match generate_thumbnail(&original_filename, &thumbnail_path_without_extension, 300) {
         Ok(val) => val,
         Err(e) => {
             //TODO: The user needs to be alerted when this happens
@@ -117,7 +117,7 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
 
     //Copy the file to the destination
     //Get the name and path of the new file
-    let new_file_path = destination_dir + "/" + &file_identifier + &file_extention;
+    let new_file_path = destination_dir + "/" + &file_identifier + &file_extension;
             
 
 
