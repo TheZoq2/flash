@@ -18,8 +18,6 @@ mod file_util;
 mod file_database_container;
 mod file_request_handlers;
 
-//use std::env::args;
-
 use iron::*;
 use staticfile::Static;
 use mount::Mount;
@@ -45,12 +43,12 @@ use file_database_container::{FileDatabaseContainer};
 
 /**
   Returns a list of all the files in a directory
-  */
-fn get_files_in_dir(dir: String) -> Vec<PathBuf> 
+*/
+fn get_files_in_dir(dir: &String) -> Vec<PathBuf> 
 {
     let mut result = Vec::<PathBuf>::new();
 
-    let full_path = dir + "/*";
+    let full_path = dir.clone() + "/*";
 
     for entry in glob(&full_path).expect("Failed to read glob")
     {
@@ -65,10 +63,11 @@ fn get_files_in_dir(dir: String) -> Vec<PathBuf>
 }
 
 
-fn main() {
-    let target_dir = "/mnt/1TB-files/Pictures/dslr/dec24-2016".to_string();
-    //let target_dir = "/home/frans/Pictures/imgtest".to_string();
-    let file_list = get_files_in_dir(target_dir.clone());
+fn main() 
+{
+    //let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
+    let target_dir = "/home/frans/Pictures/imgtest".to_string();
+    let file_list = get_files_in_dir(&target_dir);
 
     let settings = settings::Settings::get_defaults();
 
@@ -88,10 +87,12 @@ fn main() {
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileList>::both(file_list::FileList::new(file_list)));
     chain.link(Write::<FileDatabaseContainer>::both(db));
-    //mount.mount("/", Static::new(Path::new("files/index.html")));
     match Iron::new(chain).http("localhost:3000")
     {
-        Ok(_) => println!("Server running on port 3000"),
+        Ok(_) => {
+            println!("Server running on port 3000");
+            println!("Open localhost/tag_editor.html or album.html")
+        },
         Err(e) => println!("Failed to start iron: {}", e)
     }
 }

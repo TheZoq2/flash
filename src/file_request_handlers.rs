@@ -18,7 +18,7 @@ use file_util::{
     get_file_timestamp,
 };
 
-use std::sync::Mutex;
+use std::sync::{Mutex};
 
 use std::fs;
 use std::path::Path;
@@ -118,27 +118,20 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
     //Copy the file to the destination
     //Get the name and path of the new file
     let new_file_path = destination_dir + "/" + &file_identifier + &file_extention;
-
-    let file_path_clone = new_file_path.clone();
-    let original_filename_clone = original_filename.clone();
-    thread::spawn(move ||{
-        match fs::copy(original_filename_clone, &file_path_clone)
-        {
-            Ok(_) => {},
-            Err(e) => {
-                println!("Failed to copy file to destination: {}", e);
-                //TODO: Probably remove the thumbnail here
-                return
-            }
-        };
-    });
-
-    let thumbnail_filename = Path::new(&thumbnail_file_path.path).file_name().unwrap().to_str().unwrap();
-    let new_filename = Path::new(&new_file_path).file_name().unwrap().to_str().unwrap();
-
-    let timestamp = get_file_timestamp(&PathBuf::from(&original_filename));
+            
 
 
+    let thumbnail_filename = 
+            Path::new(&thumbnail_file_path.path).file_name().unwrap().to_str().unwrap();
+    let new_filename = 
+    {
+        let filename = Path::new(&new_file_path).file_name().unwrap();
+
+        String::from(filename.to_str().unwrap())
+    };
+
+
+    let timestamp = get_file_timestamp(&PathBuf::from(original_filename.clone()));
 
     match old_id
     {
@@ -171,6 +164,18 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
             }
         }
     }
+
+    thread::spawn(move ||{
+        match fs::copy(original_filename, new_file_path)
+        {
+            Ok(_) => {},
+            Err(e) => {
+                println!("Failed to copy file to destination: {}", e);
+                //TODO: Probably remove the thumbnail here
+                return
+            }
+        };
+    });
 }
 
 

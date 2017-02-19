@@ -46,8 +46,12 @@ impl FileDatabaseContainer
 
     /**
      */
-    pub fn add_file_to_db(&mut self, filename: &String, thumb_name: &String, tags: &Vec<String>, 
-                            timestamp: u64) -> usize
+    pub fn add_file_to_db(
+            &mut self, filename: &String,
+            thumb_name: &String,
+            tags: &Vec<String>, 
+            timestamp: u64
+        ) -> usize
     {
         //Save the file into the database
         self.db.add_new_file(&filename, thumb_name, tags, timestamp)
