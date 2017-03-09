@@ -1,0 +1,62 @@
+ExifTool Version Number         : 10.40
+File Name                       : IMG_20141121_163950.jpg
+Directory                       : .
+File Size                       : 4.9 MB
+File Modification Date/Time     : 2015:04:17 21:41:44+02:00
+File Access Date/Time           : 2017:03:08 21:30:05+01:00
+File Inode Change Date/Time     : 2015:04:17 21:41:44+02:00
+File Permissions                : rwxr-----
+File Type                       : JPEG
+File Type Extension             : jpg
+MIME Type                       : image/jpeg
+Exif Byte Order                 : Big-endian (Motorola, MM)
+GPS Img Direction               : 330
+GPS Img Direction Ref           : Magnetic North
+GPS Latitude Ref                : North
+GPS Longitude Ref               : East
+GPS Altitude Ref                : Above Sea Level
+GPS Time Stamp                  : 15:34:34
+GPS Processing Method           : ASCII
+GPS Date Stamp                  : 2014:11:21
+Aperture Value                  : 2.0
+Interoperability Index          : R98 - DCF basic file (sRGB)
+Interoperability Version        : 0100
+Create Date                     : 2002:12:08 12:00:00
+Shutter Speed Value             : 1/17
+Color Space                     : sRGB
+Date/Time Original              : 2014:11:21 16:39:51
+Flashpix Version                : 0100
+Exif Image Height               : 3120
+Exif Version                    : 0220
+Exif Image Width                : 4208
+Focal Length                    : 3.8 mm
+Flash                           : Auto, Fired
+Exposure Time                   : 1/17
+ISO                             : 5285
+Components Configuration        : Y, Cb, Cr, -
+F Number                        : 2.0
+Y Cb Cr Positioning             : Centered
+Y Resolution                    : 72
+Resolution Unit                 : inches
+X Resolution                    : 72
+Compression                     : JPEG (old-style)
+Thumbnail Offset                : 767
+Thumbnail Length                : 4590
+Image Width                     : 4208
+Image Height                    : 3120
+Encoding Process                : Baseline DCT, Huffman coding
+Bits Per Sample                 : 8
+Color Components                : 3
+Y Cb Cr Sub Sampling            : YCbCr4:2:0 (2 2)
+Aperture                        : 2.0
+GPS Altitude                    : 0 m Above Sea Level
+GPS Date/Time                   : 2014:11:21 15:34:34Z
+GPS Latitude                    : 58 deg 24' 5.48" N
+GPS Longitude                   : 15 deg 34' 40.24" E
+GPS Position                    : 58 deg 24' 5.48" N, 15 deg 34' 40.24" E
+Image Size                      : 4208x3120
+Megapixels                      : 13.1
+Shutter Speed                   : 1/17
+Thumbnail Image                 : (Binary data 4590 bytes, use -b option to extract)
+Focal Length                    : 3.8 mm
+Light Value                     : 0.4

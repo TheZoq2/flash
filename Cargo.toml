@@ -13,6 +13,8 @@ urlencoded = "*"
 rand = "*"
 glob = "*"
 rustc-serialize = "*"
+regex = "*"
+lazy_static = "*"
 
 image = "*"
 immeta = "*"
