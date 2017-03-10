@@ -4,7 +4,70 @@ extern crate regex;
 
 use self::regex::Regex;
 
-struct ExifData
+
+
+pub enum CardinalDirection
+{
+    East,
+    West,
+    North,
+    South
+}
+
+impl CardinalDirection
+{
+    fn from_str(name: &str) -> Result<CardinalDirection, String>
+    {
+        match name
+        {
+            "N" => Ok(CardinalDirection::North),
+            "S" => Ok(CardinalDirection::South),
+            "W" => Ok(CardinalDirection::West),
+            "E" => Ok(CardinalDirection::East),
+            other => Err(format!("{} is not a valid direction", other)),
+        }
+    }
+}
+
+pub struct GpsCoordinate
+{
+    degrees: i16,
+    minutes: i16,
+    seconds: f32,
+    direction: CardinalDirection
+}
+
+impl GpsCoordinate
+{
+    pub fn from_str(string: &str) -> Result<GpsCoordinate, String>
+    {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"(.*\b)\s*: (.*)").unwrap();
+        }
+
+        match RE.captures_iter(string).next()
+        {
+            Some(val) => Ok(GpsCoordinate{
+                degrees: val[1].parse()?,
+                minutes: val[2].parse()?,
+                seconds: val[3].parse()?,
+                direction: CardinalDirection::from_str(val[4])?
+            }),
+            None => Err(format!("String {} is not a valid GPS string", string))
+        }
+    }
+}
+
+/**
+  A GPS location
+ */
+pub struct Location
+{
+    longitude: GpsCoordinate,
+    latitude: GpsCoordinate
+}
+
+pub struct ExifData
 {
     tags: HashMap<String, String>
 }
@@ -38,6 +101,11 @@ impl ExifData
             None => None
         }
     }
+
+    pub fn get_location()
+    {
+        
+    }
 }
 
 
@@ -56,5 +124,11 @@ mod exif_data_tests
         assert_eq!(data.get_tag("GPS Img Direction"), Some("330"));
         assert_eq!(data.get_tag("X Resolution"), Some("72"));
         assert_eq!(data.get_tag("Non-existing tag"), None);
+    }
+
+    #[test]
+    fn gps_coordinate_test()
+    {
+        
     }
 }
