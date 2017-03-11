@@ -5,6 +5,12 @@ extern crate regex;
 use self::regex::Regex;
 
 
+enum ExifError
+{
+    InvalidGpsCoordinate(String)
+}
+
+
 
 pub enum CardinalDirection
 {
@@ -39,7 +45,7 @@ pub struct GpsCoordinate
 
 impl GpsCoordinate
 {
-    pub fn from_str(string: &str) -> Result<GpsCoordinate, String>
+    pub fn from_str(string: &str) -> Result<GpsCoordinate, ExifError>
     {
         lazy_static! {
             static ref RE: Regex = Regex::new(r"(.*\b)\s*: (.*)").unwrap();
@@ -51,7 +57,7 @@ impl GpsCoordinate
                 degrees: val[1].parse()?,
                 minutes: val[2].parse()?,
                 seconds: val[3].parse()?,
-                direction: CardinalDirection::from_str(val[4])?
+                direction: CardinalDirection::from_str(&val[4])?
             }),
             None => Err(format!("String {} is not a valid GPS string", string))
         }
