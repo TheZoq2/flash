@@ -4,14 +4,39 @@ extern crate regex;
 
 use self::regex::Regex;
 
+use std;
 
+
+#[derive(Clone, Debug)]
+pub enum GpsStringParseError
+{
+    NumberParseError,
+    InvalidDirection(String),
+    BadFormat
+}
+impl std::convert::From<std::num::ParseFloatError> for GpsStringParseError
+{
+    fn from(_: std::num::ParseFloatError) -> GpsStringParseError
+    {
+        GpsStringParseError::NumberParseError
+    }
+}
+impl std::convert::From<std::num::ParseIntError> for GpsStringParseError
+{
+    fn from(_: std::num::ParseIntError) -> GpsStringParseError
+    {
+        GpsStringParseError::NumberParseError
+    }
+}
+
+#[derive(Clone, Debug)]
 enum ExifError
 {
-    InvalidGpsCoordinate(String)
+    InvalidGpsCoordinate(GpsStringParseError)
 }
 
 
-
+#[derive(PartialEq, Debug)]
 pub enum CardinalDirection
 {
     East,
@@ -22,7 +47,7 @@ pub enum CardinalDirection
 
 impl CardinalDirection
 {
-    fn from_str(name: &str) -> Result<CardinalDirection, String>
+    fn from_str(name: &str) -> Result<CardinalDirection, GpsStringParseError>
     {
         match name
         {
@@ -30,11 +55,12 @@ impl CardinalDirection
             "S" => Ok(CardinalDirection::South),
             "W" => Ok(CardinalDirection::West),
             "E" => Ok(CardinalDirection::East),
-            other => Err(format!("{} is not a valid direction", other)),
+            other => Err(GpsStringParseError::InvalidDirection(String::from(other))),
         }
     }
 }
 
+#[derive(PartialEq, Debug)]
 pub struct GpsCoordinate
 {
     degrees: i16,
@@ -45,10 +71,10 @@ pub struct GpsCoordinate
 
 impl GpsCoordinate
 {
-    pub fn from_str(string: &str) -> Result<GpsCoordinate, ExifError>
+    pub fn from_str(string: &str) -> Result<GpsCoordinate, GpsStringParseError>
     {
         lazy_static! {
-            static ref RE: Regex = Regex::new(r"(.*\b)\s*: (.*)").unwrap();
+            static ref RE: Regex = Regex::new("(\\d*) deg (\\d*)' (\\d*.?\\d*)\" ([NEWS])").unwrap();
         }
 
         match RE.captures_iter(string).next()
@@ -59,7 +85,17 @@ impl GpsCoordinate
                 seconds: val[3].parse()?,
                 direction: CardinalDirection::from_str(&val[4])?
             }),
-            None => Err(format!("String {} is not a valid GPS string", string))
+            None => Err(GpsStringParseError::BadFormat)
+        }
+    }
+
+    pub fn new(degrees: i16, minutes: i16, seconds: f32, direction: CardinalDirection) -> GpsCoordinate
+    {
+        GpsCoordinate{
+            degrees: degrees,
+            minutes: minutes,
+            seconds: seconds,
+            direction: direction
         }
     }
 }
@@ -135,6 +171,13 @@ mod exif_data_tests
     #[test]
     fn gps_coordinate_test()
     {
-        
+        assert_eq!(
+            GpsCoordinate::from_str("58 deg 28' 5.45\" N").unwrap(), 
+            GpsCoordinate::new(58, 28, 5.45, CardinalDirection::North)
+        );
+        assert_eq!(
+            GpsCoordinate::from_str("58 deg 28' 5.45\" S").unwrap(), 
+            GpsCoordinate::new(58, 28, 5.45, CardinalDirection::South)
+        );
     }
 }
