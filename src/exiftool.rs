@@ -108,6 +108,16 @@ pub struct Location
     longitude: GpsCoordinate,
     latitude: GpsCoordinate
 }
+impl Location
+{
+    pub fn new(longitude: GpsCoordinate, latitude: GpsCoordinate) -> Location
+    {
+        Location {
+            longitude: longitude,
+            latitude: latitude
+        }
+    }
+}
 
 pub struct ExifData
 {
@@ -144,10 +154,22 @@ impl ExifData
         }
     }
 
-    pub fn get_location()
+    //pub fn get_timestamp
+
+    /*
+    pub fn get_location(&self) -> Option<Location>
     {
-        
+        match (self.get_tag("GPS Latitude"), self.get_tag("GPS Longitude"))
+        {
+            (Some(latitude), Some(longitude)) => 
+                Some(Location::new(
+                        GpsCoordinate::from_str(latitude),
+                        GpsCoordinate::from_str(longitude)
+                    )),
+            (_, _) => None
+        }
     }
+    */
 }
 
 
