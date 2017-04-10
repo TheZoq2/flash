@@ -11,6 +11,7 @@ extern crate lazy_static;
 
 extern crate glob;
 extern crate rustc_serialize;
+extern crate chrono;
 
 mod file_list;
 mod file_database;

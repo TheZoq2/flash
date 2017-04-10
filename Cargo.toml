@@ -15,6 +15,7 @@ glob = "*"
 rustc-serialize = "*"
 regex = "*"
 lazy_static = "*"
+chrono = "*"
 
 image = "*"
 immeta = "*"

@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 
 extern crate regex;
+extern crate chrono;
+use chrono::TimeZone;
 
 use self::regex::Regex;
 
 use std;
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum GpsStringParseError
 {
     NumberParseError,
@@ -29,10 +31,12 @@ impl std::convert::From<std::num::ParseIntError> for GpsStringParseError
     }
 }
 
-#[derive(Clone, Debug)]
-enum ExifError
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExifError
 {
-    InvalidGpsCoordinate(GpsStringParseError)
+    InvalidGpsCoordinate(GpsStringParseError),
+    NoSuchTag(String),
+    MalformedDatetime(String)
 }
 
 
@@ -154,22 +158,24 @@ impl ExifData
         }
     }
 
-    //pub fn get_timestamp
-
-    /*
-    pub fn get_location(&self) -> Option<Location>
+    pub fn get_creation_date(&self) -> Result<chrono::DateTime<chrono::UTC>, ExifError>
     {
-        match (self.get_tag("GPS Latitude"), self.get_tag("GPS Longitude"))
+        let target_tag = "Create Date";
+        match self.get_tag(target_tag)
         {
-            (Some(latitude), Some(longitude)) => 
-                Some(Location::new(
-                        GpsCoordinate::from_str(latitude),
-                        GpsCoordinate::from_str(longitude)
-                    )),
-            (_, _) => None
+            Some(date_string) => 
+            {
+                let parsed = chrono::UTC.datetime_from_str(date_string, "%Y:%m:%d %H:%M:%S");
+
+                match parsed
+                {
+                    Ok(result) => Ok(result),
+                    _ => Err(ExifError::MalformedDatetime(String::from(date_string)))
+                }
+            }
+            None => Err(ExifError::NoSuchTag(String::from(target_tag)))
         }
     }
-    */
 }
 
 
@@ -187,7 +193,11 @@ mod exif_data_tests
 
         assert_eq!(data.get_tag("GPS Img Direction"), Some("330"));
         assert_eq!(data.get_tag("X Resolution"), Some("72"));
+        assert_eq!(data.get_tag("Create Date"), Some("2002:12:08 12:00:00"));
         assert_eq!(data.get_tag("Non-existing tag"), None);
+
+        let expected_date = chrono::UTC.ymd(2002, 12, 8).and_hms(12, 0, 0);
+        assert_eq!(data.get_creation_date(), Ok(expected_date));
     }
 
     #[test]
