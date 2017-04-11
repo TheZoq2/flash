@@ -8,6 +8,8 @@ use self::regex::Regex;
 
 use std;
 
+use std::process::Command;
+
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum GpsStringParseError
@@ -29,14 +31,6 @@ impl std::convert::From<std::num::ParseIntError> for GpsStringParseError
     {
         GpsStringParseError::NumberParseError
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum ExifError
-{
-    InvalidGpsCoordinate(GpsStringParseError),
-    NoSuchTag(String),
-    MalformedDatetime(String)
 }
 
 
@@ -128,9 +122,35 @@ pub struct ExifData
     tags: HashMap<String, String>
 }
 
+#[derive(Debug)]
+pub enum ExifError
+{
+    InvalidGpsCoordinate(GpsStringParseError),
+    NoSuchTag(String),
+    MalformedDatetime(String),
+    IoError(std::io::Error),
+    MalformedUtf8(std::string::FromUtf8Error)
+}
+impl std::convert::From<std::io::Error> for ExifError
+{
+    fn from(e: std::io::Error) -> ExifError
+    {
+        ExifError::IoError(e)
+    }
+}
+impl std::convert::From<std::string::FromUtf8Error> for ExifError
+{
+    fn from(e: std::string::FromUtf8Error) -> ExifError
+    {
+        ExifError::MalformedUtf8(e)
+    }
+}
+
+
+
 impl ExifData
 {
-    pub fn from_exiftool_string(data: &str) -> Result<ExifData, String>
+    pub fn from_exiftool_string(data: &str) -> Result<ExifData, ExifError>
     {
         let mut result = ExifData{
             tags: HashMap::new()
@@ -147,6 +167,20 @@ impl ExifData
         }
 
         Ok(result)
+    }
+
+    pub fn from_file(file: &str) -> Result<ExifData, ExifError>
+    {
+        let mut cmd = Command::new("exiftool");
+        cmd.arg(file);
+
+        let command_output = {
+            let raw = cmd.output()?.stdout;
+
+            String::from_utf8(raw)?
+        };
+
+        Self::from_exiftool_string(&command_output)
     }
 
     pub fn get_tag(&self, name: &str) -> Option<&str>
@@ -197,7 +231,7 @@ mod exif_data_tests
         assert_eq!(data.get_tag("Non-existing tag"), None);
 
         let expected_date = chrono::UTC.ymd(2002, 12, 8).and_hms(12, 0, 0);
-        assert_eq!(data.get_creation_date(), Ok(expected_date));
+        assert_eq!(data.get_creation_date().unwrap(), expected_date);
     }
 
     #[test]
