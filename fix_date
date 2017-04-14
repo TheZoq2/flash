@@ -1,0 +1,22 @@
+#!/bin/bash
+
+FILENAME=$1
+
+#Read the exif date
+DATE=`exiftool $FILENAME \
+    | grep "Create Date" \
+    | head -n 1 \
+    | grep -o -P '\d{4}:\d*:\d* \d*:\d*:\d*' \
+    | sed "s/:/-/" \
+    | sed "s/:/-/" 
+    `
+
+echo $DATE
+touch -d "$DATE" $FILENAME
+
+NEW_FILENAME=`sed "s/ /-/g" <<< $DATE`
+NEW_FILENAME="${NEW_FILENAME}.JPG"
+
+echo $NEW_FILENAME
+mv $FILENAME $NEW_FILENAME
+
