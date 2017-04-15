@@ -54,9 +54,9 @@ impl FileEntry
         }
     }
 
-    pub fn has_tag(&self, tag: String)
+    pub fn has_tag(&self, tag: String) -> bool
     {
-        return self.tags.contains(tag);
+        self.tags.contains(&tag)
     }
 }
 

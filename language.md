@@ -31,19 +31,32 @@ quadcopter and 3d printer
 
 ## Dates
 ```
+DATE
+    = YearNumber Month Day
+
+TIME_TYPE
+    = year
+    | month
+    | week
+    | day
+
 SINGLE 
     = today
-    | this year
-    | 
+    | this TIME_TYPE
+
+INTERVAL
+    = between DATE and DATE
+    | past TIME_TYPE
+    | last TIME_TYPE
 ```
 
 ### Examples
-- Pictures from today: `today`
-- Pictures from this month: `this month`
-- Pictures from the last 30 days `past month`
-- Pictures from last year `last year`
-- Pictures from the last 365 days `past year`
-- Pictures taken in a specific month `in july`
+- From today: `today`
+- From this month: `this month`
+- From the last 30 days `past month`
+- From last year `last year`
+- From the last 365 days `past year`
+- From a specific month `in july`
 
 
 
