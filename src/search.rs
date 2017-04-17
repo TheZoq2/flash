@@ -42,8 +42,8 @@ pub fn get_tags_from_query(query: &str) -> Vec<String>
 {
     lazy_static!{
         static ref TAG_LIST_RE: Regex = Regex::new(TAG_LIST_REGEX).unwrap();
-        static ref AND_RE: Regex = Regex::new(r"\wand\w");
-        static ref TAG_RE: Regex = Regex::new(r"\w+");
+        static ref AND_RE: Regex = Regex::new(r"\Wand\W").unwrap();
+        static ref TAG_RE: Regex = Regex::new(r"\w+").unwrap();
     }
 
     //Try to match the search string with the tag list regex template
@@ -62,14 +62,16 @@ pub fn get_tags_from_query(query: &str) -> Vec<String>
 
     //Replace and with comma
     let list_str = AND_RE.replace_all(&list_str, ", ");
-
+    println!("{}", list_str);
 
     let mut result = vec!();
-    for cap in TAG_RE.captures_iter(list_str)
+    for cap in TAG_RE.captures_iter(&list_str)
     {
-        result.push(cap);
+        //Since the captures iterator returns all matches
+        //and 0 is always the whole match, unwrap should be safe
+        result.push(String::from(cap.at(0).unwrap()));
     }
-    vec!(String::from(list_str))
+    result
 }
 
 
@@ -85,5 +87,22 @@ mod query_tests
         assert_eq!(get_tags_from_query("of things"), vec!("things"));
         assert_eq!(get_tags_from_query("of things, stuff and items"),
                 vec!("things", "stuff", "items"));
+    }
+
+    #[test]
+    fn no_tags_should_return_empty_vector()
+    {
+        assert_eq!(get_tags_from_query("of"), Vec::<String>::new());
+        assert_eq!(get_tags_from_query(""), Vec::<String>::new());
+        assert_eq!(get_tags_from_query("in linköping"), Vec::<String>::new());
+        assert_eq!(get_tags_from_query("from this year"), Vec::<String>::new());
+    }
+
+    fn more_things_specified_should_give_correct_tags()
+    {
+        assert_eq!(get_tags_from_query("of things and stuff from last year"), 
+                   vec!("things", "stuff"));
+        assert_eq!(get_tags_from_query("of things and stuff from last year in linköping"),
+                   vec!("things", "stuff"));
     }
 }
