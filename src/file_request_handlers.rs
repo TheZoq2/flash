@@ -153,7 +153,13 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
                 let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
                 let mut db_container = mutex.lock().unwrap();
 
-                saved_id = db_container.add_file_to_db(&new_filename.to_string(), &thumbnail_filename.to_string(), &tags, timestamp);
+                saved_id = db_container.add_file_to_db(
+                        &new_filename.to_string(),
+                        &thumbnail_filename.to_string(),
+                        &tags,
+                        timestamp
+                    );
+
                 db_container.save();
             }
 

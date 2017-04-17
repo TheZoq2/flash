@@ -69,7 +69,8 @@ fn get_files_in_dir(dir: &String) -> Vec<PathBuf>
 
 fn main() 
 {
-    let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
+    //let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
+    let target_dir = "/mnt/1TB-files/Pictures/dslr/apr13-2017".to_string();
     //let target_dir = "/home/frans/Pictures/imgtest".to_string();
     let file_list = get_files_in_dir(&target_dir);
 

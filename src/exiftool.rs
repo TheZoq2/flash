@@ -246,4 +246,20 @@ mod exif_data_tests
             GpsCoordinate::new(58, 28, 5.45, CardinalDirection::South)
         );
     }
+
+
+    /*
+    #[test]
+    fn read_exif_from_file()
+    {
+        let filename = "../test/media/DSC_0001.JPG";
+
+        let data = ExifData::from_file(filename).unwrap();
+
+        assert_eq!(data.get_tag("Image Width"), Some("6000"));
+
+        let expected_date = chrono::UTC.ymd(2016, 12, 16).and_hms(21, 34, 26);
+        assert_eq!(data.get_creation_date().unwrap(), expected_date);
+    }
+    */
 }
