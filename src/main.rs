@@ -8,6 +8,7 @@ extern crate urlencoded;
 extern crate image;
 #[macro_use]
 extern crate lazy_static;
+extern crate regex;
 
 extern crate glob;
 extern crate rustc_serialize;
@@ -21,6 +22,7 @@ mod file_util;
 mod file_database_container;
 mod file_request_handlers;
 mod exiftool;
+mod search;
 
 use iron::*;
 use staticfile::Static;

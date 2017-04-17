@@ -53,6 +53,11 @@ impl FileEntry
             additional_data: HashMap::new(),
         }
     }
+
+    pub fn has_tag(&self, tag: String) -> bool
+    {
+        self.tags.contains(&tag)
+    }
 }
 
 
