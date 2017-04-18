@@ -37,7 +37,16 @@ fn has_some_tag(file: &FileEntry, tags: Vec<String>) -> bool
 }
 
 
+/**
+  A set of times to include in a search
+*/
+enum Time {
+    Interval(u32, u32),
+}
 
+/**
+  Returns all the tags specified in a search query
+*/
 pub fn get_tags_from_query(query: &str) -> Vec<String>
 {
     lazy_static!{
@@ -56,7 +65,7 @@ pub fn get_tags_from_query(query: &str) -> Vec<String>
 
     let list_str = match captures.name("list")
     {
-        Some(v) => v,
+        Some(v) => v.as_str(),
         None => return vec!()
     };
 
@@ -69,7 +78,7 @@ pub fn get_tags_from_query(query: &str) -> Vec<String>
     {
         //Since the captures iterator returns all matches
         //and 0 is always the whole match, unwrap should be safe
-        result.push(String::from(cap.at(0).unwrap()));
+        result.push(String::from(cap[0]));
     }
     result
 }
