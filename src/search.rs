@@ -78,7 +78,7 @@ pub fn get_tags_from_query(query: &str) -> Vec<String>
     {
         //Since the captures iterator returns all matches
         //and 0 is always the whole match, unwrap should be safe
-        result.push(String::from(cap[0]));
+        result.push(String::from(cap));
     }
     result
 }
