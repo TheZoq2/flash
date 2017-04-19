@@ -37,12 +37,6 @@ fn has_some_tag(file: &FileEntry, tags: Vec<String>) -> bool
 }
 
 
-/**
-  A set of times to include in a search
-*/
-enum Time {
-    Interval(u32, u32),
-}
 
 /**
   Returns all the tags specified in a search query
@@ -78,11 +72,26 @@ pub fn get_tags_from_query(query: &str) -> Vec<String>
     {
         //Since the captures iterator returns all matches
         //and 0 is always the whole match, unwrap should be safe
-        result.push(String::from(cap));
+        result.push(String::from(cap.get(0).unwrap().as_str()));
     }
     result
 }
 
+
+/**
+  A set of times to include in a search
+*/
+enum Time {
+    Interval(u32, u32),
+}
+
+pub fn get_time_from_query(query: &str) -> Time
+{
+    lazy_static!{
+        static ref TIME_INTERVAL_REGEX = 
+                Regex::new(r"from (this|last|the past) (\w*)").unwrap()
+    }
+}
 
 #[cfg(test)]
 mod query_tests
