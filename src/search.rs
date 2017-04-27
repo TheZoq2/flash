@@ -81,16 +81,30 @@ pub fn get_tags_from_query(query: &str) -> Vec<String>
 /**
   A set of times to include in a search
 */
-enum Time {
+pub enum Time {
     Interval(u32, u32),
 }
 
 pub fn get_time_from_query(query: &str) -> Time
 {
     lazy_static!{
-        static ref TIME_INTERVAL_REGEX = 
-                Regex::new(r"from (this|last|the past) (\w*)").unwrap()
+        static ref TIME_INTERVAL_REGEX: Regex = Regex::new(r"from (this|last|the past) (\w*)").unwrap();
     }
+
+    match TIME_INTERVAL_REGEX.captures(query)
+    {
+        Some(cap) => 
+        {
+            let descriptor = cap.get(1).unwrap().as_str();
+            let time = cap.get(2).unwrap().as_str();
+        },
+        None =>
+        {
+
+        }
+    }
+
+    unimplemented!()
 }
 
 #[cfg(test)]
