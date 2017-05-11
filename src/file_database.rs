@@ -10,107 +10,81 @@ use rustc_serialize::json;
 use std::io::prelude::*;
 use std::fs::{File};
 
+use diesel;
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
 
+use schema;
+use schema::files;
 
-pub enum TimestampRange
-{
-    Unbounded,
-    Bounded(u64)
-}
-
+use chrono;
+use chrono::naive::time::NaiveDateTime;
 
 /**
   A reference to a file stored in the file database
  */
-#[derive(RustcEncodable, RustcDecodable, Clone)]
+#[derive(Queryable, Clone)]
 pub struct FileEntry
 {
     //The unique ID of this file in the db
-    id: usize,
+    id: i32,
     //The path to the actual file
     pub path: String,
-    pub tags: Vec<String>,
 
-    pub timestamp: u64,
+    pub timestamp: NaiveDateTime,
 
     pub thumbnail_path: String,
 
-    pub additional_data: HashMap<String, String>,
+    is_uploaded: bool
 }
+
 impl FileEntry
 {
-    pub fn new(id: usize, path: String, tags: Vec<String>, thumbnail_path: String, timestamp: u64) -> FileEntry
-    {
-        FileEntry {
-            id: id,
-            path: path,
-            tags: tags,
-
-            timestamp: timestamp,
-
-            thumbnail_path: thumbnail_path,
-
-            additional_data: HashMap::new(),
-        }
-    }
-
     pub fn has_tag(&self, tag: String) -> bool
     {
         self.tags.contains(&tag)
     }
 }
 
+#[derive(Insertable)]
+#[table_name="files"]
+pub struct NewFileEntry<'a>
+{
+    filename: &'a str,
+    thumbnail_path: &'a str,
 
-#[derive(RustcEncodable, RustcDecodable)]
+    timestamp: NaiveDateTime,
+
+    is_uploaded: bool
+}
+
+impl<'a> NewFileEntry<'a>
+{
+    pub fn new(filename: &'a str, thumbnail_path: &'a str, creation_time: NaiveDateTime) 
+        -> NewFileEntry<'a>
+    {
+        NewFileEntry {
+            filename,
+            thumbnail_path,
+            timestamp: creation_time,
+            is_uploaded: false
+        }
+    }
+}
+
+
 pub struct FileDatabase
 {
-    version: u32,
-
-    next_id: usize,
-
-    //Map from file IDs to actual files
-    files: HashMap<usize, FileEntry>,
-
-    //Map from tags to file ids
-    tags: HashMap<String, Vec<usize>>,
+    connection: PgConnection
 }
 
 impl FileDatabase
 {
-    pub fn new() -> FileDatabase
+    pub fn new(connection: PgConnection) -> FileDatabase
     {
-        FileDatabase
-        {
-            version:0,
-
-            next_id: 0,
-
-            files: HashMap::new(),
-            tags: HashMap::new(),
+        FileDatabase{
+            connection
         }
-    }
-    pub fn load_from_json(storage_path: String) -> FileDatabase
-    {
-        let mut file = match File::open(&storage_path)
-        {
-            Ok(file) => file,
-            Err(_) => {
-                println!("No existing database file found. Creating one in {}", &storage_path);
-                return FileDatabase::new();
-            }
-        };
-
-        let mut json_str = String::new();
-        match file.read_to_string(&mut json_str)
-        {
-            Ok(_) => {},
-            Err(e) => {
-                println!("Database loading failed. File {} could not be loaded. {}", &storage_path, e);
-                println!("Creating a new db file in {}", &storage_path);
-                return FileDatabase::new();
-            }
-        };
-        json::decode::<FileDatabase>(&json_str).unwrap()
     }
 
     /**
@@ -120,19 +94,21 @@ impl FileDatabase
 
       Returns the ID of the added image
      */
-    pub fn add_new_file(&mut self, filename: &String, thumb_name: &String, 
-                        tags: &Vec<String>, timestamp: u64) -> usize
+    //TODO: Handle tags and time
+    pub fn add_new_file(&mut self,
+                        filename: &str,
+                        thumb_name: &str, 
+                        tags: &Vec<String>,
+                        timestamp: u64
+                    ) -> FileEntry
     {
-        let new_id = self.next_id;
+        use schema::files;
 
-        self.set_file_tags(new_id, tags);
+        let new_file = NewFileEntry::new(filename, thumb_name, NaiveDateTime::from_timestamp(timestamp, 0));
 
-        let file_entry = FileEntry::new(new_id, filename.clone(), tags.clone(), thumb_name.clone(), timestamp);
-        self.files.insert(self.next_id, file_entry);
-
-        self.next_id += 1;
-
-        self.next_id - 1
+        diesel::insert(&new_file).into(files::table)
+            .get_result(&self.connection)
+            .expect("Error saving new file")
     }
 
     #[must_use]
@@ -265,11 +241,6 @@ impl FileDatabase
     pub fn get_file_paths_with_tags(&self, tag: Vec<String>) -> Vec<String>
     {
         get_file_paths_from_files(self.get_files_with_tags(tag))
-    }
-
-    pub fn get_next_id(&self) -> usize
-    {
-        self.next_id
     }
 
     pub fn get_file_with_id(&self, id: usize) -> Option<&FileEntry>
