@@ -10,7 +10,7 @@ use diesel::pg::PgConnection;
 use diesel::prelude::*;
 
 use schema;
-use schema::files;
+use schema::{files, tags, tag_links};
 
 use chrono::NaiveDateTime;
 
@@ -21,52 +21,51 @@ use iron::typemap::Key;
   A tag stored in the database. Files can be linked to tags through
   tag_links
 */
-//#[derive(Queryable, Identifiable, Associations)]
-//#[has_many(tag_links)]
-//struct Tag
-//{
-//    pub id: i32,
-//    pub name: String
-//}
-//
-//#[derive(Insertable)]
-//#[table_name="tags"]
-//struct NewTag<'a>
-//{
-//    text: &'a str
-//}
-//
-//
-///**
-//  A link between a file and a tag
-//*/
-//#[derive(Queryable, Identifiable, Associations)]
-////#[belongs_to(tags), foreign_key="tag_id"]
-////#[belongs_to(files), foreign_key="file_id"]
-//#[belongs_to(tags)]
-//#[belongs_to(files)]
-//pub struct TagLink
-//{
-//    id: i32,
-//    file_id: i32,
-//    tag_id: i32
-//}
-//
-//#[derive(Insertable)]
-//#[table_name="tag_links"]
-//struct NewTagLink
-//{
-//    pub file_id: i32,
-//    pub tag_id: i32
-//}
+#[derive(Clone, Queryable, Identifiable, Associations)]
+#[has_many(tag_links)]
+struct Tag
+{
+    pub id: i32,
+    pub text: String
+}
+
+#[derive(Insertable)]
+#[table_name="tags"]
+struct NewTag<'a>
+{
+    pub text: &'a str
+}
+
+
+/**
+  A link between a file and a tag
+*/
+#[derive(Queryable, Identifiable, Associations)]
+#[belongs_to(tags)]
+#[belongs_to(files)]
+pub struct TagLink
+{
+    id: i32,
+    file_id: i32,
+    tag_id: i32
+}
+
+#[derive(Insertable)]
+#[table_name="tag_links"]
+struct NewTagLink
+{
+    pub file_id: i32,
+    pub tag_id: i32
+}
 
 
 
 /**
   A reference to a file stored in the file database
  */
-#[derive(Queryable, Clone, RustcEncodable)]
-pub struct FileEntry
+#[derive(Queryable, Identifiable, Associations, Clone, RustcEncodable)]
+#[has_many(tag_links)]
+pub struct File
 {
     //The unique ID of this file in the db
     pub id: i32,
@@ -82,7 +81,7 @@ pub struct FileEntry
 
 #[derive(Insertable)]
 #[table_name="files"]
-pub struct NewFileEntry<'a>
+pub struct NewFile<'a>
 {
     filename: &'a str,
     thumbnail_path: &'a str,
@@ -92,12 +91,12 @@ pub struct NewFileEntry<'a>
     is_uploaded: bool
 }
 
-impl<'a> NewFileEntry<'a>
+impl<'a> NewFile<'a>
 {
     pub fn new(filename: &'a str, thumbnail_path: &'a str, creation_time: NaiveDateTime) 
-        -> NewFileEntry<'a>
+        -> NewFile<'a>
     {
-        NewFileEntry {
+        NewFile {
             filename,
             thumbnail_path,
             creation_date: creation_time,
@@ -131,22 +130,54 @@ impl FileDatabase
 
       Returns the ID of the added image
      */
-    //TODO: Handle tags and time
+    //TODO: Handle tags
+    //TODO: Handle errors when writing to the database
     pub fn add_new_file(&mut self,
                         filename: &str,
                         thumb_name: &str, 
                         tags: &Vec<String>,
                         timestamp: u64
-                    ) -> FileEntry
+                    ) -> File
     {
-        use schema::files;
-
         let timestamp = timestamp as i64;
-        let new_file = NewFileEntry::new(filename, thumb_name, NaiveDateTime::from_timestamp(timestamp, 0));
+        let new_file = NewFile::new(filename, thumb_name, NaiveDateTime::from_timestamp(timestamp, 0));
 
-        diesel::insert(&new_file).into(files::table)
+        let file: File = diesel::insert(&new_file).into(files::table)
             .get_result(&self.connection)
-            .expect("Error saving new file")
+            .expect("Error saving new file");
+
+
+        //Go through all the tags and link them to this file
+        for tag_text in tags
+        {
+            //Check if such a tag exists already
+            let tag_result = tags::table
+                .filter(tags::text.eq(tag_text))
+                .load::<Tag>(&self.connection)
+                .expect(&format!("Error looking for tag {}", tag_text));
+
+            //if not, create it
+            let tag = if tag_result.is_empty()
+                {
+                    diesel::insert(&NewTag{ text: &tag_text })
+                        .into(tags::table)
+                        .get_result(&self.connection)
+                        .expect("Error inserting new file")
+                }
+                else
+                {
+                    //Unwrap is safe because we know that the length is > 1
+                    tag_result.first().unwrap().clone()
+                };
+
+            //Create a link between the file and the tag
+            diesel::insert(&NewTagLink{ file_id: file.id, tag_id: tag.id })
+                .into(tag_links::table)
+                .execute(&self.connection)
+                .expect("Error creating tag link");
+        }
+
+        file
     }
 
     #[must_use]
@@ -159,19 +190,19 @@ impl FileDatabase
 
 
     /**
-      Returns all FileEntry objects which are part of a specific tag
+      Returns all File objects which are part of a specific tag
      */
-    pub fn get_files_with_tag(&self, tag: String) -> Vec<FileEntry>
+    pub fn get_files_with_tag(&self, tag: String) -> Vec<File>
     {
         unimplemented!();
     }
 
-    pub fn get_file_by_id(&self, id: i32) -> Option<FileEntry>
+    pub fn get_file_by_id(&self, id: i32) -> Option<File>
     {
         unimplemented!();
     }
 
-    fn get_mut_file_by_id(&mut self, id: i32) -> Option<&mut FileEntry>
+    fn get_mut_file_by_id(&mut self, id: i32) -> Option<&mut File>
     {
         unimplemented!();
     }
@@ -179,7 +210,7 @@ impl FileDatabase
     /**
       Returns all files that have all the tags in the list
      */
-    pub fn get_files_with_tags(&self, tags: Vec<String>) -> Vec<FileEntry>
+    pub fn get_files_with_tags(&self, tags: Vec<String>) -> Vec<File>
     {
         unimplemented!();
     }
@@ -196,7 +227,7 @@ impl FileDatabase
         unimplemented!();
     }
 
-    pub fn get_file_with_id(&self, id: i32) -> Option<&FileEntry>
+    pub fn get_file_with_id(&self, id: i32) -> Option<&File>
     {
         unimplemented!()
     }
@@ -204,8 +235,8 @@ impl FileDatabase
     pub fn get_files_with_tags_and_function(
                 &self, 
                 tags: Vec<String>,
-                filters: &Vec<&Fn(&FileEntry) -> bool>
-            ) -> Vec<FileEntry>
+                filters: &Vec<&Fn(&File) -> bool>
+            ) -> Vec<File>
     {
         unimplemented!();
     }
@@ -246,7 +277,7 @@ impl FileDatabase
 /**
  * Returns a vector of paths from a vector of file entrys
  */
-pub fn get_file_paths_from_files(files: Vec<FileEntry>) -> Vec<String>
+pub fn get_file_paths_from_files(files: Vec<File>) -> Vec<String>
 {
     let mut result = vec!();
 
@@ -391,9 +422,9 @@ mod db_tests
         fdb.add_new_file(&String::from("5"), &String::from("5"), &vec!(), 50);
         fdb.add_new_file(&String::from("6"), &String::from("6"), &vec!(), 200);
 
-        let less_than_120 = |x: &FileEntry|{x.timestamp < 120};
-        let more_than_50 = |x: &FileEntry|{x.timestamp < 120};
-        let eq_0 = |x: &FileEntry|{x.timestamp == 0};
+        let less_than_120 = |x: &File|{x.timestamp < 120};
+        let more_than_50 = |x: &File|{x.timestamp < 120};
+        let eq_0 = |x: &File|{x.timestamp == 0};
 
         assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&less_than_120)).len() == 3);
         assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&eq_0)).len() == 1);
