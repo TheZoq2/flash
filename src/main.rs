@@ -27,7 +27,7 @@ mod album_handler;
 mod file_util;
 mod file_request_handlers;
 mod exiftool;
-mod search;
+//mod search;
 mod schema;
 
 

@@ -4,12 +4,6 @@ extern crate rand;
 extern crate rustc_serialize;
 
 use std::vec::Vec;
-use std::collections::HashMap;
-
-use rustc_serialize::json;
-
-use std::io::prelude::*;
-use std::fs::{File};
 
 use diesel;
 use diesel::pg::PgConnection;
@@ -18,10 +12,54 @@ use diesel::prelude::*;
 use schema;
 use schema::files;
 
-use chrono;
 use chrono::NaiveDateTime;
 
 use iron::typemap::Key;
+
+
+/**
+  A tag stored in the database. Files can be linked to tags through
+  tag_links
+*/
+//#[derive(Queryable, Identifiable, Associations)]
+//#[has_many(tag_links)]
+//struct Tag
+//{
+//    pub id: i32,
+//    pub name: String
+//}
+//
+//#[derive(Insertable)]
+//#[table_name="tags"]
+//struct NewTag<'a>
+//{
+//    text: &'a str
+//}
+//
+//
+///**
+//  A link between a file and a tag
+//*/
+//#[derive(Queryable, Identifiable, Associations)]
+////#[belongs_to(tags), foreign_key="tag_id"]
+////#[belongs_to(files), foreign_key="file_id"]
+//#[belongs_to(tags)]
+//#[belongs_to(files)]
+//pub struct TagLink
+//{
+//    id: i32,
+//    file_id: i32,
+//    tag_id: i32
+//}
+//
+//#[derive(Insertable)]
+//#[table_name="tag_links"]
+//struct NewTagLink
+//{
+//    pub file_id: i32,
+//    pub tag_id: i32
+//}
+
 
 
 /**
@@ -40,14 +78,6 @@ pub struct FileEntry
     pub creation_date: Option<NaiveDateTime>,
 
     is_uploaded: bool
-}
-
-impl FileEntry
-{
-    pub fn has_tag(&self, tag: String) -> bool
-    {
-        self.tags.contains(&tag)
-    }
 }
 
 #[derive(Insertable)]
@@ -202,7 +232,14 @@ impl FileDatabase
     */
     pub fn get_file_save_path(&self) -> String
     {
-        return self.file_save_path;
+        return self.file_save_path.clone();
+    }
+
+    fn get_file_amount(&self) -> i64
+    {
+        use schema::files::dsl::*;
+
+        files.count().get_result(&self.connection).unwrap()
     }
 }
 
@@ -215,7 +252,7 @@ pub fn get_file_paths_from_files(files: Vec<FileEntry>) -> Vec<String>
 
     for file in files
     {
-        result.push(file.path.clone());
+        result.push(file.filename.clone());
     }
 
     result
@@ -229,10 +266,45 @@ pub fn get_file_paths_from_files(files: Vec<FileEntry>) -> Vec<String>
 mod db_tests
 {
     use file_database::*;
+
+    use dotenv::dotenv;
+    use std::env;
+
+    use diesel;
+    use schema;
+
+    use diesel::prelude::*;
+    use diesel::pg::PgConnection;
+
+    //Establish a connection to the postgres database
+    fn establish_connection() -> PgConnection
+    {
+        dotenv().ok();
+
+        let database_url = env::var("DATABASE_TEST_URL")
+            .expect("DATABASE_TEST_URL must be set. Perhaps .env is missing?");
+        PgConnection::establish(&database_url)
+            .expect(&format!("Error connecting to {}", database_url))
+    }
+
+    fn get_file_database() -> FileDatabase
+    {
+        let connection = establish_connection();
+
+        //Clear the tables
+        diesel::delete(schema::files::table).execute(&connection);
+
+        let fdb = FileDatabase::new(establish_connection(), String::from("/tmp/flash"));
+
+        assert_eq!(fdb.get_file_amount(), 0);
+
+        fdb
+    }
+
     #[test]
     fn add_test()
     {
-        let mut fdb = FileDatabase::new();
+        let mut fdb = get_file_database();
 
         let id1 = fdb.add_new_file(
             &"test1".to_string(), 
@@ -245,8 +317,7 @@ mod db_tests
             &vec!("tag1".to_string(), "tag3".to_string()),
             0);
 
-        assert_eq!(id1, 0);
-        assert_eq!(id2, 1);
+        assert_eq!(fdb.get_file_amount(), 2);
 
         //Ensure both files are found when searching for tag1
         assert!(fdb.get_file_paths_with_tag("tag1".to_string()).contains(&"test1".to_string()));
@@ -263,6 +334,7 @@ mod db_tests
         assert!(fdb.get_file_paths_with_tag("unused_tag".to_string()).is_empty());
     }
 
+    /*
     #[test]
     fn multi_tag_test()
     {
@@ -290,7 +362,9 @@ mod db_tests
         let no_tags = fdb.get_files_with_tags(vec!());
         assert!(no_tags.len() == 3);
     }
+    */
 
+    /*
     #[test]
     fn modify_tags_test()
     {
@@ -303,7 +377,9 @@ mod db_tests
         assert!(fdb.get_files_with_tags(vec!("new_tag".to_string())).len() == 1);
         assert!(fdb.get_files_with_tags(vec!("old_tag".to_string())).len() == 0);
     }
+    */
 
+    /*
     fn timestamp_test()
     {
         let mut fdb = FileDatabase::new();
@@ -324,5 +400,6 @@ mod db_tests
 
         assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&less_than_120, &more_than_50)).len() == 1);
     }
+    */
 }
 

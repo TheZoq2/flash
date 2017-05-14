@@ -56,7 +56,8 @@ pub struct ThumbnailInfo
   landscape mode will be at most max_width tall
  */
 
-pub fn generate_thumbnail(source_path: &str, destination_path_without_extension: &str, max_size: u32) -> Result<ThumbnailInfo, image::ImageError>
+pub fn generate_thumbnail(source_path: &str, destination_path_without_extension: &str, max_size: u32)
+        -> Result<ThumbnailInfo, image::ImageError>
 {
     //Generating the filenames
     let file_extension = get_file_extension(&source_path);
