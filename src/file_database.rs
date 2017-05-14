@@ -1,6 +1,7 @@
 
 extern crate image;
 extern crate rand;
+extern crate rustc_serialize;
 
 use std::vec::Vec;
 use std::collections::HashMap;
@@ -18,22 +19,25 @@ use schema;
 use schema::files;
 
 use chrono;
-use chrono::naive::time::NaiveDateTime;
+use chrono::NaiveDateTime;
+
+use iron::typemap::Key;
+
 
 /**
   A reference to a file stored in the file database
  */
-#[derive(Queryable, Clone)]
+#[derive(Queryable, Clone, RustcEncodable)]
 pub struct FileEntry
 {
     //The unique ID of this file in the db
-    id: i32,
+    pub id: i32,
     //The path to the actual file
-    pub path: String,
-
-    pub timestamp: NaiveDateTime,
+    pub filename: String,
 
     pub thumbnail_path: String,
+
+    pub creation_date: Option<NaiveDateTime>,
 
     is_uploaded: bool
 }
@@ -53,7 +57,7 @@ pub struct NewFileEntry<'a>
     filename: &'a str,
     thumbnail_path: &'a str,
 
-    timestamp: NaiveDateTime,
+    creation_date: NaiveDateTime,
 
     is_uploaded: bool
 }
@@ -66,7 +70,7 @@ impl<'a> NewFileEntry<'a>
         NewFileEntry {
             filename,
             thumbnail_path,
-            timestamp: creation_time,
+            creation_date: creation_time,
             is_uploaded: false
         }
     }
@@ -75,15 +79,18 @@ impl<'a> NewFileEntry<'a>
 
 pub struct FileDatabase
 {
-    connection: PgConnection
+    connection: PgConnection,
+    file_save_path: String
 }
+impl Key for FileDatabase { type Value = FileDatabase; }
 
 impl FileDatabase
 {
-    pub fn new(connection: PgConnection) -> FileDatabase
+    pub fn new(connection: PgConnection, file_save_path: String) -> FileDatabase
     {
         FileDatabase{
-            connection
+            connection,
+            file_save_path
         }
     }
 
@@ -104,6 +111,7 @@ impl FileDatabase
     {
         use schema::files;
 
+        let timestamp = timestamp as i64;
         let new_file = NewFileEntry::new(filename, thumb_name, NaiveDateTime::from_timestamp(timestamp, 0));
 
         diesel::insert(&new_file).into(files::table)
@@ -112,33 +120,9 @@ impl FileDatabase
     }
 
     #[must_use]
-    pub fn change_file_tags(&mut self, id: usize, tags: &Vec<String>) -> Result<(), String>
+    pub fn change_file_tags(&mut self, id: i32, tags: &Vec<String>) -> Result<(), String>
     {
-        //First we need to find out what tags the file had before. 
-        //We can not borrow the file object here because we are going to be
-        //modifying self later on
-        let file = match self.get_file_by_id(id)
-        {
-            Some(file) => file,
-            None =>
-            {
-                return Err(String::from(format!("Failed to modify file, ID {} doesn't exist", id)));
-            }
-        };
-
-        self.remove_tags_of_file(id, &file.tags);
-
-        self.set_file_tags(id, tags);
-
-
-
-        //This time we can just unwrap the value because we know that
-        //the last get_file_by_id operation succeded if we got here
-        let file = &mut self.get_mut_file_by_id(id).unwrap();
-
-        file.tags = tags.clone();
-
-        Ok(())
+        unimplemented!()
     }
 
 
@@ -149,41 +133,17 @@ impl FileDatabase
      */
     pub fn get_files_with_tag(&self, tag: String) -> Vec<FileEntry>
     {
-        let ids = match self.tags.get(&tag)
-        {
-            Some(val) => val.clone(),
-            None => Vec::<usize>::new(),
-        };
-
-        let mut files = Vec::<FileEntry>::new();
-        for id in ids
-        {
-            //This assumes that the id exists, i'll leave it up to
-            //the rest of the system to take care of that.
-            files.push(self.files.get(&id).unwrap().clone());
-        }
-
-        files
+        unimplemented!();
     }
 
-    pub fn get_file_by_id(&self, id: usize) -> Option<FileEntry>
+    pub fn get_file_by_id(&self, id: i32) -> Option<FileEntry>
     {
-        match self.files.get(&id){
-            Some(file) => {
-                Some(file.clone())
-            },
-            None => None
-        }
+        unimplemented!();
     }
 
-    fn get_mut_file_by_id(&mut self, id: usize) -> Option<&mut FileEntry>
+    fn get_mut_file_by_id(&mut self, id: i32) -> Option<&mut FileEntry>
     {
-        match self.files.get_mut(&id){
-            Some(file) => {
-                Some(file)
-            },
-            None => None
-        }
+        unimplemented!();
     }
     
     /**
@@ -191,44 +151,7 @@ impl FileDatabase
      */
     pub fn get_files_with_tags(&self, tags: Vec<String>) -> Vec<FileEntry>
     {
-        let mut tags = tags.clone();
-
-        if tags.len() == 0
-        {
-            return self.files.values().map(|x|{x.clone()}).collect();
-        }
-
-        let possible_files = self.get_files_with_tag(tags.pop().unwrap());
-
-        let mut result = vec!();
-
-        for file in possible_files
-        {
-            let mut has_all_tags = true;
-            for tag in &tags
-            {
-                let mut has_tag = false;
-                for file_tag in &file.tags
-                {
-                    if tag == file_tag
-                    {
-                        has_tag = true;
-                    }
-                }
-
-                if !has_tag
-                {
-                    has_all_tags = false
-                }
-            }
-
-            if has_all_tags
-            {
-                result.push(file);
-            }
-        }
-
-        result
+        unimplemented!();
     }
 
     /**
@@ -236,16 +159,16 @@ impl FileDatabase
      */
     pub fn get_file_paths_with_tag(&self, tag: String) -> Vec<String>
     {
-        get_file_paths_from_files(self.get_files_with_tag(tag))
+        unimplemented!();
     }
     pub fn get_file_paths_with_tags(&self, tag: Vec<String>) -> Vec<String>
     {
-        get_file_paths_from_files(self.get_files_with_tags(tag))
+        unimplemented!();
     }
 
-    pub fn get_file_with_id(&self, id: usize) -> Option<&FileEntry>
+    pub fn get_file_with_id(&self, id: i32) -> Option<&FileEntry>
     {
-        self.files.get(&id)
+        unimplemented!()
     }
 
     pub fn get_files_with_tags_and_function(
@@ -254,38 +177,12 @@ impl FileDatabase
                 filters: &Vec<&Fn(&FileEntry) -> bool>
             ) -> Vec<FileEntry>
     {
-        let with_tags = self.get_files_with_tags(tags);
-
-        with_tags.into_iter().filter(|x|{
-            for pred in filters
-            {
-                if pred(x)
-                {
-                    return false;
-                }
-            }
-            true
-        }).collect()
+        unimplemented!();
     }
 
-    fn remove_tags_of_file(&mut self, file_id: usize, tags: &Vec<String>)
+    fn remove_tags_of_file(&mut self, file_id: i32, tags: &Vec<String>)
     {
-        for tag in tags
-        {
-            let id_list = &mut self.tags.get_mut(tag).unwrap();
-
-            let mut index = 0;
-            for i in 0..id_list.len()
-            {
-                if id_list[i] == file_id
-                {
-                    index = i;
-                    break
-                }
-            }
-
-            id_list.swap_remove(index);
-        }
+        unimplemented!();
     }
 
     /**
@@ -293,28 +190,19 @@ impl FileDatabase
       since it can cause the db tag list to desync with the file entry. Make sure you
       only run this when you are sure that the file has no previous tags stored
      */
-    fn set_file_tags(&mut self, file: usize, tags: &Vec<String>)
+    fn set_file_tags(&mut self, file: i32, tags: &Vec<String>)
     {
-        //Add all the tags to the map
-        for tag in tags
-        {
-            if self.tags.get(tag) == None
-            {
-                self.tags.insert(tag.clone(), vec!());
-            }
+        unimplemented!();
+    }
 
-            //Insert the new image using the binary search function.
-            let vec = self.tags.get_mut(tag).unwrap();
-            match vec.binary_search(&file){
-                Ok(_) => {
-                    //This shouldn't happen
-                    println!("ID {} is already part of tag {}. This is an error in FileDatabase::add_new_file", file, tag);
-                },
-                //If binary search returns Err, it means it didn't find an element and it returns
-                //the index where the element would be
-                Err(new_index) => {vec.insert(new_index, file)}
-            }
-        }
+    /**
+      Returns the path to the folder where files should be stored
+
+      TODO: Move out of database code
+    */
+    pub fn get_file_save_path(&self) -> String
+    {
+        return self.file_save_path;
     }
 }
 

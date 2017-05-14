@@ -25,7 +25,6 @@ mod file_database;
 mod settings;
 mod album_handler;
 mod file_util;
-mod file_database_container;
 mod file_request_handlers;
 mod exiftool;
 mod search;
@@ -37,13 +36,13 @@ use staticfile::Static;
 use mount::Mount;
 use std::path::{Path, PathBuf};
 
+use file_database::FileDatabase;
+
 use glob::glob;
 
 use persistent::{Write};
 
 use std::vec::Vec;
-
-use file_database_container::{FileDatabaseContainer};
 
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
@@ -104,8 +103,7 @@ fn main()
     let settings = settings::Settings::get_defaults();
 
     //Loading or creating the database
-    //let database = FileDatabase::load_from_json(&settings);
-    let db = FileDatabaseContainer::new(&settings);
+    let db = FileDatabase::new(establish_connection(), settings.get_file_storage_path());
 
     let mut mount = Mount::new();
 
@@ -118,7 +116,7 @@ fn main()
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileList>::both(file_list::FileList::new(file_list)));
-    chain.link(Write::<FileDatabaseContainer>::both(db));
+    chain.link(Write::<FileDatabase>::both(db));
     match Iron::new(chain).http("localhost:3000")
     {
         Ok(_) => {

@@ -74,7 +74,7 @@ pub fn generate_thumbnail(source_path: &str, destination_path_without_extension:
         };
 
         let thumb_data = generate_thumbnail_from_generic_image(img, max_size);
-        
+
         let ref mut fout = File::create(&Path::new(&full_path_clone)).unwrap();
         thumb_data.save(fout, image::PNG).unwrap();
     });

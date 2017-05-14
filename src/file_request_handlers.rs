@@ -9,7 +9,6 @@ use persistent::{Write};
 use std::option::Option;
 
 use file_database::{FileDatabase};
-use file_database_container::{FileDatabaseContainer};
 
 use file_util::{
     generate_thumbnail,
@@ -61,9 +60,9 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
     };
 
     let response = {
-        let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
+        let mutex = request.get::<Write<FileDatabase>>().unwrap();
         let db = mutex.lock().unwrap();
-        generate_file_list_response(filename, &db.deref().get_db())
+        generate_file_list_response(filename, &db.deref())
     };
 
     Ok(Response::with((status::Ok, format!("{}", response))))
@@ -91,17 +90,17 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
 
     //Get the folder where we want to place the stored file
     let destination_dir = {
-        let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
+        let mutex = request.get::<Write<FileDatabase>>().unwrap();
         let db = mutex.lock().unwrap();
 
-        db.get_saved_file_path()
+        db.get_file_save_path()
     };
 
     let file_identifier = get_semi_unique_identifier();
 
     let tags = get_tags_from_request(request).unwrap();
 
-    let thumbnail_path_without_extension = destination_dir.clone() + "/thumb_" + &file_identifier;
+    let thumbnail_path_without_extension = format!("{}_thumb_{}", destination_dir.clone(), &file_identifier);
 
 
     //Generate the thumbnail
@@ -118,7 +117,6 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
     //Copy the file to the destination
     //Get the name and path of the new file
     let new_file_path = destination_dir + "/" + &file_identifier + &file_extension;
-            
 
 
     let thumbnail_filename = 
@@ -138,29 +136,25 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
         Some(id) =>
         {
             //Modify the old image
-            let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
-            let mut db_container = mutex.lock().unwrap();
+            let mutex = request.get::<Write<FileDatabase>>().unwrap();
+            let mut db = mutex.lock().unwrap();
 
-            db_container.change_file_tags(id, &tags);
-        
-            db_container.save();
+            db.change_file_tags(id, &tags);
         }
         None =>
         {
             let saved_id;
             //Store the file in the database
             {
-                let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
+                let mutex = request.get::<Write<FileDatabase>>().unwrap();
                 let mut db_container = mutex.lock().unwrap();
 
-                saved_id = db_container.add_file_to_db(
+                saved_id = db_container.add_new_file(
                         &new_filename.to_string(),
                         &thumbnail_filename.to_string(),
                         &tags,
                         timestamp
-                    );
-
-                db_container.save();
+                    ).id;
             }
 
             //Remember that the current image has been saved
@@ -246,7 +240,7 @@ fn generate_file_list_response(file: Option<File>, db: &FileDatabase) -> String
         file_type: String,
 
         tags: Vec<String>,
-        old_id: Option<usize>
+        old_id: Option<i32>
     }
 
     let mut response = Response{
@@ -272,7 +266,8 @@ fn generate_file_list_response(file: Option<File>, db: &FileDatabase) -> String
             {
                 Some(id) => {
                     //Fetch the data about the image in the database
-                    response.tags = db.get_file_with_id(id).unwrap().tags.clone();
+                    //response.tags = db.get_file_with_id(id).unwrap().tags.clone();
+                    response.tags = unimplemented!();
                     response.old_id = Some(id);
                 },
                 None => {}

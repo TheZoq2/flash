@@ -6,8 +6,9 @@ use rustc_serialize::json;
 use iron::*;
 use persistent::{Write};
 
-use file_database_container::FileDatabaseContainer;
 use file_util::sanitize_tag_names;
+
+use file_database::FileDatabase;
 
 
 pub fn handle_album_list_request(request: &mut Request) -> IronResult<Response>
@@ -47,11 +48,11 @@ pub fn handle_album_list_request(request: &mut Request) -> IronResult<Response>
 
     //Get the database and search through it for the tags
     //Store the file in the database
-    let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
-    let db_container = mutex.lock().unwrap();
+    let mutex = request.get::<Write<FileDatabase>>().unwrap();
+    let db = mutex.lock().unwrap();
 
     //let filenames = db_container.get_db().get_file_paths_with_tags(tags);
-    let files = db_container.get_db().get_files_with_tags(tags);
+    let files = db.get_files_with_tags(tags);
 
     Ok(Response::with((status::Ok, format!("{}", json::encode(&files).unwrap()))))
 }
@@ -78,7 +79,7 @@ pub fn handle_album_image_request(request: &mut Request) -> IronResult<Response>
         }
     };
     
-    let id = match id_string.parse::<usize>()
+    let id = match id_string.parse::<i32>()
     {
         Ok(val) => val,
         Err(e) => {
@@ -87,10 +88,10 @@ pub fn handle_album_image_request(request: &mut Request) -> IronResult<Response>
         }
     };
 
-    let mutex = request.get::<Write<FileDatabaseContainer>>().unwrap();
-    let db_container = mutex.lock().unwrap();
+    let mutex = request.get::<Write<FileDatabase>>().unwrap();
+    let db = mutex.lock().unwrap();
 
-    let file = db_container.get_db().get_file_with_id(id);
+    let file = db.get_file_with_id(id);
 
     Ok(Response::with((status::Ok, format!("{}", json::encode(&file).unwrap()))))
 }
