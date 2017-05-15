@@ -215,16 +215,9 @@ impl FileDatabase
         unimplemented!();
     }
 
-    /**
-      Returns paths to all file objects that are part of a tag
-     */
-    pub fn get_file_paths_with_tag(&self, tag: String) -> Vec<String>
+    pub fn get_file_paths_with_tags(&self, tags: Vec<String>) -> Vec<String>
     {
-        unimplemented!();
-    }
-    pub fn get_file_paths_with_tags(&self, tag: Vec<String>) -> Vec<String>
-    {
-        unimplemented!();
+        self.get_files_with_tags(tags).iter().map(|x|{x.filename.clone()}).collect()
     }
 
     pub fn get_file_with_id(&self, id: i32) -> Option<&File>
@@ -323,7 +316,9 @@ mod db_tests
         let connection = establish_connection();
 
         //Clear the tables
-        diesel::delete(schema::files::table).execute(&connection);
+        diesel::delete(schema::tag_links::table).execute(&connection).unwrap();
+        diesel::delete(schema::tags::table).execute(&connection).unwrap();
+        diesel::delete(schema::files::table).execute(&connection).unwrap();
 
         let fdb = FileDatabase::new(establish_connection(), String::from("/tmp/flash"));
 
@@ -351,18 +346,18 @@ mod db_tests
         assert_eq!(fdb.get_file_amount(), 2);
 
         //Ensure both files are found when searching for tag1
-        assert!(fdb.get_file_paths_with_tag("tag1".to_string()).contains(&"test1".to_string()));
-        assert!(fdb.get_file_paths_with_tag("tag1".to_string()).contains(&"test2".to_string()));
+        assert!(fdb.get_file_paths_with_tags(vec!("tag1".to_string())).contains(&"test1".to_string()));
+        assert!(fdb.get_file_paths_with_tags(vec!("tag1".to_string())).contains(&"test2".to_string()));
 
         //Ensure only the correct tags are found when searching for the other tags
-        assert!(fdb.get_file_paths_with_tag("tag2".to_string()).contains(&"test1".to_string()));
-        assert!(fdb.get_file_paths_with_tag("tag2".to_string()).contains(&"test2".to_string()) == false);
+        assert!(fdb.get_file_paths_with_tags(vec!("tag2".to_string())).contains(&"test1".to_string()));
+        assert!(fdb.get_file_paths_with_tags(vec!("tag2".to_string())).contains(&"test2".to_string()) == false);
 
-        assert!(fdb.get_file_paths_with_tag("tag3".to_string()).contains(&"test2".to_string()));
-        assert!(fdb.get_file_paths_with_tag("tag3".to_string()).contains(&"test1".to_string()) == false);
+        assert!(fdb.get_file_paths_with_tags(vec!("tag3".to_string())).contains(&"test2".to_string()));
+        assert!(fdb.get_file_paths_with_tags(vec!("tag3".to_string())).contains(&"test1".to_string()) == false);
 
         //Ensure that tags that don't exist don't return anything
-        assert!(fdb.get_file_paths_with_tag("unused_tag".to_string()).is_empty());
+        assert!(fdb.get_file_paths_with_tags(vec!("unused_tag".to_string())).is_empty());
     }
 
     /*
