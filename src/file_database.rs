@@ -10,53 +10,11 @@ use diesel::pg::PgConnection;
 use diesel::prelude::*;
 
 use schema;
-use schema::{files, tags, tag_links};
+use schema::{files};
 
 use chrono::NaiveDateTime;
 
 use iron::typemap::Key;
-
-
-/**
-  A tag stored in the database. Files can be linked to tags through
-  tag_links
-*/
-#[derive(Clone, Queryable, Identifiable, Associations)]
-#[has_many(tag_links)]
-struct Tag
-{
-    pub id: i32,
-    pub text: String
-}
-
-#[derive(Insertable)]
-#[table_name="tags"]
-struct NewTag<'a>
-{
-    pub text: &'a str
-}
-
-
-/**
-  A link between a file and a tag
-*/
-#[derive(Queryable, Identifiable, Associations)]
-#[belongs_to(tags)]
-#[belongs_to(files)]
-pub struct TagLink
-{
-    id: i32,
-    file_id: i32,
-    tag_id: i32
-}
-
-#[derive(Insertable)]
-#[table_name="tag_links"]
-struct NewTagLink
-{
-    pub file_id: i32,
-    pub tag_id: i32
-}
 
 
 
@@ -64,7 +22,6 @@ struct NewTagLink
   A reference to a file stored in the file database
  */
 #[derive(Queryable, Identifiable, Associations, Clone, RustcEncodable)]
-#[has_many(tag_links)]
 pub struct File
 {
     //The unique ID of this file in the db
@@ -76,7 +33,9 @@ pub struct File
 
     pub creation_date: Option<NaiveDateTime>,
 
-    is_uploaded: bool
+    is_uploaded: bool,
+
+    tags: Vec<String>
 }
 
 #[derive(Insertable)]
@@ -88,19 +47,22 @@ pub struct NewFile<'a>
 
     creation_date: NaiveDateTime,
 
-    is_uploaded: bool
+    is_uploaded: bool,
+
+    tags: Vec<String>
 }
 
 impl<'a> NewFile<'a>
 {
-    pub fn new(filename: &'a str, thumbnail_path: &'a str, creation_time: NaiveDateTime) 
+    pub fn new(filename: &'a str, thumbnail_path: &'a str, creation_time: NaiveDateTime, tags: Vec<String>)
         -> NewFile<'a>
     {
         NewFile {
             filename,
             thumbnail_path,
             creation_date: creation_time,
-            is_uploaded: false
+            is_uploaded: false,
+            tags
         }
     }
 }
@@ -140,42 +102,17 @@ impl FileDatabase
                     ) -> File
     {
         let timestamp = timestamp as i64;
-        let new_file = NewFile::new(filename, thumb_name, NaiveDateTime::from_timestamp(timestamp, 0));
+        let new_file = NewFile::new(
+                filename,
+                thumb_name,
+                NaiveDateTime::from_timestamp(timestamp, 0),
+                tags.clone()
+            );
 
         let file: File = diesel::insert(&new_file).into(files::table)
             .get_result(&self.connection)
             .expect("Error saving new file");
 
-
-        //Go through all the tags and link them to this file
-        for tag_text in tags
-        {
-            //Check if such a tag exists already
-            let tag_result = tags::table
-                .filter(tags::text.eq(tag_text))
-                .load::<Tag>(&self.connection)
-                .expect(&format!("Error looking for tag {}", tag_text));
-
-            //if not, create it
-            let tag = if tag_result.is_empty()
-                {
-                    diesel::insert(&NewTag{ text: &tag_text })
-                        .into(tags::table)
-                        .get_result(&self.connection)
-                        .expect("Error inserting new file")
-                }
-                else
-                {
-                    //Unwrap is safe because we know that the length is > 1
-                    tag_result.first().unwrap().clone()
-                };
-
-            //Create a link between the file and the tag
-            diesel::insert(&NewTagLink{ file_id: file.id, tag_id: tag.id })
-                .into(tag_links::table)
-                .execute(&self.connection)
-                .expect("Error creating tag link");
-        }
 
         file
     }
@@ -212,7 +149,9 @@ impl FileDatabase
      */
     pub fn get_files_with_tags(&self, tags: Vec<String>) -> Vec<File>
     {
-        unimplemented!();
+        files::table.filter(files::tags.contains(tags))
+            .get_results(&self.connection)
+            .expect("Error retrieving photos with tags")
     }
 
     pub fn get_file_paths_with_tags(&self, tags: Vec<String>) -> Vec<String>
@@ -316,8 +255,6 @@ mod db_tests
         let connection = establish_connection();
 
         //Clear the tables
-        diesel::delete(schema::tag_links::table).execute(&connection).unwrap();
-        diesel::delete(schema::tags::table).execute(&connection).unwrap();
         diesel::delete(schema::files::table).execute(&connection).unwrap();
 
         let fdb = FileDatabase::new(establish_connection(), String::from("/tmp/flash"));

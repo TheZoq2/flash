@@ -2,7 +2,7 @@
 
 source .env
 
-DATABASE_URL=$DATABASE_TEST_URL
+export DATABASE_URL=$DATABASE_TEST_URL
 
 echo "Migrating ${DATABASE_URL}"
 
