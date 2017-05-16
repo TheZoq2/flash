@@ -92,7 +92,6 @@ impl FileDatabase
 
       Returns the ID of the added image
      */
-    //TODO: Handle tags
     //TODO: Handle errors when writing to the database
     pub fn add_new_file(&mut self,
                         filename: &str,
@@ -127,24 +126,6 @@ impl FileDatabase
 
 
     /**
-      Returns all File objects which are part of a specific tag
-     */
-    pub fn get_files_with_tag(&self, tag: String) -> Vec<File>
-    {
-        unimplemented!();
-    }
-
-    pub fn get_file_by_id(&self, id: i32) -> Option<File>
-    {
-        unimplemented!();
-    }
-
-    fn get_mut_file_by_id(&mut self, id: i32) -> Option<&mut File>
-    {
-        unimplemented!();
-    }
-    
-    /**
       Returns all files that have all the tags in the list
      */
     pub fn get_files_with_tags(&self, tags: Vec<String>) -> Vec<File>
@@ -164,29 +145,6 @@ impl FileDatabase
         unimplemented!()
     }
 
-    pub fn get_files_with_tags_and_function(
-                &self, 
-                tags: Vec<String>,
-                filters: &Vec<&Fn(&File) -> bool>
-            ) -> Vec<File>
-    {
-        unimplemented!();
-    }
-
-    fn remove_tags_of_file(&mut self, file_id: i32, tags: &Vec<String>)
-    {
-        unimplemented!();
-    }
-
-    /**
-      Sets the tags of a file without removing old tags from it. This is dangerous
-      since it can cause the db tag list to desync with the file entry. Make sure you
-      only run this when you are sure that the file has no previous tags stored
-     */
-    fn set_file_tags(&mut self, file: i32, tags: &Vec<String>)
-    {
-        unimplemented!();
-    }
 
     /**
       Returns the path to the folder where files should be stored
