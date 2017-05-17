@@ -110,7 +110,6 @@ impl FileDatabase
             .get_result(&self.connection)
             .expect("Error saving new file");
 
-
         file
     }
 
@@ -132,9 +131,6 @@ impl FileDatabase
         }
     }
 
-
-
-
     /**
       Returns all files that have all the tags in the list
      */
@@ -153,12 +149,12 @@ impl FileDatabase
     pub fn get_file_with_id(&self, id: i32) -> Option<File>
     {
         let result =
-            files::table.find(id).first(&self.connection);
+            files::table.find(id).get_result::<File>(&self.connection);
 
         match result
         {
-            Ok(val) => val,
-            Err(e) => None
+            Ok(val) => Some(val),
+            Err(_) => None
         }
     }
 
