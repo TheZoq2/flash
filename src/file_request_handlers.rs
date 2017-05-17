@@ -139,7 +139,12 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
             let mutex = request.get::<Write<FileDatabase>>().unwrap();
             let mut db = mutex.lock().unwrap();
 
-            db.change_file_tags(id, &tags);
+            let file = db.get_file_with_id(id);
+
+            if file.is_some()
+            {
+                db.change_file_tags(file.unwrap(), &tags);
+            }
         }
         None =>
         {
@@ -266,8 +271,7 @@ fn generate_file_list_response(file: Option<File>, db: &FileDatabase) -> String
             {
                 Some(id) => {
                     //Fetch the data about the image in the database
-                    //response.tags = db.get_file_with_id(id).unwrap().tags.clone();
-                    response.tags = unimplemented!();
+                    response.tags = db.get_file_with_id(id).unwrap().tags.clone();
                     response.old_id = Some(id);
                 },
                 None => {}

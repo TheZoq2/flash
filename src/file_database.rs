@@ -9,13 +9,11 @@ use diesel;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 
-use schema;
 use schema::{files};
 
 use chrono::NaiveDateTime;
 
 use iron::typemap::Key;
-
 
 
 /**
@@ -33,9 +31,9 @@ pub struct File
 
     pub creation_date: Option<NaiveDateTime>,
 
-    is_uploaded: bool,
+    pub is_uploaded: bool,
 
-    tags: Vec<String>
+    pub tags: Vec<String>
 }
 
 #[derive(Insertable)]
@@ -116,10 +114,22 @@ impl FileDatabase
         file
     }
 
+    /**
+      Changes the tags of a specified file. Returns the new file object
+    */
     #[must_use]
-    pub fn change_file_tags(&mut self, id: i32, tags: &Vec<String>) -> Result<(), String>
+    pub fn change_file_tags(&self, file: File, tags: &Vec<String>) -> Result<File, String>
     {
-        unimplemented!()
+        let result = 
+            diesel::update(files::table.find(file.id))
+                .set(files::tags.eq(tags))
+                .get_result(&self.connection);
+
+        match result
+        {
+            Ok(val) => Ok(val),
+            Err(e) => Err(format!("Failed to update file tags. {:?}", e))
+        }
     }
 
 
@@ -140,9 +150,16 @@ impl FileDatabase
         self.get_files_with_tags(tags).iter().map(|x|{x.filename.clone()}).collect()
     }
 
-    pub fn get_file_with_id(&self, id: i32) -> Option<&File>
+    pub fn get_file_with_id(&self, id: i32) -> Option<File>
     {
-        unimplemented!()
+        let result =
+            files::table.find(id).first(&self.connection);
+
+        match result
+        {
+            Ok(val) => val,
+            Err(e) => None
+        }
     }
 
 
@@ -222,7 +239,18 @@ mod db_tests
         fdb
     }
 
+    /**
+      Since the results of these tests depend on the database state,
+      they can not be run concurrently
+    */
     #[test]
+    fn database_test()
+    {
+        add_test();
+        multi_tag_test();
+        modify_tags_test();
+    }
+
     fn add_test()
     {
         let mut fdb = get_file_database();
@@ -255,11 +283,9 @@ mod db_tests
         assert!(fdb.get_file_paths_with_tags(vec!("unused_tag".to_string())).is_empty());
     }
 
-    /*
-    #[test]
     fn multi_tag_test()
     {
-        let mut fdb = FileDatabase::new();
+        let mut fdb = get_file_database();
 
         fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("common_tag".to_string(), "only1_tag".to_string()), 0);
         fdb.add_new_file(&"test2".to_string(), &"thumb2".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()), 0);
@@ -283,13 +309,10 @@ mod db_tests
         let no_tags = fdb.get_files_with_tags(vec!());
         assert!(no_tags.len() == 3);
     }
-    */
 
-    /*
-    #[test]
     fn modify_tags_test()
     {
-        let mut fdb = FileDatabase::new();
+        let mut fdb = get_file_database();
 
         let id = fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("old_tag".to_string()), 0);
 
@@ -298,7 +321,6 @@ mod db_tests
         assert!(fdb.get_files_with_tags(vec!("new_tag".to_string())).len() == 1);
         assert!(fdb.get_files_with_tags(vec!("old_tag".to_string())).len() == 0);
     }
-    */
 
     /*
     fn timestamp_test()
