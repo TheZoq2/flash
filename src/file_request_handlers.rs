@@ -100,11 +100,11 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
 
     let tags = get_tags_from_request(request).unwrap();
 
-    let thumbnail_path_without_extension = format!("{}_thumb_{}", destination_dir.clone(), &file_identifier);
+    let thumbnail_path_without_extension = format!("{}/thumb_{}", destination_dir.clone(), &file_identifier);
 
 
     //Generate the thumbnail
-    let thumbnail_file_path = match generate_thumbnail(&original_filename, &thumbnail_path_without_extension, 300) {
+    let thumbnail_info = match generate_thumbnail(&original_filename, &thumbnail_path_without_extension, 300) {
         Ok(val) => val,
         Err(e) => {
             //TODO: The user needs to be alerted when this happens
@@ -120,7 +120,7 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
 
 
     let thumbnail_filename = 
-            Path::new(&thumbnail_file_path.path).file_name().unwrap().to_str().unwrap();
+            Path::new(&thumbnail_info.path).file_name().unwrap().to_str().unwrap();
     let new_filename = 
     {
         let filename = Path::new(&new_file_path).file_name().unwrap();
