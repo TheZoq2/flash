@@ -10,6 +10,12 @@ extern crate image;
 extern crate lazy_static;
 extern crate regex;
 
+#[macro_use]
+extern crate diesel;
+extern crate dotenv;
+#[macro_use]
+extern crate diesel_codegen;
+
 extern crate glob;
 extern crate rustc_serialize;
 extern crate chrono;
@@ -19,15 +25,18 @@ mod file_database;
 mod settings;
 mod album_handler;
 mod file_util;
-mod file_database_container;
 mod file_request_handlers;
 mod exiftool;
-mod search;
+//mod search;
+mod schema;
+
 
 use iron::*;
 use staticfile::Static;
 use mount::Mount;
 use std::path::{Path, PathBuf};
+
+use file_database::FileDatabase;
 
 use glob::glob;
 
@@ -35,7 +44,22 @@ use persistent::{Write};
 
 use std::vec::Vec;
 
-use file_database_container::{FileDatabaseContainer};
+use diesel::prelude::*;
+use diesel::pg::PgConnection;
+
+use dotenv::dotenv;
+use std::env;
+
+//Establish a connection to the postgres database
+pub fn establish_connection() -> PgConnection
+{
+    dotenv().ok();
+
+    let database_url = env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set. Perhaps .env is missing?");
+    PgConnection::establish(&database_url)
+        .expect(&format!("Error connecting to {}", database_url))
+}
 
 
 /**
@@ -79,8 +103,7 @@ fn main()
     let settings = settings::Settings::get_defaults();
 
     //Loading or creating the database
-    //let database = FileDatabase::load_from_json(&settings);
-    let db = FileDatabaseContainer::new(&settings);
+    let db = FileDatabase::new(establish_connection(), settings.get_file_storage_path());
 
     let mut mount = Mount::new();
 
@@ -93,7 +116,7 @@ fn main()
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileList>::both(file_list::FileList::new(file_list)));
-    chain.link(Write::<FileDatabaseContainer>::both(db));
+    chain.link(Write::<FileDatabase>::both(db));
     match Iron::new(chain).http("localhost:3000")
     {
         Ok(_) => {

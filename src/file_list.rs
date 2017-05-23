@@ -8,7 +8,7 @@ use std::option::Option;
 pub struct File
 {
     pub path: PathBuf,
-    pub saved_id: Option<usize>
+    pub saved_id: Option<i32>
 }
 
 #[derive(Clone)]
@@ -43,7 +43,7 @@ impl FileList
 
         None
     }
-    pub fn get_current_file_save_id(&self) -> Option<usize>
+    pub fn get_current_file_save_id(&self) -> Option<i32>
     {
         match self.get_current_file()
         {
@@ -87,7 +87,7 @@ impl FileList
         }
     }
 
-    pub fn mark_current_file_as_saved(&mut self, db_id: usize)
+    pub fn mark_current_file_as_saved(&mut self, db_id: i32)
     {
         if self.current_index < self.files.len()
         {

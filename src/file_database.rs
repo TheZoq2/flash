@@ -1,116 +1,86 @@
 
 extern crate image;
 extern crate rand;
+extern crate rustc_serialize;
 
 use std::vec::Vec;
-use std::collections::HashMap;
 
-use rustc_serialize::json;
+use diesel;
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
 
-use std::io::prelude::*;
-use std::fs::{File};
+use schema::{files};
 
+use chrono::NaiveDateTime;
 
-
-pub enum TimestampRange
-{
-    Unbounded,
-    Bounded(u64)
-}
+use iron::typemap::Key;
 
 
 /**
   A reference to a file stored in the file database
  */
-#[derive(RustcEncodable, RustcDecodable, Clone)]
-pub struct FileEntry
+#[derive(Queryable, Identifiable, Associations, Clone, RustcEncodable)]
+pub struct File
 {
     //The unique ID of this file in the db
-    id: usize,
+    pub id: i32,
     //The path to the actual file
-    pub path: String,
-    pub tags: Vec<String>,
-
-    pub timestamp: u64,
+    pub filename: String,
 
     pub thumbnail_path: String,
 
-    pub additional_data: HashMap<String, String>,
+    pub creation_date: Option<NaiveDateTime>,
+
+    pub is_uploaded: bool,
+
+    pub tags: Vec<String>
 }
-impl FileEntry
+
+#[derive(Insertable)]
+#[table_name="files"]
+pub struct NewFile<'a>
 {
-    pub fn new(id: usize, path: String, tags: Vec<String>, thumbnail_path: String, timestamp: u64) -> FileEntry
+    filename: &'a str,
+    thumbnail_path: &'a str,
+
+    creation_date: NaiveDateTime,
+
+    is_uploaded: bool,
+
+    tags: Vec<String>
+}
+
+impl<'a> NewFile<'a>
+{
+    pub fn new(filename: &'a str, thumbnail_path: &'a str, creation_time: NaiveDateTime, tags: Vec<String>)
+        -> NewFile<'a>
     {
-        FileEntry {
-            id: id,
-            path: path,
-            tags: tags,
-
-            timestamp: timestamp,
-
-            thumbnail_path: thumbnail_path,
-
-            additional_data: HashMap::new(),
+        NewFile {
+            filename,
+            thumbnail_path,
+            creation_date: creation_time,
+            is_uploaded: false,
+            tags
         }
     }
-
-    pub fn has_tag(&self, tag: String) -> bool
-    {
-        self.tags.contains(&tag)
-    }
 }
 
 
-#[derive(RustcEncodable, RustcDecodable)]
 pub struct FileDatabase
 {
-    version: u32,
-
-    next_id: usize,
-
-    //Map from file IDs to actual files
-    files: HashMap<usize, FileEntry>,
-
-    //Map from tags to file ids
-    tags: HashMap<String, Vec<usize>>,
+    connection: PgConnection,
+    file_save_path: String
 }
+impl Key for FileDatabase { type Value = FileDatabase; }
 
 impl FileDatabase
 {
-    pub fn new() -> FileDatabase
+    pub fn new(connection: PgConnection, file_save_path: String) -> FileDatabase
     {
-        FileDatabase
-        {
-            version:0,
-
-            next_id: 0,
-
-            files: HashMap::new(),
-            tags: HashMap::new(),
+        FileDatabase{
+            connection,
+            file_save_path
         }
-    }
-    pub fn load_from_json(storage_path: String) -> FileDatabase
-    {
-        let mut file = match File::open(&storage_path)
-        {
-            Ok(file) => file,
-            Err(_) => {
-                println!("No existing database file found. Creating one in {}", &storage_path);
-                return FileDatabase::new();
-            }
-        };
-
-        let mut json_str = String::new();
-        match file.read_to_string(&mut json_str)
-        {
-            Ok(_) => {},
-            Err(e) => {
-                println!("Database loading failed. File {} could not be loaded. {}", &storage_path, e);
-                println!("Creating a new db file in {}", &storage_path);
-                return FileDatabase::new();
-            }
-        };
-        json::decode::<FileDatabase>(&json_str).unwrap()
     }
 
     /**
@@ -120,243 +90,103 @@ impl FileDatabase
 
       Returns the ID of the added image
      */
-    pub fn add_new_file(&mut self, filename: &String, thumb_name: &String, 
-                        tags: &Vec<String>, timestamp: u64) -> usize
+    //TODO: Handle errors when writing to the database
+    pub fn add_new_file(&mut self,
+                        filename: &str,
+                        thumb_name: &str, 
+                        tags: &Vec<String>,
+                        timestamp: u64
+                    ) -> File
     {
-        let new_id = self.next_id;
+        let timestamp = timestamp as i64;
+        let new_file = NewFile::new(
+                filename,
+                thumb_name,
+                NaiveDateTime::from_timestamp(timestamp, 0),
+                tags.clone()
+            );
 
-        self.set_file_tags(new_id, tags);
+        let file: File = diesel::insert(&new_file).into(files::table)
+            .get_result(&self.connection)
+            .expect("Error saving new file");
 
-        let file_entry = FileEntry::new(new_id, filename.clone(), tags.clone(), thumb_name.clone(), timestamp);
-        self.files.insert(self.next_id, file_entry);
-
-        self.next_id += 1;
-
-        self.next_id - 1
+        file
     }
-
-    #[must_use]
-    pub fn change_file_tags(&mut self, id: usize, tags: &Vec<String>) -> Result<(), String>
-    {
-        //First we need to find out what tags the file had before. 
-        //We can not borrow the file object here because we are going to be
-        //modifying self later on
-        let file = match self.get_file_by_id(id)
-        {
-            Some(file) => file,
-            None =>
-            {
-                return Err(String::from(format!("Failed to modify file, ID {} doesn't exist", id)));
-            }
-        };
-
-        self.remove_tags_of_file(id, &file.tags);
-
-        self.set_file_tags(id, tags);
-
-
-
-        //This time we can just unwrap the value because we know that
-        //the last get_file_by_id operation succeded if we got here
-        let file = &mut self.get_mut_file_by_id(id).unwrap();
-
-        file.tags = tags.clone();
-
-        Ok(())
-    }
-
-
-
 
     /**
-      Returns all FileEntry objects which are part of a specific tag
-     */
-    pub fn get_files_with_tag(&self, tag: String) -> Vec<FileEntry>
+      Changes the tags of a specified file. Returns the new file object
+    */
+    #[must_use]
+    pub fn change_file_tags(&self, file: File, tags: &Vec<String>) -> Result<File, String>
     {
-        let ids = match self.tags.get(&tag)
+        let result = 
+            diesel::update(files::table.find(file.id))
+                .set(files::tags.eq(tags))
+                .get_result(&self.connection);
+
+        match result
         {
-            Some(val) => val.clone(),
-            None => Vec::<usize>::new(),
-        };
-
-        let mut files = Vec::<FileEntry>::new();
-        for id in ids
-        {
-            //This assumes that the id exists, i'll leave it up to
-            //the rest of the system to take care of that.
-            files.push(self.files.get(&id).unwrap().clone());
-        }
-
-        files
-    }
-
-    pub fn get_file_by_id(&self, id: usize) -> Option<FileEntry>
-    {
-        match self.files.get(&id){
-            Some(file) => {
-                Some(file.clone())
-            },
-            None => None
+            Ok(val) => Ok(val),
+            Err(e) => Err(format!("Failed to update file tags. {:?}", e))
         }
     }
 
-    fn get_mut_file_by_id(&mut self, id: usize) -> Option<&mut FileEntry>
-    {
-        match self.files.get_mut(&id){
-            Some(file) => {
-                Some(file)
-            },
-            None => None
-        }
-    }
-    
     /**
       Returns all files that have all the tags in the list
      */
-    pub fn get_files_with_tags(&self, tags: Vec<String>) -> Vec<FileEntry>
+    pub fn get_files_with_tags(&self, tags: Vec<String>) -> Vec<File>
     {
-        let mut tags = tags.clone();
-
-        if tags.len() == 0
-        {
-            return self.files.values().map(|x|{x.clone()}).collect();
-        }
-
-        let possible_files = self.get_files_with_tag(tags.pop().unwrap());
-
-        let mut result = vec!();
-
-        for file in possible_files
-        {
-            let mut has_all_tags = true;
-            for tag in &tags
-            {
-                let mut has_tag = false;
-                for file_tag in &file.tags
-                {
-                    if tag == file_tag
-                    {
-                        has_tag = true;
-                    }
-                }
-
-                if !has_tag
-                {
-                    has_all_tags = false
-                }
-            }
-
-            if has_all_tags
-            {
-                result.push(file);
-            }
-        }
-
-        result
+        files::table.filter(files::tags.contains(tags))
+            .get_results(&self.connection)
+            .expect("Error retrieving photos with tags")
     }
+
+    pub fn get_file_paths_with_tags(&self, tags: Vec<String>) -> Vec<String>
+    {
+        self.get_files_with_tags(tags).iter().map(|x|{x.filename.clone()}).collect()
+    }
+
+    pub fn get_file_with_id(&self, id: i32) -> Option<File>
+    {
+        let result =
+            files::table.find(id).get_result::<File>(&self.connection);
+
+        match result
+        {
+            Ok(val) => Some(val),
+            Err(_) => None
+        }
+    }
+
 
     /**
-      Returns paths to all file objects that are part of a tag
-     */
-    pub fn get_file_paths_with_tag(&self, tag: String) -> Vec<String>
+      Returns the path to the folder where files should be stored
+
+      TODO: Move out of database code
+    */
+    pub fn get_file_save_path(&self) -> String
     {
-        get_file_paths_from_files(self.get_files_with_tag(tag))
-    }
-    pub fn get_file_paths_with_tags(&self, tag: Vec<String>) -> Vec<String>
-    {
-        get_file_paths_from_files(self.get_files_with_tags(tag))
+        return self.file_save_path.clone();
     }
 
-    pub fn get_next_id(&self) -> usize
+    fn get_file_amount(&self) -> i64
     {
-        self.next_id
-    }
+        use schema::files::dsl::*;
 
-    pub fn get_file_with_id(&self, id: usize) -> Option<&FileEntry>
-    {
-        self.files.get(&id)
-    }
-
-    pub fn get_files_with_tags_and_function(
-                &self, 
-                tags: Vec<String>,
-                filters: &Vec<&Fn(&FileEntry) -> bool>
-            ) -> Vec<FileEntry>
-    {
-        let with_tags = self.get_files_with_tags(tags);
-
-        with_tags.into_iter().filter(|x|{
-            for pred in filters
-            {
-                if pred(x)
-                {
-                    return false;
-                }
-            }
-            true
-        }).collect()
-    }
-
-    fn remove_tags_of_file(&mut self, file_id: usize, tags: &Vec<String>)
-    {
-        for tag in tags
-        {
-            let id_list = &mut self.tags.get_mut(tag).unwrap();
-
-            let mut index = 0;
-            for i in 0..id_list.len()
-            {
-                if id_list[i] == file_id
-                {
-                    index = i;
-                    break
-                }
-            }
-
-            id_list.swap_remove(index);
-        }
-    }
-
-    /**
-      Sets the tags of a file without removing old tags from it. This is dangerous
-      since it can cause the db tag list to desync with the file entry. Make sure you
-      only run this when you are sure that the file has no previous tags stored
-     */
-    fn set_file_tags(&mut self, file: usize, tags: &Vec<String>)
-    {
-        //Add all the tags to the map
-        for tag in tags
-        {
-            if self.tags.get(tag) == None
-            {
-                self.tags.insert(tag.clone(), vec!());
-            }
-
-            //Insert the new image using the binary search function.
-            let vec = self.tags.get_mut(tag).unwrap();
-            match vec.binary_search(&file){
-                Ok(_) => {
-                    //This shouldn't happen
-                    println!("ID {} is already part of tag {}. This is an error in FileDatabase::add_new_file", file, tag);
-                },
-                //If binary search returns Err, it means it didn't find an element and it returns
-                //the index where the element would be
-                Err(new_index) => {vec.insert(new_index, file)}
-            }
-        }
+        files.count().get_result(&self.connection).unwrap()
     }
 }
 
 /**
  * Returns a vector of paths from a vector of file entrys
  */
-pub fn get_file_paths_from_files(files: Vec<FileEntry>) -> Vec<String>
+pub fn get_file_paths_from_files(files: Vec<File>) -> Vec<String>
 {
     let mut result = vec!();
 
     for file in files
     {
-        result.push(file.path.clone());
+        result.push(file.filename.clone());
     }
 
     result
@@ -370,10 +200,56 @@ pub fn get_file_paths_from_files(files: Vec<FileEntry>) -> Vec<String>
 mod db_tests
 {
     use file_database::*;
+
+    use dotenv::dotenv;
+    use std::env;
+
+    use diesel;
+    use schema;
+
+    use diesel::prelude::*;
+    use diesel::pg::PgConnection;
+
+    //Establish a connection to the postgres database
+    fn establish_connection() -> PgConnection
+    {
+        dotenv().ok();
+
+        let database_url = env::var("DATABASE_TEST_URL")
+            .expect("DATABASE_TEST_URL must be set. Perhaps .env is missing?");
+        PgConnection::establish(&database_url)
+            .expect(&format!("Error connecting to {}", database_url))
+    }
+
+    fn get_file_database() -> FileDatabase
+    {
+        let connection = establish_connection();
+
+        //Clear the tables
+        diesel::delete(schema::files::table).execute(&connection).unwrap();
+
+        let fdb = FileDatabase::new(establish_connection(), String::from("/tmp/flash"));
+
+        assert_eq!(fdb.get_file_amount(), 0);
+
+        fdb
+    }
+
+    /**
+      Since the results of these tests depend on the database state,
+      they can not be run concurrently
+    */
     #[test]
+    fn database_test()
+    {
+        add_test();
+        multi_tag_test();
+        modify_tags_test();
+    }
+
     fn add_test()
     {
-        let mut fdb = FileDatabase::new();
+        let mut fdb = get_file_database();
 
         let id1 = fdb.add_new_file(
             &"test1".to_string(), 
@@ -386,28 +262,26 @@ mod db_tests
             &vec!("tag1".to_string(), "tag3".to_string()),
             0);
 
-        assert_eq!(id1, 0);
-        assert_eq!(id2, 1);
+        assert_eq!(fdb.get_file_amount(), 2);
 
         //Ensure both files are found when searching for tag1
-        assert!(fdb.get_file_paths_with_tag("tag1".to_string()).contains(&"test1".to_string()));
-        assert!(fdb.get_file_paths_with_tag("tag1".to_string()).contains(&"test2".to_string()));
+        assert!(fdb.get_file_paths_with_tags(vec!("tag1".to_string())).contains(&"test1".to_string()));
+        assert!(fdb.get_file_paths_with_tags(vec!("tag1".to_string())).contains(&"test2".to_string()));
 
         //Ensure only the correct tags are found when searching for the other tags
-        assert!(fdb.get_file_paths_with_tag("tag2".to_string()).contains(&"test1".to_string()));
-        assert!(fdb.get_file_paths_with_tag("tag2".to_string()).contains(&"test2".to_string()) == false);
+        assert!(fdb.get_file_paths_with_tags(vec!("tag2".to_string())).contains(&"test1".to_string()));
+        assert!(fdb.get_file_paths_with_tags(vec!("tag2".to_string())).contains(&"test2".to_string()) == false);
 
-        assert!(fdb.get_file_paths_with_tag("tag3".to_string()).contains(&"test2".to_string()));
-        assert!(fdb.get_file_paths_with_tag("tag3".to_string()).contains(&"test1".to_string()) == false);
+        assert!(fdb.get_file_paths_with_tags(vec!("tag3".to_string())).contains(&"test2".to_string()));
+        assert!(fdb.get_file_paths_with_tags(vec!("tag3".to_string())).contains(&"test1".to_string()) == false);
 
         //Ensure that tags that don't exist don't return anything
-        assert!(fdb.get_file_paths_with_tag("unused_tag".to_string()).is_empty());
+        assert!(fdb.get_file_paths_with_tags(vec!("unused_tag".to_string())).is_empty());
     }
 
-    #[test]
     fn multi_tag_test()
     {
-        let mut fdb = FileDatabase::new();
+        let mut fdb = get_file_database();
 
         fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("common_tag".to_string(), "only1_tag".to_string()), 0);
         fdb.add_new_file(&"test2".to_string(), &"thumb2".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()), 0);
@@ -432,10 +306,9 @@ mod db_tests
         assert!(no_tags.len() == 3);
     }
 
-    #[test]
     fn modify_tags_test()
     {
-        let mut fdb = FileDatabase::new();
+        let mut fdb = get_file_database();
 
         let id = fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("old_tag".to_string()), 0);
 
@@ -445,6 +318,7 @@ mod db_tests
         assert!(fdb.get_files_with_tags(vec!("old_tag".to_string())).len() == 0);
     }
 
+    /*
     fn timestamp_test()
     {
         let mut fdb = FileDatabase::new();
@@ -456,14 +330,15 @@ mod db_tests
         fdb.add_new_file(&String::from("5"), &String::from("5"), &vec!(), 50);
         fdb.add_new_file(&String::from("6"), &String::from("6"), &vec!(), 200);
 
-        let less_than_120 = |x: &FileEntry|{x.timestamp < 120};
-        let more_than_50 = |x: &FileEntry|{x.timestamp < 120};
-        let eq_0 = |x: &FileEntry|{x.timestamp == 0};
+        let less_than_120 = |x: &File|{x.timestamp < 120};
+        let more_than_50 = |x: &File|{x.timestamp < 120};
+        let eq_0 = |x: &File|{x.timestamp == 0};
 
         assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&less_than_120)).len() == 3);
         assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&eq_0)).len() == 1);
 
         assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&less_than_120, &more_than_50)).len() == 1);
     }
+    */
 }
 
