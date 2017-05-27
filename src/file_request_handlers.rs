@@ -24,10 +24,32 @@ use std::path::Path;
 
 use std::ops::Deref;
 
-use file_list::{FileList};
+use file_list::{FileList, FileListList};
 use file_util::{sanitize_tag_names};
 
-use file_list::File;
+/**
+  Handles requests for creating a filelist from a directory path
+*/
+pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
+{
+    let path = match get_get_variable(request, "path".to_string())
+    {
+        Some(val) => val,
+        None => {
+            println!("Directory list creation request did contain a path");
+            unimplemented!()
+        }
+    };
+
+    // Check if path is a valid path
+    let path = PathBuf::from(&path);
+
+    // Lock the file list and insert a new list
+    let mutex = Request.get::<Wirte<FileListList>>().unwrap();
+    let file_list = mutex.lock().unwrap();
+
+    file_list.add(FileList::from_directory(path));
+}
 
 /**
  Handler for requests for new files in the list

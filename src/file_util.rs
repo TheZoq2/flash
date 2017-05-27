@@ -12,6 +12,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use std::thread;
 
+use glob::glob;
+
 
 /**
   Enum for different types of media
@@ -181,6 +183,28 @@ pub fn sanitize_tag_names(tag_list: &Vec<String>) -> Result<Vec<String>, String>
     }
 
     Ok(new_list)
+}
+
+
+/**
+  Returns a list of all the files in a directory
+*/
+pub fn get_files_in_dir(dir: &PathBuf) -> Vec<PathBuf> 
+{
+    let mut result = Vec::<PathBuf>::new();
+
+    let full_path = String::from(dir.to_string_lossy()).clone() + "/*";
+
+    for entry in glob(&full_path).expect("Failed to read glob")
+    {
+        match entry
+        {
+            Ok(path) => result.push(path),
+            Err(e) => println!("{}", e)
+        }
+    }
+
+    result
 }
 
 
