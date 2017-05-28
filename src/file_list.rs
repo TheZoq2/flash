@@ -9,7 +9,7 @@ use file_util::{get_files_in_dir};
 /**
   The location of a file stored in a file list.
 */
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 enum FileLocation
 {
     ///Not yet stored in the database.
@@ -21,7 +21,7 @@ enum FileLocation
 /**
   Original source of creation of a FileList.
 */
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub enum FileListSource
 {
     ///Result of a search query
@@ -34,7 +34,7 @@ pub enum FileListSource
   A list of files that are either from a file query or files stored in 
   a directry. Files can go from directory storage to database
 */
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct FileList
 {
     files: Vec<FileLocation>,
@@ -92,7 +92,20 @@ impl FileListList
     pub fn add(&mut self, list: FileList) -> usize
     {
         self.lists.push(list);
-        self.lists.len()
+        self.lists.len() - 1
+    }
+
+    pub fn get_id_with_source(&self, source: FileListSource) -> Option<usize>
+    {
+        //self.lists.iter().fold(None, |acc, elem| { acc || elem.source == source })
+        for i in 0..self.lists.len()
+        {
+            if self.lists[i].source == source
+            {
+                return Some(i)
+            }
+        }
+        None
     }
 }
 

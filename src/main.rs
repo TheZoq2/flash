@@ -85,7 +85,7 @@ fn main()
     //let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
     //let target_dir = "/mnt/1TB-files/Pictures/dslr/apr13-2017".to_string();
     let target_dir = "/home/frans/Pictures/dslr/26-may".to_string();
-    let file_list = get_files_in_dir(&target_dir);
+    //let file_list = get_files_in_dir(&target_dir);
 
     let settings = settings::Settings::get_defaults();
 
@@ -94,12 +94,13 @@ fn main()
 
     let mut mount = Mount::new();
 
-    mount.mount("/list", file_request_handlers::file_list_request_handler);
+    //mount.mount("/list", file_request_handlers::file_list_request_handler);
     mount.mount("/", Static::new(Path::new("frontend/output")));
     mount.mount("/file", Static::new(Path::new(&target_dir)));
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())));
     mount.mount("/album", album_handler::handle_album_list_request);
     mount.mount("/album/file", album_handler::handle_album_image_request);
+    mount.mount("/file_list/from_path", file_request_handlers::directory_list_handler);
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list::FileListList::new()));

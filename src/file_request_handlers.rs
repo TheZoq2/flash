@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use urlencoded::UrlEncodedQuery;
 use rustc_serialize::json;
 
+use serde_json;
+
 use std::thread;
 use iron::*;
 use persistent::{Write};
@@ -24,27 +26,28 @@ use std::path::Path;
 
 use std::ops::Deref;
 
-use file_list::{FileList, FileListList};
+use file_list::{FileList, FileListList, FileListSource};
 use file_util::{sanitize_tag_names};
 
-pub fn reply_to_file_list_request(id: usize) -> IronResult<Response>
+pub fn reply_to_file_list_request(request: &mut Request, id: usize) -> IronResult<Response>
 {
 
     #[derive(Serialize)]
-    struct ListResponse
+    struct ListResponse<'a>
     {
         pub id: usize,
-        pub file_list: Option<FileList>
+        pub file_list: Option<&'a FileList>
     }
 
     // Fetch the file list
-    let mutex = request.get::<Wirte<FileListList>>().unwrap();
+    let mutex = request.get::<Write<FileListList>>().unwrap();
     let file_list_list = mutex.lock().unwrap();
 
     let result = ListResponse{ id, file_list: file_list_list.get(id)};
 
-    Ok(Response::with((status::Ok, format!("{}", serde_json::to_string(result)))))
+    Ok(Response::with((status::Ok, format!("{}", serde_json::to_string(&result).unwrap()))))
 }
+
 /**
   Handles requests for creating a filelist from a directory path
 */
@@ -55,6 +58,7 @@ pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
         Some(val) => val,
         None => {
             println!("Directory list creation request did contain a path");
+            //TODO: Find a better way to handle errors
             unimplemented!()
         }
     };
@@ -64,13 +68,17 @@ pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
 
     // Lock the file list and insert a new list
     let file_list_id = {
-        let mutex = request.get::<Wirte<FileListList>>().unwrap();
-        let file_list = mutex.lock().unwrap();
+        let mutex = request.get::<Write<FileListList>>().unwrap();
+        let mut file_list_list = mutex.lock().unwrap();
 
-        file_list_list.add(FileList::from_directory(path))
+        match file_list_list.get_id_with_source(FileListSource::Folder(path.clone()))
+        {
+            Some(id) => id,
+            None => file_list_list.add(FileList::from_directory(path))
+        }
     };
 
-    reply_to_file_list_request(file_list_id)
+    reply_to_file_list_request(request, file_list_id)
 }
 
 /**
@@ -78,6 +86,8 @@ pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
 */
 pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 {
+    unimplemented!()
+    /*
     let action = match get_get_variable(request, "action".to_string())
     {
         Some(val) => val,
@@ -110,10 +120,12 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
     };
 
     Ok(Response::with((status::Ok, format!("{}", response))))
+    */
 }
 
 pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileList>)
 {
+    /*
     //Get the original filename from the File list. 
     let (original_filename, old_id) = {
         let file_list = file_list_mutex.lock().unwrap();
@@ -225,6 +237,9 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
             }
         };
     });
+    */
+
+    unimplemented!()
 }
 
 
@@ -272,59 +287,4 @@ fn get_get_variable(request: &mut Request, name: String) -> Option<String>
         },
         _ => None
     }
-}
-/**
-    Generates a json string as a reply to a request for a file
- */
-fn generate_file_list_response(file: Option<File>, db: &FileDatabase) -> String
-{
-    /**
-      Helper class for generating json data about the current files
-     */
-    #[derive(RustcDecodable, RustcEncodable)]
-    struct Response
-    {
-        status: String,
-        file_path: String,
-        file_type: String,
-
-        tags: Vec<String>,
-        old_id: Option<i32>
-    }
-
-    let mut response = Response{
-        status: "".to_string(),
-        file_path: "".to_string(),
-        file_type: "image".to_string(),
-
-        tags: vec!(),
-        old_id: None
-    };
-
-    match file
-    {
-        Some(file_obj) => {
-            let path = file_obj.path;
-            let filename = path.file_name().unwrap().to_str().unwrap();
-            
-            response.status = "ok".to_string();
-            response.file_path = "file/".to_string() + &filename;
-            response.file_type = "image".to_string();
-
-            match file_obj.saved_id
-            {
-                Some(id) => {
-                    //Fetch the data about the image in the database
-                    response.tags = db.get_file_with_id(id).unwrap().tags.clone();
-                    response.old_id = Some(id);
-                },
-                None => {}
-            }
-        },
-        None => response.status = "no_file".to_string(),
-    }
-
-    let result = json::encode(&response).unwrap();
-
-    result
 }
