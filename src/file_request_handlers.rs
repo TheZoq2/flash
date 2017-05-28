@@ -33,17 +33,25 @@ pub fn reply_to_file_list_request(request: &mut Request, id: usize) -> IronResul
 {
 
     #[derive(Serialize)]
-    struct ListResponse<'a>
+    struct ListResponse
     {
         pub id: usize,
-        pub file_list: Option<&'a FileList>
+        pub length: Option<usize>
     }
 
     // Fetch the file list
-    let mutex = request.get::<Write<FileListList>>().unwrap();
-    let file_list_list = mutex.lock().unwrap();
+    let file_amount = {
+        let mutex = request.get::<Write<FileListList>>().unwrap();
+        let file_list_list = mutex.lock().unwrap();
 
-    let result = ListResponse{ id, file_list: file_list_list.get(id)};
+        match file_list_list.get(id)
+        {
+            Some(list) => Some(list.len()),
+            None => None
+        }
+    };
+
+    let result = ListResponse{ id, length: file_amount };
 
     Ok(Response::with((status::Ok, format!("{}", serde_json::to_string(&result).unwrap()))))
 }

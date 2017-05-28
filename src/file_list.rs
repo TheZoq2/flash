@@ -62,6 +62,11 @@ impl FileList
     {
         self.files.get(index)
     }
+
+    pub fn len(&self) -> usize
+    {
+        self.files.len()
+    }
 }
 
 
