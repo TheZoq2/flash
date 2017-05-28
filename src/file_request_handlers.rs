@@ -5,26 +5,11 @@ use rustc_serialize::json;
 
 use serde_json;
 
-use std::thread;
 use iron::*;
 use persistent::{Write};
 use std::option::Option;
 
-use file_database::{FileDatabase};
-
-use file_util::{
-    generate_thumbnail,
-    get_file_extension,
-    get_semi_unique_identifier,
-    get_file_timestamp,
-};
-
 use std::sync::{Mutex};
-
-use std::fs;
-use std::path::Path;
-
-use std::ops::Deref;
 
 use file_list::{FileList, FileListList, FileListSource};
 use file_util::{sanitize_tag_names};

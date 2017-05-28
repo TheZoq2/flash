@@ -40,15 +40,11 @@ extern crate serde_json;
 use iron::*;
 use staticfile::Static;
 use mount::Mount;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 
 use file_database::FileDatabase;
 
-use glob::glob;
-
 use persistent::{Write};
-
-use std::vec::Vec;
 
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
@@ -67,7 +63,6 @@ pub fn establish_connection() -> PgConnection
         .expect(&format!("Error connecting to {}", database_url))
 }
 
-
 //TODO: Rewrite this comment 
 /**
     Process for saving an image:
@@ -79,8 +74,7 @@ pub fn establish_connection() -> PgConnection
  */
 
 
-
-fn main() 
+fn main()
 {
     //let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
     //let target_dir = "/mnt/1TB-files/Pictures/dslr/apr13-2017".to_string();

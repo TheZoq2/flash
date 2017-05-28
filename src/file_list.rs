@@ -10,7 +10,7 @@ use file_util::{get_files_in_dir};
   The location of a file stored in a file list.
 */
 #[derive(Clone, Serialize)]
-enum FileLocation
+pub enum FileLocation
 {
     ///Not yet stored in the database.
     Unsaved(PathBuf),
