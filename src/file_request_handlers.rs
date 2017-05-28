@@ -27,6 +27,24 @@ use std::ops::Deref;
 use file_list::{FileList, FileListList};
 use file_util::{sanitize_tag_names};
 
+pub fn reply_to_file_list_request(id: usize) -> IronResult<Response>
+{
+
+    #[derive(Serialize)]
+    struct ListResponse
+    {
+        pub id: usize,
+        pub file_list: Option<FileList>
+    }
+
+    // Fetch the file list
+    let mutex = request.get::<Wirte<FileListList>>().unwrap();
+    let file_list_list = mutex.lock().unwrap();
+
+    let result = ListResponse{ id, file_list: file_list_list.get(id)};
+
+    Ok(Response::with((status::Ok, format!("{}", serde_json::to_string(result)))))
+}
 /**
   Handles requests for creating a filelist from a directory path
 */
@@ -45,10 +63,14 @@ pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
     let path = PathBuf::from(&path);
 
     // Lock the file list and insert a new list
-    let mutex = Request.get::<Wirte<FileListList>>().unwrap();
-    let file_list = mutex.lock().unwrap();
+    let file_list_id = {
+        let mutex = request.get::<Wirte<FileListList>>().unwrap();
+        let file_list = mutex.lock().unwrap();
 
-    file_list.add(FileList::from_directory(path));
+        file_list_list.add(FileList::from_directory(path))
+    };
+
+    reply_to_file_list_request(file_list_id)
 }
 
 /**

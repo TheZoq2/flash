@@ -24,6 +24,10 @@ diesel = { version = "0.11.0", features = ["postgres", "chrono"] }
 diesel_codegen = { version = "0.11.0", features = ["postgres"] }
 dotenv = "0.8.0"
 
+serde = "1.0.8"
+serde_derive = "1.0.8"
+serde_json = "1.0.2"
+
 [dependencies.chrono]
 version = "*"
 features = ["rustc-serialize"]

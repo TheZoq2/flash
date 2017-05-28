@@ -30,6 +30,12 @@ mod exiftool;
 //mod search;
 mod schema;
 
+#[macro_use]
+extern crate serde_derive;
+
+extern crate serde;
+extern crate serde_json;
+
 
 use iron::*;
 use staticfile::Static;

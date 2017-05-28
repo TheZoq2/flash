@@ -89,9 +89,10 @@ impl FileListList
         self.lists.get(index)
     }
 
-    pub fn add(&mut self, list: FileList)
+    pub fn add(&mut self, list: FileList) -> usize
     {
-        self.lists.push(list)
+        self.lists.push(list);
+        self.lists.len()
     }
 }
 
