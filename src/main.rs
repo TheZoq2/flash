@@ -88,7 +88,7 @@ fn main()
 
     let mut mount = Mount::new();
 
-    //mount.mount("/list", file_request_handlers::file_list_request_handler);
+    mount.mount("/list", file_request_handlers::file_list_request_handler);
     mount.mount("/", Static::new(Path::new("frontend/output")));
     mount.mount("/file", Static::new(Path::new(&target_dir)));
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())));

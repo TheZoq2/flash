@@ -11,8 +11,40 @@ use std::option::Option;
 
 use std::sync::{Mutex};
 
-use file_list::{FileList, FileListList, FileListSource};
+use file_database;
+use file_database::{FileDatabase};
+use file_list::{FileList, FileListList, FileListSource, FileLocation};
 use file_util::{sanitize_tag_names};
+
+
+#[derive(Serialize)]
+struct FileData
+{
+    file_path: String,
+    thumbnail_path: String,
+    tags: Vec<String>,
+}
+
+impl FileData
+{
+    fn from_database(source: file_database::File) -> FileData
+    {
+        FileData {
+            file_path: source.filename,
+            thumbnail_path: source.thumbnail_path,
+            tags: source.tags
+        }
+    }
+
+    fn from_path(source: PathBuf) -> FileData
+    {
+        FileData {
+            file_path: String::from(source.to_string_lossy()),
+            thumbnail_path: String::from(source.to_string_lossy()),
+            tags: vec!()
+        }
+    }
+}
 
 pub fn reply_to_file_list_request(request: &mut Request, id: usize) -> IronResult<Response>
 {
@@ -74,46 +106,107 @@ pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
     reply_to_file_list_request(request, file_list_id)
 }
 
-/**
- Handler for requests for new files in the list
-*/
-pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
+pub fn reply_with_file_list_data(request: &mut Request) -> IronResult<Response>
 {
-    unimplemented!()
-    /*
-    let action = match get_get_variable(request, "action".to_string())
-    {
-        Some(val) => val,
+    //TODO: Unduplicate this code
+    //TODO: Unnest match statements
+    let list_id = match get_get_variable(request, "list_id".to_string()) {
+        Some(val) => {
+            match val.parse::<usize>()
+            {
+                Ok(val) => val,
+                Err(_) => {
+                    let message = format!("{} is not a valid file list id", val);
+                    return Ok(Response::with((status::NotFound, message)));
+                }
+            }
+        },
         None => {
-            println!("Action not part of GET for request. Assuming 'current'");
-            "current".to_string()
+            let message = format!("missing list_id variable");
+            return Ok(Response::with((status::NotFound, message)));
         }
     };
 
-    //Get the current file list
-    let mutex = request.get::<Write<FileList>>().unwrap();
-    match action.as_str()
-    {
-        "current" => {}
-        "next" => mutex.lock().unwrap().select_next_file(),
-        "prev" => mutex.lock().unwrap().select_prev_file(),
-        "save" => handle_save_request(request, &mutex),
-        other => println!("Unknown list action: {}", other),
+    let file_index = match get_get_variable(request, "index".to_string()) {
+        Some(val) => {
+            match val.parse::<usize>()
+            {
+                Ok(val) => val,
+                Err(_) => {
+                    let message = format!("{} is not a valid list index", val);
+                    return Ok(Response::with((status::NotFound, message)))
+                }
+            }
+        },
+        None => {
+            let message = format!("missing index variable");
+            return Ok(Response::with((status::NotFound, message)))
+        }
+    };
+
+    // Lock the file list and try to fetch the file
+    let file = {
+        let mutex = request.get::<Write<FileListList>>().unwrap();
+        let file_list_list = mutex.lock().unwrap();
+
+        let file_list = match file_list_list.get(list_id)
+        {
+            Some(list) => list,
+            None => {
+                let message = format!("No file list with id {}", list_id);
+                return Ok(Response::with((status::NotFound, message)));
+            }
+        };
+
+        match file_list.get(file_index)
+        {
+            Some(file) => file.clone(),
+            None => {
+                let message = format!("No file with index {} in file_list {}", file_index, list_id);
+                return Ok(Response::with((status::NotFound, message)));
+            }
+        }
+    };
+
+    let file_data = match file {
+        FileLocation::Unsaved(path) => FileData::from_path(path),
+        FileLocation::Database(id) => {
+            // lock the database and fetch the file data
+            let mutex = request.get::<Write<FileDatabase>>().unwrap();
+            let db = mutex.lock().unwrap();
+
+            let data = db.get_file_with_id(id);
+
+            // TODO: Handle non-existent files
+            FileData::from_database(data.unwrap())
+        }
+    };
+
+    return Ok(Response::with((status::Ok, serde_json::to_string(&file_data).unwrap())))
+}
+
+/**
+  Handles requests for actions dealing with specific entries in file lists
+*/
+pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
+{
+    let action = match get_get_variable(request, "action".to_string()) {
+        Some(val) => val,
+        None => {
+            return Ok(Response::with((status::NotFound, "Missing 'action' parameter")));
+        }
+    };
+
+
+    match action.as_str() {
+        "get_data" => {
+            reply_with_file_list_data(request)
+        },
+        val => {
+            let message = format!("Unrecognised `action`: {}", val);
+            Ok(Response::with((status::NotFound, message)))
+        }
     }
-
-    let filename = {
-        let file_list = mutex.lock().unwrap();
-        file_list.get_current_file()
-    };
-
-    let response = {
-        let mutex = request.get::<Write<FileDatabase>>().unwrap();
-        let db = mutex.lock().unwrap();
-        generate_file_list_response(filename, &db.deref())
-    };
-
-    Ok(Response::with((status::Ok, format!("{}", response))))
-    */
 }
 
 pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileList>)
