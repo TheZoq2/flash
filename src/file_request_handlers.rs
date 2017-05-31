@@ -106,44 +106,9 @@ pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
     reply_to_file_list_request(request, file_list_id)
 }
 
-pub fn reply_with_file_list_data(request: &mut Request) -> IronResult<Response>
+pub fn reply_with_file_list_data(request: &mut Request, list_id: usize, file_index: usize)
+        -> IronResult<Response>
 {
-    //TODO: Unduplicate this code
-    //TODO: Unnest match statements
-    let list_id = match get_get_variable(request, "list_id".to_string()) {
-        Some(val) => {
-            match val.parse::<usize>()
-            {
-                Ok(val) => val,
-                Err(_) => {
-                    let message = format!("{} is not a valid file list id", val);
-                    return Ok(Response::with((status::NotFound, message)));
-                }
-            }
-        },
-        None => {
-            let message = format!("missing list_id variable");
-            return Ok(Response::with((status::NotFound, message)));
-        }
-    };
-
-    let file_index = match get_get_variable(request, "index".to_string()) {
-        Some(val) => {
-            match val.parse::<usize>()
-            {
-                Ok(val) => val,
-                Err(_) => {
-                    let message = format!("{} is not a valid list index", val);
-                    return Ok(Response::with((status::NotFound, message)))
-                }
-            }
-        },
-        None => {
-            let message = format!("missing index variable");
-            return Ok(Response::with((status::NotFound, message)))
-        }
-    };
-
     // Lock the file list and try to fetch the file
     let file = {
         let mutex = request.get::<Write<FileListList>>().unwrap();
@@ -185,6 +150,51 @@ pub fn reply_with_file_list_data(request: &mut Request) -> IronResult<Response>
     return Ok(Response::with((status::Ok, serde_json::to_string(&file_data).unwrap())))
 }
 
+fn reply_with_file_list_file(request: &mut Request, list_id: usize, file_index: usize)
+        -> IronResult<Response>
+{
+    // XXX: This code is duplicated witht he above function
+    // Lock the file list and try to fetch the file
+    let file = {
+        let mutex = request.get::<Write<FileListList>>().unwrap();
+        let file_list_list = mutex.lock().unwrap();
+
+        let file_list = match file_list_list.get(list_id)
+        {
+            Some(list) => list,
+            None => {
+                let message = format!("No file list with id {}", list_id);
+                return Ok(Response::with((status::NotFound, message)));
+            }
+        };
+
+        match file_list.get(file_index)
+        {
+            Some(file) => file.clone(),
+            None => {
+                let message = format!("No file with index {} in file_list {}", file_index, list_id);
+                return Ok(Response::with((status::NotFound, message)));
+            }
+        }
+    };
+
+    let path = match file {
+        FileLocation::Unsaved(path) => path,
+        FileLocation::Database(id) => {
+            // lock the database and fetch the file data
+            let mutex = request.get::<Write<FileDatabase>>().unwrap();
+            let db = mutex.lock().unwrap();
+
+            let data = db.get_file_with_id(id);
+
+            // TODO: Handle non-existent files
+            PathBuf::from(data.unwrap().filename)
+        }
+    };
+
+    return Ok(Response::with((status::Ok, path)))
+}
+
 /**
   Handles requests for actions dealing with specific entries in file lists
 */
@@ -197,10 +207,49 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
         }
     };
 
+    //TODO: Unduplicate this code
+    //TODO: Unnest match statements
+    let list_id = match get_get_variable(request, "list_id".to_string()) {
+        Some(val) => {
+            match val.parse::<usize>()
+            {
+                Ok(val) => val,
+                Err(_) => {
+                    let message = format!("{} is not a valid file list id", val);
+                    return Ok(Response::with((status::NotFound, message)));
+                }
+            }
+        },
+        None => {
+            let message = format!("missing list_id variable");
+            return Ok(Response::with((status::NotFound, message)));
+        }
+    };
+
+    let file_index = match get_get_variable(request, "index".to_string()) {
+        Some(val) => {
+            match val.parse::<usize>()
+            {
+                Ok(val) => val,
+                Err(_) => {
+                    let message = format!("{} is not a valid list index", val);
+                    return Ok(Response::with((status::NotFound, message)))
+                }
+            }
+        },
+        None => {
+            let message = format!("missing index variable");
+            return Ok(Response::with((status::NotFound, message)))
+        }
+    };
+
 
     match action.as_str() {
         "get_data" => {
-            reply_with_file_list_data(request)
+            reply_with_file_list_data(request, list_id, file_index)
+        },
+        "get_file" => {
+            reply_with_file_list_file(request, list_id, file_index)
         },
         val => {
             let message = format!("Unrecognised `action`: {}", val);
