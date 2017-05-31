@@ -48,7 +48,6 @@ impl FileData
 
 pub fn reply_to_file_list_request(request: &mut Request, id: usize) -> IronResult<Response>
 {
-
     #[derive(Serialize)]
     struct ListResponse
     {
@@ -207,42 +206,13 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
         }
     };
 
-    //TODO: Unduplicate this code
-    //TODO: Unnest match statements
-    let list_id = match get_get_variable(request, "list_id".to_string()) {
-        Some(val) => {
-            match val.parse::<usize>()
-            {
-                Ok(val) => val,
-                Err(_) => {
-                    let message = format!("{} is not a valid file list id", val);
-                    return Ok(Response::with((status::NotFound, message)));
-                }
-            }
-        },
-        None => {
-            let message = format!("missing list_id variable");
+    let (list_id, file_index) = match read_request_list_id_index(request)
+    {
+        Ok(val) => val,
+        Err(message) => {
             return Ok(Response::with((status::NotFound, message)));
         }
     };
-
-    let file_index = match get_get_variable(request, "index".to_string()) {
-        Some(val) => {
-            match val.parse::<usize>()
-            {
-                Ok(val) => val,
-                Err(_) => {
-                    let message = format!("{} is not a valid list index", val);
-                    return Ok(Response::with((status::NotFound, message)))
-                }
-            }
-        },
-        None => {
-            let message = format!("missing index variable");
-            return Ok(Response::with((status::NotFound, message)))
-        }
-    };
-
 
     match action.as_str() {
         "get_data" => {
@@ -377,6 +347,39 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
     unimplemented!()
 }
 
+
+fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), String>
+{
+    let list_id = match get_get_variable(request, "list_id".to_string()) {
+        Some(val) => val,
+        None => {
+            return Err(format!("missing list_id variable"));
+        }
+    };
+
+    let list_id = match list_id.parse::<usize>() {
+        Ok(val) => val,
+        Err(_) => {
+            return Err(format!("{} is not a valid file list id", list_id));
+        }
+    };
+
+    let file_index = match get_get_variable(request, "index".to_string()) {
+        Some(val) => val,
+        None => {
+            return Err(format!("missing index variable"));
+        }
+    };
+
+    let file_index = match file_index.parse::<usize>() {
+        Ok(val) => val,
+        Err(_) => {
+            return Err(format!("{} is not a valid list index", file_index));
+        }
+    };
+
+    Ok((list_id, file_index))
+}
 
 
 fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, String>
