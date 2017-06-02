@@ -58,6 +58,7 @@ pub struct ThumbnailInfo
   landscape mode will be at most max_width tall
  */
 
+//TODO: Rewrite to use std::path instead of &str
 pub fn generate_thumbnail(source_path: &str, destination_path_without_extension: &str, max_size: u32)
         -> Result<ThumbnailInfo, image::ImageError>
 {

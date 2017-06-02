@@ -8,13 +8,24 @@ use serde_json;
 use iron::*;
 use persistent::{Write};
 use std::option::Option;
+use std::fs;
 
+use std::thread;
 use std::sync::{Mutex};
+use std::sync::Arc;
+
+use std::path::Path;
 
 use file_database;
 use file_database::{FileDatabase};
 use file_list::{FileList, FileListList, FileListSource, FileLocation};
 use file_util::{sanitize_tag_names};
+use file_util::{
+    generate_thumbnail,
+    get_file_extension,
+    get_semi_unique_identifier,
+    get_file_timestamp
+};
 
 
 #[derive(Serialize)]
@@ -105,34 +116,11 @@ pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
     reply_to_file_list_request(request, file_list_id)
 }
 
-pub fn reply_with_file_list_data(request: &mut Request, list_id: usize, file_index: usize)
+pub fn reply_with_file_list_data(request: &mut Request, file: &FileLocation)
         -> IronResult<Response>
 {
     // Lock the file list and try to fetch the file
-    let file = {
-        let mutex = request.get::<Write<FileListList>>().unwrap();
-        let file_list_list = mutex.lock().unwrap();
-
-        let file_list = match file_list_list.get(list_id)
-        {
-            Some(list) => list,
-            None => {
-                let message = format!("No file list with id {}", list_id);
-                return Ok(Response::with((status::NotFound, message)));
-            }
-        };
-
-        match file_list.get(file_index)
-        {
-            Some(file) => file.clone(),
-            None => {
-                let message = format!("No file with index {} in file_list {}", file_index, list_id);
-                return Ok(Response::with((status::NotFound, message)));
-            }
-        }
-    };
-
-    let file_data = match file {
+    let file_data = match *file {
         FileLocation::Unsaved(path) => FileData::from_path(path),
         FileLocation::Database(id) => {
             // lock the database and fetch the file data
@@ -149,35 +137,10 @@ pub fn reply_with_file_list_data(request: &mut Request, list_id: usize, file_ind
     return Ok(Response::with((status::Ok, serde_json::to_string(&file_data).unwrap())))
 }
 
-fn reply_with_file_list_file(request: &mut Request, list_id: usize, file_index: usize)
+fn reply_with_file_list_file(request: &mut Request, file: &FileLocation)
         -> IronResult<Response>
 {
-    // XXX: This code is duplicated witht he above function
-    // Lock the file list and try to fetch the file
-    let file = {
-        let mutex = request.get::<Write<FileListList>>().unwrap();
-        let file_list_list = mutex.lock().unwrap();
-
-        let file_list = match file_list_list.get(list_id)
-        {
-            Some(list) => list,
-            None => {
-                let message = format!("No file list with id {}", list_id);
-                return Ok(Response::with((status::NotFound, message)));
-            }
-        };
-
-        match file_list.get(file_index)
-        {
-            Some(file) => file.clone(),
-            None => {
-                let message = format!("No file with index {} in file_list {}", file_index, list_id);
-                return Ok(Response::with((status::NotFound, message)));
-            }
-        }
-    };
-
-    let path = match file {
+    let path = match *file {
         FileLocation::Unsaved(path) => path,
         FileLocation::Database(id) => {
             // lock the database and fetch the file data
@@ -192,6 +155,28 @@ fn reply_with_file_list_file(request: &mut Request, list_id: usize, file_index: 
     };
 
     return Ok(Response::with((status::Ok, path)))
+}
+
+fn get_file_list_object(file_list_list: &FileListList, list_id: usize, file_index: usize)
+    -> Result<FileLocation, String>
+{
+    let file_list = match file_list_list.get(list_id)
+    {
+        Some(list) => list,
+        None => {
+            let message = format!("No file list with id {}", list_id);
+            return Err(message);
+        }
+    };
+
+    match file_list.get(file_index)
+    {
+        Some(file) => Ok(file.clone()),
+        None => {
+            let message = format!("No file with index {} in file_list {}", file_index, list_id);
+            Err(message)
+        }
+    }
 }
 
 /**
@@ -214,13 +199,29 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
         }
     };
 
+    let file_location = {
+        let mutex = request.get::<Write<FileListList>>().unwrap();
+        let file_list_list = mutex.lock().unwrap();
+
+        match get_file_list_object(&*file_list_list, list_id, file_index) {
+            Ok(val) => val,
+            Err(message) => {
+                return Ok(Response::with((status:: NotFound, message)))
+            }
+        }
+    };
+
     match action.as_str() {
         "get_data" => {
-            reply_with_file_list_data(request, list_id, file_index)
+            reply_with_file_list_data(request, &file_location)
         },
         "get_file" => {
-            reply_with_file_list_file(request, list_id, file_index)
+            reply_with_file_list_file(request, &file_location)
         },
+        "save" => {
+            match handle_save_request(request, &file_location) {
+            }
+        }
         val => {
             let message = format!("Unrecognised `action`: {}", val);
             Ok(Response::with((status::NotFound, message)))
@@ -228,26 +229,24 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
     }
 }
 
-pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileList>)
+pub fn handle_save_request(request: &mut Request, file_location: &FileLocation)
+        -> Result<Option<FileLocation>, String>
 {
-    /*
-    //Get the original filename from the File list. 
-    let (original_filename, old_id) = {
-        let file_list = file_list_mutex.lock().unwrap();
+    let tags = get_tags_from_request(request)?;
 
-        let filename = match file_list.get_current_file()
-        {
-            Some(file) => file.path.into_os_string().into_string().unwrap(),
-            None => {
-                println!("Failed to save file.Crrent file is None");
-                return;
-            }
-        };
+    match file_location {
+        FileLocation::Unsaved(path) => 
+            Some(FileLocation::Database(save_new_file(request, path, tags))),
+        FileLocation::Database(id) => None
+    }
+}
 
-        (filename, file_list.get_current_file_save_id())
-    };
+pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: Vec<String>)
+        -> Result<i32, String>
+{
+    let original_path = Arc::new(*original_path);
 
-    let file_extension = get_file_extension(&original_filename);
+    let file_extension = (*original_path).extension().unwrap();
 
     //Get the folder where we want to place the stored file
     let destination_dir = {
@@ -265,74 +264,48 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
 
 
     //Generate the thumbnail
-    let thumbnail_info = match generate_thumbnail(&original_filename, &thumbnail_path_without_extension, 300) {
+    let original_path_string = (*original_path).to_string_lossy();
+    let thumbnail_info = match generate_thumbnail(&original_path_string, &thumbnail_path_without_extension, 300) {
         Ok(val) => val,
         Err(e) => {
-            //TODO: The user needs to be alerted when this happens
-            //TODO: Also, test this
-            println!("Failed to generate thumbnail: {}", e); 
-            return;
+            return Err(format!("Failed to generate thumbnail: {}", e));
         }
     };
 
     //Copy the file to the destination
     //Get the name and path of the new file
-    let new_file_path = destination_dir + "/" + &file_identifier + &file_extension;
+    let new_file_path = Arc::new(
+            destination_dir + "/" + &file_identifier + &file_extension.to_string_lossy()
+        );
 
 
     let thumbnail_filename = 
             Path::new(&thumbnail_info.path).file_name().unwrap().to_str().unwrap();
     let new_filename = 
     {
-        let filename = Path::new(&new_file_path).file_name().unwrap();
+        let filename = Path::new(&*new_file_path).file_name().unwrap();
 
         String::from(filename.to_str().unwrap())
     };
 
 
-    let timestamp = get_file_timestamp(&PathBuf::from(original_filename.clone()));
+    let timestamp = get_file_timestamp(&PathBuf::from((*original_path).clone()));
 
-    match old_id
-    {
-        Some(id) =>
-        {
-            //Modify the old image
-            let mutex = request.get::<Write<FileDatabase>>().unwrap();
-            let mut db = mutex.lock().unwrap();
+    //Store the file in the database
+    let saved_id = {
+        let mutex = request.get::<Write<FileDatabase>>().unwrap();
+        let mut db_container = mutex.lock().unwrap();
 
-            let file = db.get_file_with_id(id);
-
-            if file.is_some()
-            {
-                db.change_file_tags(file.unwrap(), &tags);
-            }
-        }
-        None =>
-        {
-            let saved_id;
-            //Store the file in the database
-            {
-                let mutex = request.get::<Write<FileDatabase>>().unwrap();
-                let mut db_container = mutex.lock().unwrap();
-
-                saved_id = db_container.add_new_file(
-                        &new_filename.to_string(),
-                        &thumbnail_filename.to_string(),
-                        &tags,
-                        timestamp
-                    ).id;
-            }
-
-            //Remember that the current image has been saved
-            {
-                let mut file_list = file_list_mutex.lock().unwrap();
-                file_list.mark_current_file_as_saved(saved_id);
-            }
-        }
-    }
+        db_container.add_new_file(
+                &new_filename.to_string(),
+                &thumbnail_filename.to_string(),
+                &tags,
+                timestamp
+            ).id
+    };
 
     thread::spawn(move ||{
-        match fs::copy(original_filename, new_file_path)
+        match fs::copy(*original_path, *new_file_path)
         {
             Ok(_) => {},
             Err(e) => {
@@ -342,9 +315,13 @@ pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileLi
             }
         };
     });
-    */
 
-    unimplemented!()
+    Ok(saved_id)
+}
+
+pub fn update_stored_file(id: i32, tags: Vec<String>)
+{
+    
 }
 
 
