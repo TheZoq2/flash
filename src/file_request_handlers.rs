@@ -121,7 +121,7 @@ pub fn reply_with_file_list_data(request: &mut Request, file: &FileLocation)
 {
     // Lock the file list and try to fetch the file
     let file_data = match *file {
-        FileLocation::Unsaved(path) => FileData::from_path(path),
+        FileLocation::Unsaved(ref path) => FileData::from_path(path.clone()),
         FileLocation::Database(id) => {
             // lock the database and fetch the file data
             let mutex = request.get::<Write<FileDatabase>>().unwrap();
@@ -141,7 +141,7 @@ fn reply_with_file_list_file(request: &mut Request, file: &FileLocation)
         -> IronResult<Response>
 {
     let path = match *file {
-        FileLocation::Unsaved(path) => path,
+        FileLocation::Unsaved(ref path) => path.clone(),
         FileLocation::Database(id) => {
             // lock the database and fetch the file data
             let mutex = request.get::<Write<FileDatabase>>().unwrap();
@@ -220,6 +220,11 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
         },
         "save" => {
             match handle_save_request(request, &file_location) {
+                Ok(new_location) => match new_location {
+                    Some(new_location) => Ok(Response::with((status::Ok, ""))),
+                    None => Ok(Response::with((status::Ok, "")))
+                },
+                Err(message) => Ok(Response::with((status::NotFound, message)))
             }
         }
         val => {
@@ -234,18 +239,20 @@ pub fn handle_save_request(request: &mut Request, file_location: &FileLocation)
 {
     let tags = get_tags_from_request(request)?;
 
-    match file_location {
-        FileLocation::Unsaved(path) => 
-            Some(FileLocation::Database(save_new_file(request, path, tags))),
-        FileLocation::Database(id) => None
+    match file_location.clone() {
+        FileLocation::Unsaved(ref path) => 
+            match save_new_file(request, &path, tags)
+            {
+                Ok(id) => Ok(Some(FileLocation::Database(id))),
+                Err(e) => Err(e)
+            },
+        FileLocation::Database(id) => Ok(None) //TODO: Actually update things
     }
 }
 
 pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: Vec<String>)
         -> Result<i32, String>
 {
-    let original_path = Arc::new(*original_path);
-
     let file_extension = (*original_path).extension().unwrap();
 
     //Get the folder where we want to place the stored file
@@ -264,7 +271,7 @@ pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: Vec<S
 
 
     //Generate the thumbnail
-    let original_path_string = (*original_path).to_string_lossy();
+    let original_path_string = original_path.to_string_lossy();
     let thumbnail_info = match generate_thumbnail(&original_path_string, &thumbnail_path_without_extension, 300) {
         Ok(val) => val,
         Err(e) => {
@@ -274,9 +281,8 @@ pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: Vec<S
 
     //Copy the file to the destination
     //Get the name and path of the new file
-    let new_file_path = Arc::new(
-            destination_dir + "/" + &file_identifier + &file_extension.to_string_lossy()
-        );
+    let new_file_path =
+            destination_dir + "/" + &file_identifier + &file_extension.to_string_lossy();
 
 
     let thumbnail_filename = 
@@ -304,17 +310,21 @@ pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: Vec<S
             ).id
     };
 
-    thread::spawn(move ||{
-        match fs::copy(*original_path, *new_file_path)
-        {
-            Ok(_) => {},
-            Err(e) => {
-                println!("Failed to copy file to destination: {}", e);
-                //TODO: Probably remove the thumbnail here
-                return
-            }
-        };
-    });
+    {
+        let original_path = original_path.clone();
+        let new_file_path = new_file_path.clone();
+        thread::spawn(move ||{
+            match fs::copy(original_path, new_file_path)
+            {
+                Ok(_) => {},
+                Err(e) => {
+                    println!("Failed to copy file to destination: {}", e);
+                    //TODO: Probably remove the thumbnail here
+                    return
+                }
+            };
+        });
+    }
 
     Ok(saved_id)
 }
