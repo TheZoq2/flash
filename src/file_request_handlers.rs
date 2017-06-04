@@ -220,6 +220,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
         },
         "save" => {
             match handle_save_request(request, &file_location) {
+                Ok(val) => 
             }
         }
         val => {
@@ -229,16 +230,27 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
     }
 }
 
+
+/**
+  Saves the specified tags for the file. If a FileLocation id has been created,
+  it is returned. Otherwise None. If saving failed an error is returned
+*/
 pub fn handle_save_request(request: &mut Request, file_location: &FileLocation)
         -> Result<Option<FileLocation>, String>
 {
     let tags = get_tags_from_request(request)?;
 
-    match file_location {
-        FileLocation::Unsaved(path) => 
-            Some(FileLocation::Database(save_new_file(request, path, tags))),
-        FileLocation::Database(id) => None
+    match *file_location {
+        FileLocation::Unsaved(path) => {
+            match save_new_file(request, &path, tags) {
+                Ok(id) => Ok(Some(FileLocation::Database(id))),
+                Err(e) => Err(e)
+            }
+        },
+        FileLocation::Database(id) => Ok(None)
     }
+
+
 }
 
 pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: Vec<String>)
