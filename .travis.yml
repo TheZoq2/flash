@@ -1,13 +1,13 @@
 language: rust
 rust:
   - stable
-  - beta
   - nightly
 matrix:
   allow_failures:
     - rust
       - stable
-      - beta
+
+cache: cargo
 
 services:
     - postgresql
@@ -22,4 +22,5 @@ before_script:
 # Ignore submodules since the backend does not care about frontend
 git:
     submodules: false
+
 
