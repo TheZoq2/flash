@@ -12,8 +12,10 @@ cache: cargo
 services:
     - postgresql
 
+before_cache:
+    - cargo install diesel_cli --force
+
 before_script:
-    - cargo install diesel_cli
     - psql -c 'create database flash_development;' -U postgres
     - psql -c 'create database flash_test;' -U postgres
     - diesel database setup
