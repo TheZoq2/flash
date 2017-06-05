@@ -5,17 +5,19 @@ use std::option::Option;
 
 use file_util::{get_files_in_dir};
 
+use file_database;
+
 
 /**
   The location of a file stored in a file list.
 */
-#[derive(Clone, Serialize)]
+#[derive(Clone)]
 pub enum FileLocation
 {
     ///Not yet stored in the database.
     Unsaved(PathBuf),
     ///Stored in the database with the specified ID
-    Database(i32)
+    Database(file_database::File)
 }
 
 /**
@@ -34,7 +36,7 @@ pub enum FileListSource
   A list of files that are either from a file query or files stored in 
   a directry. Files can go from directory storage to database
 */
-#[derive(Clone, Serialize)]
+#[derive(Clone)]
 pub struct FileList
 {
     files: Vec<FileLocation>,

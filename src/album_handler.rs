@@ -52,7 +52,7 @@ pub fn handle_album_list_request(request: &mut Request) -> IronResult<Response>
     let db = mutex.lock().unwrap();
 
     //let filenames = db_container.get_db().get_file_paths_with_tags(tags);
-    let files = db.get_files_with_tags(tags);
+    let files = db.get_files_with_tags(&tags);
 
     Ok(Response::with((status::Ok, json::encode(&files).unwrap())))
 }

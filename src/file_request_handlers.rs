@@ -112,41 +112,28 @@ pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
     reply_to_file_list_request(request, file_list_id)
 }
 
-pub fn reply_with_file_list_data(request: &mut Request, file: &FileLocation)
+pub fn reply_with_file_list_data(file: &FileLocation)
         -> IronResult<Response>
 {
     // Lock the file list and try to fetch the file
     let file_data = match *file {
         FileLocation::Unsaved(ref path) => FileData::from_path(path.clone()),
-        FileLocation::Database(id) => {
-            // lock the database and fetch the file data
-            let mutex = request.get::<Write<FileDatabase>>().unwrap();
-            let db = mutex.lock().unwrap();
-
-            let data = db.get_file_with_id(id);
-
-            // TODO: Handle non-existent files
-            FileData::from_database(data.unwrap())
+        FileLocation::Database(ref db_entry) => {
+            //TODO: Make sure this data is not outdated
+            FileData::from_database(db_entry.clone())
         }
     };
 
     Ok(Response::with((status::Ok, serde_json::to_string(&file_data).unwrap())))
 }
 
-fn reply_with_file_list_file(request: &mut Request, file: &FileLocation)
+fn reply_with_file_list_file(file: &FileLocation)
         -> IronResult<Response>
 {
     let path = match *file {
         FileLocation::Unsaved(ref path) => path.clone(),
-        FileLocation::Database(id) => {
-            // lock the database and fetch the file data
-            let mutex = request.get::<Write<FileDatabase>>().unwrap();
-            let db = mutex.lock().unwrap();
-
-            let data = db.get_file_with_id(id);
-
-            // TODO: Handle non-existent files
-            PathBuf::from(data.unwrap().filename)
+        FileLocation::Database(ref db_entry) => {
+            PathBuf::from(db_entry.filename.clone())
         }
     };
 
@@ -209,10 +196,10 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 
     match action.as_str() {
         "get_data" => {
-            reply_with_file_list_data(request, &file_location)
+            reply_with_file_list_data(&file_location)
         },
         "get_file" => {
-            reply_with_file_list_file(request, &file_location)
+            reply_with_file_list_file(&file_location)
         },
         "save" => {
             match handle_save_request(request, &file_location) {
@@ -244,7 +231,7 @@ pub fn handle_save_request(request: &mut Request, file_location: &FileLocation)
         FileLocation::Unsaved(ref path) => {
             match save_new_file(request, path, &tags)
             {
-                Ok(id) => Ok(Some(FileLocation::Database(id))),
+                Ok(db_entry) => Ok(Some(FileLocation::Database(db_entry))),
                 Err(e) => Err(e)
             }
         },
@@ -253,7 +240,7 @@ pub fn handle_save_request(request: &mut Request, file_location: &FileLocation)
 }
 
 pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: &[String])
-        -> Result<i32, String>
+        -> Result<file_database::File, String>
 {
     let file_extension = (*original_path).extension().unwrap();
 
@@ -307,7 +294,7 @@ pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: &[Str
                 &thumbnail_filename.to_string(),
                 tags,
                 timestamp
-            ).id
+            )
     };
 
     {

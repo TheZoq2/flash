@@ -15,7 +15,6 @@ use chrono::NaiveDateTime;
 
 use iron::typemap::Key;
 
-
 /**
   A reference to a file stored in the file database
  */
@@ -134,7 +133,7 @@ impl FileDatabase
     /**
       Returns all files that have all the tags in the list
      */
-    pub fn get_files_with_tags(&self, tags: Vec<String>) -> Vec<File>
+    pub fn get_files_with_tags(&self, tags: &[String]) -> Vec<File>
     {
         files::table.filter(files::tags.contains(tags))
             .get_results(&self.connection)
@@ -143,7 +142,7 @@ impl FileDatabase
 
     pub fn get_file_paths_with_tags(&self, tags: Vec<String>) -> Vec<String>
     {
-        self.get_files_with_tags(tags).iter().map(|x|{x.filename.clone()}).collect()
+        self.get_files_with_tags(&tags).iter().map(|x|{x.filename.clone()}).collect()
     }
 
     pub fn get_file_with_id(&self, id: i32) -> Option<File>
@@ -207,7 +206,6 @@ mod db_tests
     use diesel;
     use schema;
 
-    use diesel::prelude::*;
     use diesel::pg::PgConnection;
 
     //Establish a connection to the postgres database
@@ -251,12 +249,12 @@ mod db_tests
     {
         let mut fdb = get_file_database();
 
-        let id1 = fdb.add_new_file(
+        fdb.add_new_file(
             &"test1".to_string(), 
             &"thumb1".to_string(),
             &vec!("tag1".to_string(), "tag2".to_string()),
             0);
-        let id2 = fdb.add_new_file(
+        fdb.add_new_file(
             &"test2".to_string(),
             &"thumb2".to_string(),
             &vec!("tag1".to_string(), "tag3".to_string()),
@@ -287,22 +285,22 @@ mod db_tests
         fdb.add_new_file(&"test2".to_string(), &"thumb2".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()), 0);
         fdb.add_new_file(&"test3".to_string(), &"thumb3".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()), 0);
 
-        let common_2_3 = fdb.get_files_with_tags(vec!("common_tag".to_string(), "only2_3_tag".to_string()));
+        let common_2_3 = fdb.get_files_with_tags(&vec!("common_tag".to_string(), "only2_3_tag".to_string()));
         assert!(get_file_paths_from_files(common_2_3.clone()).contains(&"test1".to_string()) == false);
         assert!(get_file_paths_from_files(common_2_3.clone()).contains(&"test2".to_string()));
         assert!(get_file_paths_from_files(common_2_3.clone()).contains(&"test3".to_string()));
 
-        let common_1 = fdb.get_files_with_tags(vec!("common_tag".to_string()));
+        let common_1 = fdb.get_files_with_tags(&vec!("common_tag".to_string()));
         assert!(get_file_paths_from_files(common_1.clone()).contains(&"test1".to_string()));
         assert!(get_file_paths_from_files(common_1.clone()).contains(&"test2".to_string()));
         assert!(get_file_paths_from_files(common_1.clone()).contains(&"test3".to_string()));
 
-        let only_1 = fdb.get_files_with_tags(vec!("only1_tag".to_string()));
+        let only_1 = fdb.get_files_with_tags(&vec!("only1_tag".to_string()));
         assert!(get_file_paths_from_files(only_1.clone()).contains(&"test1".to_string()));
         assert!(get_file_paths_from_files(only_1.clone()).contains(&"test2".to_string()) == false);
         assert!(get_file_paths_from_files(only_1.clone()).contains(&"test3".to_string()) == false);
 
-        let no_tags = fdb.get_files_with_tags(vec!());
+        let no_tags = fdb.get_files_with_tags(&vec!());
         assert!(no_tags.len() == 3);
     }
 
@@ -314,8 +312,8 @@ mod db_tests
 
         fdb.change_file_tags(id, &vec!("new_tag".to_string())).unwrap();
 
-        assert!(fdb.get_files_with_tags(vec!("new_tag".to_string())).len() == 1);
-        assert!(fdb.get_files_with_tags(vec!("old_tag".to_string())).len() == 0);
+        assert!(fdb.get_files_with_tags(&vec!("new_tag".to_string())).len() == 1);
+        assert!(fdb.get_files_with_tags(&vec!("old_tag".to_string())).len() == 0);
     }
 
     /*
