@@ -9,6 +9,17 @@ matrix:
       - stable
       - beta
 
-#Ignore submodules since the backend does not care about frontend
+services:
+    - postgresql
+
+before_script:
+    cargo install diesel-cli
+    psql -c 'create database flash_development;' -u postgres
+    psql -c 'create database flash_test;' -u postgres
+    diesel database setup
+    DATABASE_URL=$DATABASE_TEST_URL diesel database setup
+
+# Ignore submodules since the backend does not care about frontend
 git:
     submodules: false
+
