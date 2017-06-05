@@ -221,7 +221,7 @@ mod thumbnail_tests
     {
         let img = image::DynamicImage::new_rgba8(500, 500);
 
-        let thumbnail = super::generate_thumbnail_from_generic_image(img, 300);
+        let thumbnail = super::generate_thumbnail_from_generic_image(&img, 300);
 
         assert!(thumbnail.dimensions() == (300, 300));
     }
@@ -230,7 +230,7 @@ mod thumbnail_tests
     {
         let img = image::DynamicImage::new_rgba8(500, 250);
 
-        let thumbnail = super::generate_thumbnail_from_generic_image(img, 300);
+        let thumbnail = super::generate_thumbnail_from_generic_image(&img, 300);
 
         assert!(thumbnail.dimensions() == (300, 150));
     }
@@ -240,7 +240,7 @@ mod thumbnail_tests
     {
         let img = image::DynamicImage::new_rgba8(250, 500);
 
-        let thumbnail = super::generate_thumbnail_from_generic_image(img, 300);
+        let thumbnail = super::generate_thumbnail_from_generic_image(&img, 300);
 
         assert!(thumbnail.dimensions() == (150, 300));
     }
