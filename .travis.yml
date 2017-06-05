@@ -13,7 +13,7 @@ services:
     - postgresql
 
 before_script:
-    - cargo install diesel-cli
+    - cargo install diesel_cli
     - psql -c 'create database flash_development;' -u postgres
     - psql -c 'create database flash_test;' -u postgres
     - diesel database setup
