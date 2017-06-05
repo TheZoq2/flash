@@ -8,3 +8,7 @@ matrix:
     - rust
       - stable
       - beta
+
+#Ignore submodules since the backend does not care about frontend
+git:
+    submodules: false
