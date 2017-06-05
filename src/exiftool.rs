@@ -224,6 +224,7 @@ impl ExifData
 #[cfg(test)]
 mod exif_data_tests
 {
+    use std::str::FromStr;
     use super::*;
 
     #[test]
