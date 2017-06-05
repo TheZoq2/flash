@@ -94,7 +94,7 @@ impl FileDatabase
     pub fn add_new_file(&mut self,
                         filename: &str,
                         thumb_name: &str, 
-                        tags: &Vec<String>,
+                        tags: &[String],
                         timestamp: u64
                     ) -> File
     {
@@ -103,7 +103,7 @@ impl FileDatabase
                 filename,
                 thumb_name,
                 NaiveDateTime::from_timestamp(timestamp, 0),
-                tags.clone()
+                tags.to_owned()
             );
 
         let file: File = diesel::insert(&new_file).into(files::table)
@@ -117,7 +117,7 @@ impl FileDatabase
       Changes the tags of a specified file. Returns the new file object
     */
     #[must_use]
-    pub fn change_file_tags(&self, file: File, tags: &Vec<String>) -> Result<File, String>
+    pub fn change_file_tags(&self, file: File, tags: &[String]) -> Result<File, String>
     {
         let result = 
             diesel::update(files::table.find(file.id))
@@ -166,7 +166,7 @@ impl FileDatabase
     */
     pub fn get_file_save_path(&self) -> String
     {
-        return self.file_save_path.clone();
+        self.file_save_path.clone()
     }
 
     fn get_file_amount(&self) -> i64

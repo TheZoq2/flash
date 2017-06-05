@@ -11,9 +11,6 @@ use std::option::Option;
 use std::fs;
 
 use std::thread;
-use std::sync::{Mutex};
-use std::sync::Arc;
-
 use std::path::Path;
 
 use file_database;
@@ -22,7 +19,6 @@ use file_list::{FileList, FileListList, FileListSource, FileLocation};
 use file_util::{sanitize_tag_names};
 use file_util::{
     generate_thumbnail,
-    get_file_extension,
     get_semi_unique_identifier,
     get_file_timestamp
 };
@@ -80,7 +76,7 @@ pub fn reply_to_file_list_request(request: &mut Request, id: usize) -> IronResul
 
     let result = ListResponse{ id, length: file_amount };
 
-    Ok(Response::with((status::Ok, format!("{}", serde_json::to_string(&result).unwrap()))))
+    Ok(Response::with((status::Ok, serde_json::to_string(&result).unwrap())))
 }
 
 /**
@@ -88,7 +84,7 @@ pub fn reply_to_file_list_request(request: &mut Request, id: usize) -> IronResul
 */
 pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
 {
-    let path = match get_get_variable(request, "path".to_string())
+    let path = match get_get_variable(request, "path")
     {
         Some(val) => val,
         None => {
@@ -121,7 +117,7 @@ pub fn reply_with_file_list_data(request: &mut Request, file: &FileLocation)
 {
     // Lock the file list and try to fetch the file
     let file_data = match *file {
-        FileLocation::Unsaved(path) => FileData::from_path(path),
+        FileLocation::Unsaved(ref path) => FileData::from_path(path.clone()),
         FileLocation::Database(id) => {
             // lock the database and fetch the file data
             let mutex = request.get::<Write<FileDatabase>>().unwrap();
@@ -134,14 +130,14 @@ pub fn reply_with_file_list_data(request: &mut Request, file: &FileLocation)
         }
     };
 
-    return Ok(Response::with((status::Ok, serde_json::to_string(&file_data).unwrap())))
+    Ok(Response::with((status::Ok, serde_json::to_string(&file_data).unwrap())))
 }
 
 fn reply_with_file_list_file(request: &mut Request, file: &FileLocation)
         -> IronResult<Response>
 {
     let path = match *file {
-        FileLocation::Unsaved(path) => path,
+        FileLocation::Unsaved(ref path) => path.clone(),
         FileLocation::Database(id) => {
             // lock the database and fetch the file data
             let mutex = request.get::<Write<FileDatabase>>().unwrap();
@@ -154,7 +150,7 @@ fn reply_with_file_list_file(request: &mut Request, file: &FileLocation)
         }
     };
 
-    return Ok(Response::with((status::Ok, path)))
+    Ok(Response::with((status::Ok, path)))
 }
 
 fn get_file_list_object(file_list_list: &FileListList, list_id: usize, file_index: usize)
@@ -184,7 +180,7 @@ fn get_file_list_object(file_list_list: &FileListList, list_id: usize, file_inde
 */
 pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 {
-    let action = match get_get_variable(request, "action".to_string()) {
+    let action = match get_get_variable(request, "action") {
         Some(val) => val,
         None => {
             return Ok(Response::with((status::NotFound, "Missing 'action' parameter")));
@@ -220,7 +216,11 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
         },
         "save" => {
             match handle_save_request(request, &file_location) {
-                Ok(val) => 
+                Ok(new_location) => match new_location {
+                    Some(new_location) => Ok(Response::with((status::Ok, ""))),
+                    None => Ok(Response::with((status::Ok, "")))
+                },
+                Err(message) => Ok(Response::with((status::NotFound, message)))
             }
         }
         val => {
@@ -232,7 +232,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 
 
 /**
-  Saves the specified tags for the file. If a FileLocation id has been created,
+  Saves the specified tags for the file. If a `FileLocation` id has been created,
   it is returned. Otherwise None. If saving failed an error is returned
 */
 pub fn handle_save_request(request: &mut Request, file_location: &FileLocation)
@@ -240,24 +240,21 @@ pub fn handle_save_request(request: &mut Request, file_location: &FileLocation)
 {
     let tags = get_tags_from_request(request)?;
 
-    match *file_location {
-        FileLocation::Unsaved(path) => {
-            match save_new_file(request, &path, tags) {
+    match file_location.clone() {
+        FileLocation::Unsaved(ref path) => {
+            match save_new_file(request, path, &tags)
+            {
                 Ok(id) => Ok(Some(FileLocation::Database(id))),
                 Err(e) => Err(e)
             }
         },
-        FileLocation::Database(id) => Ok(None)
+        FileLocation::Database(_) => Ok(None) //TODO: Actually update things
     }
-
-
 }
 
-pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: Vec<String>)
+pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: &[String])
         -> Result<i32, String>
 {
-    let original_path = Arc::new(*original_path);
-
     let file_extension = (*original_path).extension().unwrap();
 
     //Get the folder where we want to place the stored file
@@ -270,13 +267,11 @@ pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: Vec<S
 
     let file_identifier = get_semi_unique_identifier();
 
-    let tags = get_tags_from_request(request).unwrap();
-
     let thumbnail_path_without_extension = format!("{}/thumb_{}", destination_dir.clone(), &file_identifier);
 
 
     //Generate the thumbnail
-    let original_path_string = (*original_path).to_string_lossy();
+    let original_path_string = original_path.to_string_lossy();
     let thumbnail_info = match generate_thumbnail(&original_path_string, &thumbnail_path_without_extension, 300) {
         Ok(val) => val,
         Err(e) => {
@@ -286,9 +281,8 @@ pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: Vec<S
 
     //Copy the file to the destination
     //Get the name and path of the new file
-    let new_file_path = Arc::new(
-            destination_dir + "/" + &file_identifier + &file_extension.to_string_lossy()
-        );
+    let new_file_path =
+            destination_dir + "/" + &file_identifier + &file_extension.to_string_lossy();
 
 
     let thumbnail_filename = 
@@ -311,38 +305,36 @@ pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: Vec<S
         db_container.add_new_file(
                 &new_filename.to_string(),
                 &thumbnail_filename.to_string(),
-                &tags,
+                tags,
                 timestamp
             ).id
     };
 
-    thread::spawn(move ||{
-        match fs::copy(*original_path, *new_file_path)
-        {
-            Ok(_) => {},
-            Err(e) => {
-                println!("Failed to copy file to destination: {}", e);
-                //TODO: Probably remove the thumbnail here
-                return
-            }
-        };
-    });
+    {
+        let original_path = original_path.clone();
+        let new_file_path = new_file_path.clone();
+        thread::spawn(move ||{
+            match fs::copy(original_path, new_file_path)
+            {
+                Ok(_) => {},
+                Err(e) => {
+                    println!("Failed to copy file to destination: {}", e);
+                    //TODO: Probably remove the thumbnail here
+                    return
+                }
+            };
+        });
+    }
 
     Ok(saved_id)
 }
 
-pub fn update_stored_file(id: i32, tags: Vec<String>)
-{
-    
-}
-
-
 fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), String>
 {
-    let list_id = match get_get_variable(request, "list_id".to_string()) {
+    let list_id = match get_get_variable(request, "list_id") {
         Some(val) => val,
         None => {
-            return Err(format!("missing list_id variable"));
+            return Err("missing list_id variable".to_owned());
         }
     };
 
@@ -353,10 +345,10 @@ fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), S
         }
     };
 
-    let file_index = match get_get_variable(request, "index".to_string()) {
+    let file_index = match get_get_variable(request, "index") {
         Some(val) => val,
         None => {
-            return Err(format!("missing index variable"));
+            return Err("missing index variable".to_owned());
         }
     };
 
@@ -381,8 +373,8 @@ fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, String>
             {
                 Some(val) => val.first().unwrap().clone(), //The request contains a vec each occurence of the variable
                 None => {
-                    return Err(String::from("Failed to decode tag list. 'tags' variable not
-                                        in GET ilist"));
+                    return Err("Failed to decode tag list. 'tags' variable not
+                                        in GET ilist".to_owned());
                 }
             }
         },
@@ -395,18 +387,18 @@ fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, String>
         Ok(result) => Ok(sanitize_tag_names(&result).unwrap()),
         Err(e) => {
             println!("Failed to decode tag list. Error: {}", e);
-            return Err(format!("{}", e));
+            Err(format!("{}", e))
         }
     }
 }
 
-fn get_get_variable(request: &mut Request, name: String) -> Option<String>
+fn get_get_variable(request: &mut Request, name: &str) -> Option<String>
 {
     //return Some("".to_string());
     match request.get_ref::<UrlEncodedQuery>()
     {
         Ok(hash_map) => {
-            match hash_map.get(&name)
+            match hash_map.get(name)
             {
                 Some(val) => Some(val.first().unwrap().clone()),
                 None => None

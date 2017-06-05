@@ -19,7 +19,7 @@ pub enum FileLocation
 }
 
 /**
-  Original source of creation of a FileList.
+  Original source of creation of a `FileList`.
 */
 #[derive(Clone, PartialEq, Eq, Serialize)]
 pub enum FileListSource

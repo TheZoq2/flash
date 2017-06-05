@@ -54,7 +54,7 @@ pub fn handle_album_list_request(request: &mut Request) -> IronResult<Response>
     //let filenames = db_container.get_db().get_file_paths_with_tags(tags);
     let files = db.get_files_with_tags(tags);
 
-    Ok(Response::with((status::Ok, format!("{}", json::encode(&files).unwrap()))))
+    Ok(Response::with((status::Ok, json::encode(&files).unwrap())))
 }
 
 
@@ -78,7 +78,7 @@ pub fn handle_album_image_request(request: &mut Request) -> IronResult<Response>
             return Ok(Response::with(iron::status::NotFound));//This is a lie. TODO: Update response
         }
     };
-    
+
     let id = match id_string.parse::<i32>()
     {
         Ok(val) => val,
@@ -93,5 +93,5 @@ pub fn handle_album_image_request(request: &mut Request) -> IronResult<Response>
 
     let file = db.get_file_with_id(id);
 
-    Ok(Response::with((status::Ok, format!("{}", json::encode(&file).unwrap()))))
+    Ok(Response::with((status::Ok, json::encode(&file).unwrap())))
 }
