@@ -18,12 +18,12 @@ use iron::typemap::Key;
 /**
   A reference to a file stored in the file database
  */
-#[derive(Queryable, Identifiable, Associations, Clone, RustcEncodable)]
+#[derive(Queryable, Identifiable, Associations, Clone, RustcEncodable, PartialEq, Debug)]
 pub struct File
 {
-    //The unique ID of this file in the db
+    // The unique ID of this file in the db
     pub id: i32,
-    //The path to the actual file
+    // The path to the actual file
     pub filename: String,
 
     pub thumbnail_path: String,

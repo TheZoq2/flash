@@ -7,11 +7,10 @@ use file_util::{get_files_in_dir};
 
 use file_database;
 
-
 /**
   The location of a file stored in a file list.
 */
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum FileLocation
 {
     ///Not yet stored in the database.
@@ -45,6 +44,14 @@ pub struct FileList
 
 impl FileList
 {
+    pub fn from_locations(files: Vec<FileLocation>, source: FileListSource) -> FileList
+    {
+        FileList {
+            files,
+            source
+        }
+    }
+
     pub fn from_directory(path: PathBuf) -> FileList
     {
         let file_paths = get_files_in_dir(&path);
@@ -63,6 +70,40 @@ impl FileList
     pub fn get(&self, index: usize) -> Option<&FileLocation>
     {
         self.files.get(index)
+    }
+
+    pub fn set(&mut self, index: usize, new_location: FileLocation) -> Result<(), ()>
+    {
+        if index < self.files.len()
+        {
+            self.files[index] = new_location;
+            Ok(())
+        }
+        else
+        {
+            Err(())
+        }
+    }
+
+    pub fn edit_entry(&self, index: usize, new_location: &FileLocation) -> FileList
+    {
+        let new_list = self.files
+            .iter()
+            .enumerate()
+            .map(|(i, location): (usize, &FileLocation)| {
+                    if i == index {
+                        new_location.clone()
+                    }
+                    else {
+                        location.clone()
+                    }
+                })
+            .collect();
+
+        FileList {
+            files: new_list,
+            .. self.clone()
+        }
     }
 
     pub fn len(&self) -> usize
@@ -114,9 +155,79 @@ impl FileListList
         }
         None
     }
+
+    /**
+      Set the `FileLocation` in file `file_index` in list `list_id` to
+      `file_entry`
+
+      Does nothing if `file_index` or `list_id` are out of bounds
+    */
+    pub fn edit_file_list_entry(
+            &mut self,
+            list_id: usize,
+            file_index: usize,
+            file_entry: &FileLocation
+        )
+    {
+        self.lists = self.lists
+            .iter()
+            .enumerate()
+            .map(|enumerable| {
+                    let (i, list) = enumerable;
+                    if i == list_id {
+                        list.edit_entry(file_index, file_entry)
+                    }
+                    else {
+                        list.clone()
+                    }
+                })
+            .collect()
+    }
 }
 
 impl Key for FileListList { type Value = FileListList; }
 
+
+
+
+#[cfg(test)]
+mod file_list_tests
+{
+    use super::*;
+
+    #[test]
+    fn file_entry_update_test()
+    {
+        let mut fll = FileListList::new();
+
+        let list1 = FileList::from_locations(
+                vec!( FileLocation::Unsaved(PathBuf::from("test1"))
+                    , FileLocation::Unsaved(PathBuf::from("test2"))
+                    , FileLocation::Unsaved(PathBuf::from("test3"))
+                    ),
+                FileListSource::Search
+            );
+        let list2 = FileList::from_locations(
+                vec!( FileLocation::Unsaved(PathBuf::from("test1"))
+                    , FileLocation::Unsaved(PathBuf::from("test2"))
+                    , FileLocation::Unsaved(PathBuf::from("test3"))
+                    ),
+                FileListSource::Search
+            );
+
+        fll.add(list1);
+        fll.add(list2);
+
+        fll.edit_file_list_entry(0,0, &FileLocation::Unsaved(PathBuf::from("changed")));
+
+        assert_eq!(fll.get(0).unwrap().get(0).unwrap(), &FileLocation::Unsaved(PathBuf::from("changed")));
+        assert_eq!(fll.get(0).unwrap().get(1).unwrap(), &FileLocation::Unsaved(PathBuf::from("test2")));
+        assert_eq!(fll.get(0).unwrap().get(2).unwrap(), &FileLocation::Unsaved(PathBuf::from("test3")));
+
+        assert_eq!(fll.get(1).unwrap().get(0).unwrap(), &FileLocation::Unsaved(PathBuf::from("test1")));
+        assert_eq!(fll.get(1).unwrap().get(1).unwrap(), &FileLocation::Unsaved(PathBuf::from("test2")));
+        assert_eq!(fll.get(1).unwrap().get(2).unwrap(), &FileLocation::Unsaved(PathBuf::from("test3")));
+    }
+}
 
 

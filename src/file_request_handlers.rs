@@ -6,9 +6,13 @@ use rustc_serialize::json;
 use serde_json;
 
 use iron::*;
+
 use persistent::{Write};
 use std::option::Option;
 use std::fs;
+
+use std::sync::Mutex;
+use std::sync::Arc;
 
 use std::thread;
 use std::path::Path;
@@ -23,7 +27,15 @@ use file_util::{
     get_file_timestamp
 };
 
+use file_request_error::{
+    FileRequestError,
+    err_invalid_variable_type
+};
 
+////////////////////////////////////////////////////////////////////////////////
+//                      Helper types used for passing
+//                      response data between functions
+////////////////////////////////////////////////////////////////////////////////
 #[derive(Serialize)]
 struct FileData
 {
@@ -53,19 +65,22 @@ impl FileData
     }
 }
 
-pub fn reply_to_file_list_request(request: &mut Request, id: usize) -> IronResult<Response>
-{
-    #[derive(Serialize)]
-    struct ListResponse
-    {
-        pub id: usize,
-        pub length: Option<usize>
-    }
 
+/**
+  Serializable list response that contains data about a file list
+*/
+#[derive(Serialize)]
+struct ListResponse
+{
+    pub id: usize,
+    pub length: Option<usize>
+}
+fn reply_to_file_list_request(file_list_list: Arc<Mutex<FileListList>>, id: usize)
+        -> ListResponse
+{
     // Fetch the file list
     let file_amount = {
-        let mutex = request.get::<Write<FileListList>>().unwrap();
-        let file_list_list = mutex.lock().unwrap();
+        let file_list_list = file_list_list.lock().unwrap();
 
         match file_list_list.get(id)
         {
@@ -76,31 +91,28 @@ pub fn reply_to_file_list_request(request: &mut Request, id: usize) -> IronResul
 
     let result = ListResponse{ id, length: file_amount };
 
-    Ok(Response::with((status::Ok, serde_json::to_string(&result).unwrap())))
+    result
 }
+
+////////////////////////////////////////////////////////////////////////////////
+//                      Public request handlers
+////////////////////////////////////////////////////////////////////////////////
 
 /**
   Handles requests for creating a filelist from a directory path
 */
 pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
 {
-    let path = match get_get_variable(request, "path")
-    {
-        Some(val) => val,
-        None => {
-            println!("Directory list creation request did contain a path");
-            //TODO: Find a better way to handle errors
-            unimplemented!()
-        }
-    };
+    let path = get_get_variable(request, "path")?;
+
+    let file_list_list = request.get::<Write<FileListList>>().unwrap();
 
     // Check if path is a valid path
     let path = PathBuf::from(&path);
 
     // Lock the file list and insert a new list
     let file_list_id = {
-        let mutex = request.get::<Write<FileListList>>().unwrap();
-        let mut file_list_list = mutex.lock().unwrap();
+        let mut file_list_list = file_list_list.lock().unwrap();
 
         match file_list_list.get_id_with_source(FileListSource::Folder(path.clone()))
         {
@@ -109,57 +121,8 @@ pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
         }
     };
 
-    reply_to_file_list_request(request, file_list_id)
-}
-
-pub fn reply_with_file_list_data(file: &FileLocation)
-        -> IronResult<Response>
-{
-    // Lock the file list and try to fetch the file
-    let file_data = match *file {
-        FileLocation::Unsaved(ref path) => FileData::from_path(path.clone()),
-        FileLocation::Database(ref db_entry) => {
-            //TODO: Make sure this data is not outdated
-            FileData::from_database(db_entry.clone())
-        }
-    };
-
-    Ok(Response::with((status::Ok, serde_json::to_string(&file_data).unwrap())))
-}
-
-fn reply_with_file_list_file(file: &FileLocation)
-        -> IronResult<Response>
-{
-    let path = match *file {
-        FileLocation::Unsaved(ref path) => path.clone(),
-        FileLocation::Database(ref db_entry) => {
-            PathBuf::from(db_entry.filename.clone())
-        }
-    };
-
-    Ok(Response::with((status::Ok, path)))
-}
-
-fn get_file_list_object(file_list_list: &FileListList, list_id: usize, file_index: usize)
-    -> Result<FileLocation, String>
-{
-    let file_list = match file_list_list.get(list_id)
-    {
-        Some(list) => list,
-        None => {
-            let message = format!("No file list with id {}", list_id);
-            return Err(message);
-        }
-    };
-
-    match file_list.get(file_index)
-    {
-        Some(file) => Ok(file.clone()),
-        None => {
-            let message = format!("No file with index {} in file_list {}", file_index, list_id);
-            Err(message)
-        }
-    }
+    let list_response = reply_to_file_list_request(file_list_list, file_list_id);
+    Ok(Response::with((status::Ok, serde_json::to_string(&list_response).unwrap())))
 }
 
 /**
@@ -167,47 +130,48 @@ fn get_file_list_object(file_list_list: &FileListList, list_id: usize, file_inde
 */
 pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 {
-    let action = match get_get_variable(request, "action") {
-        Some(val) => val,
-        None => {
-            return Ok(Response::with((status::NotFound, "Missing 'action' parameter")));
-        }
-    };
+    let action = get_get_variable(request, "action")?;
 
-    let (list_id, file_index) = match read_request_list_id_index(request)
-    {
-        Ok(val) => val,
-        Err(message) => {
-            return Ok(Response::with((status::NotFound, message)));
-        }
-    };
+    let (list_id, file_index) = read_request_list_id_index(request)?;
 
     let file_location = {
         let mutex = request.get::<Write<FileListList>>().unwrap();
         let file_list_list = mutex.lock().unwrap();
 
-        match get_file_list_object(&*file_list_list, list_id, file_index) {
-            Ok(val) => val,
-            Err(message) => {
-                return Ok(Response::with((status:: NotFound, message)))
-            }
-        }
+        get_file_list_object(&*file_list_list, list_id, file_index)?
     };
 
     match action.as_str() {
         "get_data" => {
-            reply_with_file_list_data(&file_location)
+            let file_data = file_data_from_file_location(&file_location);
+            Ok(Response::with(
+                    (status::Ok, serde_json::to_string(&file_data).unwrap())
+                ))
         },
         "get_file" => {
-            reply_with_file_list_file(&file_location)
+            let path = get_file_list_file(&file_location);
+            Ok(Response::with((status::Ok, path)))
         },
+        "get_thumbnail" => {
+            let path = get_file_list_thumbnail(&file_location);
+            Ok(Response::with((status::Ok, path)))
+        }
         "save" => {
-            match handle_save_request(request, &file_location) {
-                Ok(new_location) => match new_location {
-                    Some(new_location) => Ok(Response::with((status::Ok, ""))),
-                    None => Ok(Response::with((status::Ok, "")))
+            //TODO Maybe break this out into its own function
+            let db = request.get::<Write<FileDatabase>>().unwrap();
+            let tags = get_tags_from_request(request)?;
+
+            match handle_save_request(db, &file_location, &tags)? {
+                Some(new_location) => {
+                    update_file_list(
+                                &mut request.get::<Write<FileListList>>().unwrap(),
+                                list_id,
+                                file_index,
+                                new_location
+                            );
+                    Ok(Response::with((status::Ok, "")))
                 },
-                Err(message) => Ok(Response::with((status::NotFound, message)))
+                None => Ok(Response::with((status::Ok, "")))
             }
         }
         val => {
@@ -218,18 +182,91 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 }
 
 
+////////////////////////////////////////////////////////////////////////////////
+///                     Private functions for getting data
+///                     out of iron requests
+////////////////////////////////////////////////////////////////////////////////
+fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), FileRequestError>
+{
+    let list_id = get_get_variable(request, "list_id")?;
+
+    let list_id = match list_id.parse::<usize>() {
+        Ok(val) => val,
+        Err(_) => {
+            return Err(err_invalid_variable_type("list_id", "usize"));
+        }
+    };
+
+    let file_index = get_get_variable(request, "index")?;
+
+    let file_index = match file_index.parse::<usize>() {
+        Ok(val) => val,
+        Err(_) => {
+            return Err(err_invalid_variable_type("index", "usize"));
+        }
+    };
+
+    Ok((list_id, file_index))
+}
+
+fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, FileRequestError>
+{
+    //Get the important information from the request.
+    let tag_string = get_get_variable(request, "tags")?;
+
+    match json::decode::<Vec<String>>(&tag_string){
+        Ok(result) => Ok(sanitize_tag_names(&result).unwrap()),
+        Err(e) => {
+            Err(err_invalid_variable_type("tags", &format!("{:?}", e)))
+        }
+    }
+}
+
+fn get_get_variable(request: &mut Request, name: &str) -> Result<String, FileRequestError>
+{
+    match request.get_ref::<UrlEncodedQuery>()
+    {
+        Ok(hash_map) => {
+            match hash_map.get(name)
+            {
+                Some(val) => Ok(val.first().unwrap().clone()),
+                None => Err(FileRequestError::NoSuchVariable(name.to_owned()))
+            }
+        },
+        _ => Err(FileRequestError::NoUrlEncodedQuery)
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//                      Private functions for generating
+//                      replies to file requests
+////////////////////////////////////////////////////////////////////////////////
+
 /**
-  Saves the specified tags for the file. If a `FileLocation` id has been created,
+  Updates the specified file_list with a new FileLocation
+*/
+fn update_file_list(
+        file_list_list: &mut Arc<Mutex<FileListList>>,
+        list_id: usize,
+        file_index: usize,
+        new_location: FileLocation
+    )
+{
+    let mut file_list_list = file_list_list.lock().unwrap();
+    file_list_list.edit_file_list_entry(list_id, file_index, &new_location);
+}
+
+/**
+  Saves the specified tags for the file. If a new `FileLocation` has been created,
   it is returned. Otherwise None. If saving failed an error is returned
 */
-pub fn handle_save_request(request: &mut Request, file_location: &FileLocation)
-        -> Result<Option<FileLocation>, String>
+fn handle_save_request(db: Arc<Mutex<FileDatabase>>, file_location: &FileLocation, tags: &[String])
+        -> Result<Option<FileLocation>, FileRequestError>
 {
-    let tags = get_tags_from_request(request)?;
-
-    match file_location.clone() {
+    match *file_location {
         FileLocation::Unsaved(ref path) => {
-            match save_new_file(request, path, &tags)
+            match save_new_file(db, path, tags)
             {
                 Ok(db_entry) => Ok(Some(FileLocation::Database(db_entry))),
                 Err(e) => Err(e)
@@ -239,15 +276,17 @@ pub fn handle_save_request(request: &mut Request, file_location: &FileLocation)
     }
 }
 
-pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: &[String])
-        -> Result<file_database::File, String>
+/**
+  Saves a specified file in the `Filedatabase`
+*/
+pub fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[String])
+        -> Result<file_database::File, FileRequestError>
 {
     let file_extension = (*original_path).extension().unwrap();
 
     //Get the folder where we want to place the stored file
     let destination_dir = {
-        let mutex = request.get::<Write<FileDatabase>>().unwrap();
-        let db = mutex.lock().unwrap();
+        let db = db.lock().unwrap();
 
         db.get_file_save_path()
     };
@@ -259,12 +298,11 @@ pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: &[Str
 
     //Generate the thumbnail
     let original_path_string = original_path.to_string_lossy();
-    let thumbnail_info = match generate_thumbnail(&original_path_string, &thumbnail_path_without_extension, 300) {
-        Ok(val) => val,
-        Err(e) => {
-            return Err(format!("Failed to generate thumbnail: {}", e));
-        }
-    };
+    let thumbnail_info = generate_thumbnail(
+                &original_path_string,
+                &thumbnail_path_without_extension,
+                300
+            )?;
 
     //Copy the file to the destination
     //Get the name and path of the new file
@@ -286,10 +324,9 @@ pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: &[Str
 
     //Store the file in the database
     let saved_id = {
-        let mutex = request.get::<Write<FileDatabase>>().unwrap();
-        let mut db_container = mutex.lock().unwrap();
+        let mut db = db.lock().unwrap();
 
-        db_container.add_new_file(
+        db.add_new_file(
                 &new_filename.to_string(),
                 &thumbnail_filename.to_string(),
                 tags,
@@ -316,81 +353,136 @@ pub fn save_new_file(request: &mut Request, original_path: &PathBuf, tags: &[Str
     Ok(saved_id)
 }
 
-fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), String>
+
+fn file_data_from_file_location(file: &FileLocation)
+        -> FileData
 {
-    let list_id = match get_get_variable(request, "list_id") {
-        Some(val) => val,
-        None => {
-            return Err("missing list_id variable".to_owned());
-        }
-    };
-
-    let list_id = match list_id.parse::<usize>() {
-        Ok(val) => val,
-        Err(_) => {
-            return Err(format!("{} is not a valid file list id", list_id));
-        }
-    };
-
-    let file_index = match get_get_variable(request, "index") {
-        Some(val) => val,
-        None => {
-            return Err("missing index variable".to_owned());
-        }
-    };
-
-    let file_index = match file_index.parse::<usize>() {
-        Ok(val) => val,
-        Err(_) => {
-            return Err(format!("{} is not a valid list index", file_index));
-        }
-    };
-
-    Ok((list_id, file_index))
-}
-
-
-fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, String>
-{
-    //Get the important information from the request.
-    let tag_string = match request.get_ref::<UrlEncodedQuery>()
-    {
-        Ok(hash_map) => {
-            match hash_map.get("tags")
-            {
-                Some(val) => val.first().unwrap().clone(), //The request contains a vec each occurence of the variable
-                None => {
-                    return Err("Failed to decode tag list. 'tags' variable not
-                                        in GET ilist".to_owned());
-                }
-            }
-        },
-        Err(e) => {
-            return Err(String::from(format!("Failed to get GET variable: {:?}", e)));
-        }
-    };
-
-    match json::decode::<Vec<String>>(&tag_string){
-        Ok(result) => Ok(sanitize_tag_names(&result).unwrap()),
-        Err(e) => {
-            println!("Failed to decode tag list. Error: {}", e);
-            Err(format!("{}", e))
+    // Lock the file list and try to fetch the file
+    match *file {
+        FileLocation::Unsaved(ref path) => FileData::from_path(path.clone()),
+        FileLocation::Database(ref db_entry) => {
+            //TODO: Make sure this data is not outdated
+            FileData::from_database(db_entry.clone())
         }
     }
 }
 
-fn get_get_variable(request: &mut Request, name: &str) -> Option<String>
+fn get_file_list_file(file: &FileLocation)
+        -> PathBuf
 {
-    //return Some("".to_string());
-    match request.get_ref::<UrlEncodedQuery>()
+    match *file {
+        FileLocation::Unsaved(ref path) => path.clone(),
+        FileLocation::Database(ref db_entry) => {
+            PathBuf::from(db_entry.filename.clone())
+        }
+    }
+}
+
+fn get_file_list_thumbnail(file: &FileLocation) -> PathBuf
+{
+    match *file {
+        FileLocation::Unsaved(ref path) => path.clone(),
+        FileLocation::Database(ref db_entry) => {
+            PathBuf::from(db_entry.thumbnail_path.clone())
+        }
+    }
+}
+
+/**
+  Returns a `FileLocation` from a `FileListList`, a list id and a file id
+*/
+fn get_file_list_object(file_list_list: &FileListList, list_id: usize, file_index: usize)
+    -> Result<FileLocation, FileRequestError>
+{
+    let file_list = match file_list_list.get(list_id)
     {
-        Ok(hash_map) => {
-            match hash_map.get(name)
-            {
-                Some(val) => Some(val.first().unwrap().clone()),
-                None => None
-            }
-        },
-        _ => None
+        Some(list) => list,
+        None => {
+            return Err(FileRequestError::NoSuchList(list_id));
+        }
+    };
+
+    match file_list.get(file_index)
+    {
+        Some(file) => Ok(file.clone()),
+        None => {
+            Err(FileRequestError::NoSuchFile(list_id, file_index))
+        }
+    }
+}
+
+
+
+/*
+  Database tests are not currently run because the database can't be shared
+  between test threads
+
+  TODO: Create a database test module which tests the db
+*/
+#[cfg(test)]
+mod file_request_tests
+{
+    use super::*;
+
+    fn dummy_database_entry(file_path: &str, thumbnail_path: &str)
+            -> file_database::File
+    {
+        file_database::File {
+            id: 0,
+            filename: file_path.to_owned(),
+            thumbnail_path: thumbnail_path.to_owned(),
+            creation_date: None,
+            is_uploaded: true,
+            tags: vec!()
+        }
+    }
+
+    fn make_dummy_file_list_list() -> FileListList
+    {
+        let mut fll = FileListList::new();
+
+        let flist1 = FileList::from_locations(
+                vec!( FileLocation::Unsaved(PathBuf::from("l0f0"))
+                    , FileLocation::Unsaved(PathBuf::from("l0f1"))
+                    , FileLocation::Unsaved(PathBuf::from("l0f2"))
+                    ),
+                FileListSource::Search
+            );
+
+        let flist2 = FileList::from_locations(
+                vec!( FileLocation::Unsaved(PathBuf::from("l1f0"))
+                    , FileLocation::Unsaved(PathBuf::from("l1f1"))
+                    ),
+                FileListSource::Search
+            );
+
+        let flist3 = FileList::from_locations(
+                vec!( FileLocation::Database(dummy_database_entry("test1", "thumb1"))
+                    , FileLocation::Database(dummy_database_entry("test2", "thumb2"))
+                    ),
+                FileListSource::Search
+            );
+
+        fll.add(flist1);
+        fll.add(flist2);
+
+        fll
+    }
+
+    #[test]
+    fn file_list_object_test()
+    {
+        let fll = make_dummy_file_list_list();
+
+        // Getting files from the first list works
+        assert_eq!(get_file_list_object(&fll, 0, 0).unwrap(), FileLocation::Unsaved(PathBuf::from("l0f0")));
+        assert_eq!(get_file_list_object(&fll, 0, 2).unwrap(), FileLocation::Unsaved(PathBuf::from("l0f2")));
+        // Getting files from the second list works
+        assert_eq!(get_file_list_object(&fll, 1, 1).unwrap(), FileLocation::Unsaved(PathBuf::from("l1f1")));
+
+        //Out of bounds 
+        assert!(get_file_list_object(&fll, 0, 3).is_err());
+        assert!(get_file_list_object(&fll, 1, 2).is_err());
+        assert!(get_file_list_object(&fll, 3, 2).is_err());
     }
 }

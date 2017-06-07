@@ -26,6 +26,7 @@ mod settings;
 mod album_handler;
 mod file_util;
 mod file_request_handlers;
+mod file_request_error;
 mod exiftool;
 //mod search;
 mod schema;
@@ -93,7 +94,6 @@ fn main()
     mount.mount("/file", Static::new(Path::new(&target_dir)));
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())));
     mount.mount("/album", album_handler::handle_album_list_request);
-    mount.mount("/album/file", album_handler::handle_album_image_request);
     mount.mount("/file_list/from_path", file_request_handlers::directory_list_handler);
 
     let mut chain = Chain::new(mount);
