@@ -277,7 +277,6 @@ fn update_file_list(
   Saves the specified tags for the file. If a new `FileLocation` has been created,
   it is returned. Otherwise None. If saving failed an error is returned
 */
-// TODO: Write tests for new db entries
 fn handle_save_request(db: Arc<Mutex<FileDatabase>>, file_location: &FileLocation, tags: &[String])
         -> Result<FileSaveRequestResult, FileRequestError>
 {
@@ -285,7 +284,6 @@ fn handle_save_request(db: Arc<Mutex<FileDatabase>>, file_location: &FileLocatio
         FileLocation::Unsaved(ref path) => {
             match save_new_file(db, path, tags)
             {
-                // TODO: Handle issues sent back through the channel
                 Ok((db_entry, save_result_rx)) => {
                     Ok(FileSaveRequestResult::NewDatabaseEntry(
                         FileLocation::Database(db_entry),
@@ -424,7 +422,6 @@ fn file_data_from_file_location(file: &FileLocation)
     match *file {
         FileLocation::Unsaved(ref path) => FileData::from_path(path.clone()),
         FileLocation::Database(ref db_entry) => {
-            //TODO: Make sure this data is not outdated
             FileData::from_database(db_entry.clone())
         }
     }
