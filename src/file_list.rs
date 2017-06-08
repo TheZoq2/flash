@@ -44,6 +44,7 @@ pub struct FileList
 
 impl FileList
 {
+    #[cfg(test)]
     pub fn from_locations(files: Vec<FileLocation>, source: FileListSource) -> FileList
     {
         FileList {
