@@ -20,6 +20,13 @@ extern crate glob;
 extern crate rustc_serialize;
 extern crate chrono;
 
+#[cfg(test)]
+#[macro_use]
+extern crate assert_matches;
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
+
 mod file_list;
 mod file_database;
 mod settings;

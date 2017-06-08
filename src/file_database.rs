@@ -174,6 +174,12 @@ impl FileDatabase
 
         files.count().get_result(&self.connection).unwrap()
     }
+
+    #[cfg(test)]
+    fn reset(&self)
+    {
+        diesel::delete(files::table).execute(&self.connection).unwrap();
+    }
 }
 
 /**
@@ -192,13 +198,13 @@ pub fn get_file_paths_from_files(files: Vec<File>) -> Vec<String>
 }
 
 
-/*
-   Tests
- */
 #[cfg(test)]
-mod db_tests
+pub mod db_test_helpers
 {
     use file_database::*;
+
+    use std::sync::Mutex;
+    use std::sync::Arc;
 
     use dotenv::dotenv;
     use std::env;
@@ -219,19 +225,49 @@ mod db_tests
             .expect(&format!("Error connecting to {}", database_url))
     }
 
-    fn get_file_database() -> FileDatabase
+    fn get_test_storage_path() -> String
+    {
+        dotenv().ok();
+        env::var("TEST_FILE_STORAGE_PATH")
+            .expect("TEST_FILE_STORAGE_PATH must be set. Perhaps .env is missing?")
+    }
+
+    fn create_db() -> FileDatabase
     {
         let connection = establish_connection();
 
-        //Clear the tables
-        diesel::delete(schema::files::table).execute(&connection).unwrap();
-
-        let fdb = FileDatabase::new(establish_connection(), String::from("/tmp/flash"));
-
-        assert_eq!(fdb.get_file_amount(), 0);
+        let test_file_storage_path = get_test_storage_path();
+        let fdb = FileDatabase::new(establish_connection(), String::from(test_file_storage_path));
 
         fdb
     }
+
+    lazy_static! {
+        static ref FDB: Arc<Mutex<FileDatabase>> = Arc::new(Mutex::new(create_db()));
+    }
+
+    pub fn get_database() -> Arc<Mutex<FileDatabase>>
+    {
+        FDB.clone()
+    }
+
+    pub fn run_test<F: Fn(&mut FileDatabase)>(test: F)
+    {
+        let mut fdb = FDB.lock().unwrap();
+        fdb.reset();
+        assert_eq!(fdb.get_file_amount(), 0);
+
+        test(&mut fdb);
+    }
+}
+
+/*
+   Tests
+ */
+#[cfg(test)]
+mod db_tests
+{
+    use file_database::*;
 
     /**
       Since the results of these tests depend on the database state,
@@ -240,15 +276,13 @@ mod db_tests
     #[test]
     fn database_test()
     {
-        add_test();
-        multi_tag_test();
-        modify_tags_test();
+        db_test_helpers::run_test(add_test);
+        db_test_helpers::run_test(multi_tag_test);
+        db_test_helpers::run_test(modify_tags_test);
     }
 
-    fn add_test()
+    fn add_test(fdb: &mut FileDatabase)
     {
-        let mut fdb = get_file_database();
-
         fdb.add_new_file(
             &"test1".to_string(), 
             &"thumb1".to_string(),
@@ -277,10 +311,8 @@ mod db_tests
         assert!(fdb.get_file_paths_with_tags(vec!("unused_tag".to_string())).is_empty());
     }
 
-    fn multi_tag_test()
+    fn multi_tag_test(fdb: &mut FileDatabase)
     {
-        let mut fdb = get_file_database();
-
         fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("common_tag".to_string(), "only1_tag".to_string()), 0);
         fdb.add_new_file(&"test2".to_string(), &"thumb2".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()), 0);
         fdb.add_new_file(&"test3".to_string(), &"thumb3".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()), 0);
@@ -304,10 +336,8 @@ mod db_tests
         assert!(no_tags.len() == 3);
     }
 
-    fn modify_tags_test()
+    fn modify_tags_test(fdb: &mut FileDatabase)
     {
-        let mut fdb = get_file_database();
-
         let id = fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("old_tag".to_string()), 0);
 
         fdb.change_file_tags(id, &vec!("new_tag".to_string())).unwrap();

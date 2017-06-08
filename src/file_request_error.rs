@@ -5,6 +5,7 @@ use std::fmt;
 use std::convert;
 
 use image;
+use std::path::PathBuf;
 
 
 #[derive(Debug)]
@@ -22,7 +23,10 @@ pub enum FileRequestError
     /// The current request did not contain a `UrlEncodedQuery`
     NoUrlEncodedQuery,
     /// Error returned when a thumbnail was generated
-    ThumbnailGenerationError(image::ImageError)
+    ThumbnailGenerationError(image::ImageError),
+    /// Error thrown when a function expected a path with an extension but
+    /// got a file without one
+    NoFileExtension(PathBuf)
 }
 
 impl fmt::Display for FileRequestError
@@ -59,6 +63,8 @@ impl Error for FileRequestError
                 "No url parameters",
             &FileRequestError::ThumbnailGenerationError(_) =>
                 "Failed to generate thumbnail",
+            &FileRequestError::NoFileExtension(_) =>
+                "The specified path does not have an extension"
         }
     }
 }

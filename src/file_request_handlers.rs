@@ -282,7 +282,11 @@ fn handle_save_request(db: Arc<Mutex<FileDatabase>>, file_location: &FileLocatio
 pub fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[String])
         -> Result<file_database::File, FileRequestError>
 {
-    let file_extension = (*original_path).extension().unwrap();
+    let file_extension = match (*original_path).extension()
+    {
+        Some(val) => val,
+        None => return Err(FileRequestError::NoFileExtension(original_path.clone()))
+    };
 
     //Get the folder where we want to place the stored file
     let destination_dir = {
@@ -424,6 +428,7 @@ mod file_request_tests
 {
     use super::*;
 
+
     fn dummy_database_entry(file_path: &str, thumbnail_path: &str)
             -> file_database::File
     {
@@ -484,5 +489,38 @@ mod file_request_tests
         assert!(get_file_list_object(&fll, 0, 3).is_err());
         assert!(get_file_list_object(&fll, 1, 2).is_err());
         assert!(get_file_list_object(&fll, 3, 2).is_err());
+    }
+
+    #[test]
+    fn database_related_tests()
+    {
+        let fdb = file_database::db_test_helpers::get_database();
+
+        file_list_saving_tests(fdb);
+    }
+
+    // pub fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[String])
+            // -> Result<file_database::File, FileRequestError>
+    fn file_list_saving_tests(fdb: Arc<Mutex<FileDatabase>>)
+    {
+        assert_matches!(save_new_file
+                (
+                    fdb.clone(),
+                    &PathBuf::from("test"), 
+                    &vec!("test1".to_owned(), "test2".to_owned())
+                ),
+                Err(FileRequestError::NoFileExtension(_))
+            );
+
+        assert_matches!(save_new_file
+                (
+                    fdb.clone(), 
+                    &PathBuf::from("test/media/DSC_0001.JPG"), 
+                    &vec!("test1".to_owned(), "test2".to_owned())
+                ),
+                Ok(_)
+            );
+        //TODO: Make sure file saving works
+        //TODO: Make sure the correct tags are added to the database
     }
 }
