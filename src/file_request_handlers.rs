@@ -148,7 +148,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
                 ))
         },
         "get_file" => {
-            let path = get_file_list_file(&file_location);
+            let path = get_file_location_path(&file_location);
             Ok(Response::with((status::Ok, path)))
         },
         "get_thumbnail" => {
@@ -160,24 +160,17 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
             let tags = get_tags_from_request(request)?;
 
             match handle_save_request(db, &file_location, &tags)? {
-                FileSaveRequestResult::NewDatabaseEntry(new_location, _) => {
+                FileSaveRequestResult::NewDatabaseEntry(new_location, _) 
+                | FileSaveRequestResult::UpdatedDatabaseEntry(new_location)
+                => {
                     update_file_list(
                                 &mut request.get::<Write<FileListList>>().unwrap(),
                                 list_id,
                                 file_index,
-                                new_location
+                                &new_location
                             );
                     Ok(Response::with((status::Ok, "")))
                 },
-                FileSaveRequestResult::UpdatedDatabaseEntry(new_location) => {
-                    update_file_list(
-                                &mut request.get::<Write<FileListList>>().unwrap(),
-                                list_id,
-                                file_index,
-                                new_location
-                            );
-                    Ok(Response::with((status::Ok, "")))
-                }
             }
         }
         val => {
@@ -263,23 +256,21 @@ fn reply_to_file_list_request(file_list_list: Arc<Mutex<FileListList>>, id: usiz
         }
     };
 
-    let result = ListResponse{ id, length: file_amount };
-
-    result
+    ListResponse{ id, length: file_amount }
 }
 
 /**
-  Updates the specified file_list with a new FileLocation
+  Updates the specified `file_list` with a new `FileLocation`
 */
 fn update_file_list(
         file_list_list: &mut Arc<Mutex<FileListList>>,
         list_id: usize,
         file_index: usize,
-        new_location: FileLocation
+        new_location: &FileLocation
     )
 {
     let mut file_list_list = file_list_list.lock().unwrap();
-    file_list_list.edit_file_list_entry(list_id, file_index, &new_location);
+    file_list_list.edit_file_list_entry(list_id, file_index, new_location);
 }
 
 /**
@@ -423,6 +414,9 @@ fn update_stored_file(db: Arc<Mutex<FileDatabase>>, old_entry: &file_database::F
 }
 
 
+/**
+  Returns a `FileData` struct for the specified file location
+*/
 fn file_data_from_file_location(file: &FileLocation)
         -> FileData
 {
@@ -436,7 +430,10 @@ fn file_data_from_file_location(file: &FileLocation)
     }
 }
 
-fn get_file_list_file(file: &FileLocation)
+/**
+  Returns a the path to a `FileLocation`
+*/
+fn get_file_location_path(file: &FileLocation)
         -> PathBuf
 {
     match *file {
@@ -447,6 +444,9 @@ fn get_file_list_file(file: &FileLocation)
     }
 }
 
+/**
+  Returns the path to the thumbnail of a `FileLocation`
+*/
 fn get_file_list_thumbnail(file: &FileLocation) -> PathBuf
 {
     match *file {

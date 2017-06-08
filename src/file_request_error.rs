@@ -51,23 +51,23 @@ impl Error for FileRequestError
 {
     fn description(&self) -> &str
     {
-        match self
+        match *self
         {
-            &FileRequestError::NoSuchList(_) =>
+            FileRequestError::NoSuchList(_) =>
                 "Unknown file list",
-            &FileRequestError::NoSuchFile(_, _) =>
+            FileRequestError::NoSuchFile(_, _) =>
                 "Unknown file",
-            &FileRequestError::NoSuchVariable(_) =>
+            FileRequestError::NoSuchVariable(_) =>
                 "Missing url variable",
-            &FileRequestError::InvalidVariableType(_, _) =>
+            FileRequestError::InvalidVariableType(_, _) =>
                 "Wrong url variable type",
-            &FileRequestError::NoUrlEncodedQuery =>
+            FileRequestError::NoUrlEncodedQuery =>
                 "No url parameters",
-            &FileRequestError::ThumbnailGenerationError(_) =>
+            FileRequestError::ThumbnailGenerationError(_) =>
                 "Failed to generate thumbnail",
-            &FileRequestError::NoFileExtension(_) =>
+            FileRequestError::NoFileExtension(_) =>
                 "The specified path does not have an extension",
-            &FileRequestError::DatabaseSaveError(_) =>
+            FileRequestError::DatabaseSaveError(_) =>
                 "There was an error saving to the database"
         }
     }
@@ -91,7 +91,7 @@ impl convert::From<FileRequestError> for IronError {
 
 
 /**
-  Convenience function for avoiding String::from for creating 
+  Convenience function for avoiding `String::from` for creating 
   `FileRequestError::InvalidVariableType` errors
 */
 pub fn err_invalid_variable_type(var: &str, expected_type: &str) -> FileRequestError
