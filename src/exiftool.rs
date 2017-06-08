@@ -43,8 +43,10 @@ pub enum CardinalDirection
     South
 }
 
-impl CardinalDirection
+impl std::str::FromStr for CardinalDirection
 {
+    type Err = GpsStringParseError;
+
     fn from_str(name: &str) -> Result<CardinalDirection, GpsStringParseError>
     {
         match name
@@ -69,7 +71,23 @@ pub struct GpsCoordinate
 
 impl GpsCoordinate
 {
-    pub fn from_str(string: &str) -> Result<GpsCoordinate, GpsStringParseError>
+
+    pub fn new(degrees: i16, minutes: i16, seconds: f32, direction: CardinalDirection) -> GpsCoordinate
+    {
+        GpsCoordinate{
+            degrees: degrees,
+            minutes: minutes,
+            seconds: seconds,
+            direction: direction
+        }
+    }
+}
+
+impl std::str::FromStr for GpsCoordinate
+{
+    type Err = GpsStringParseError;
+
+    fn from_str(string: &str) -> Result<GpsCoordinate, Self::Err>
     {
         lazy_static! {
             static ref RE: Regex = Regex::new("(\\d*) deg (\\d*)' (\\d*.?\\d*)\" ([NEWS])").unwrap();
@@ -84,16 +102,6 @@ impl GpsCoordinate
                 direction: CardinalDirection::from_str(&val[4])?
             }),
             None => Err(GpsStringParseError::BadFormat)
-        }
-    }
-
-    pub fn new(degrees: i16, minutes: i16, seconds: f32, direction: CardinalDirection) -> GpsCoordinate
-    {
-        GpsCoordinate{
-            degrees: degrees,
-            minutes: minutes,
-            seconds: seconds,
-            direction: direction
         }
     }
 }
@@ -187,7 +195,7 @@ impl ExifData
     {
         match self.tags.get(name)
         {
-            Some(tag) => Some(&tag),
+            Some(tag) => Some(tag),
             None => None
         }
     }
@@ -216,6 +224,7 @@ impl ExifData
 #[cfg(test)]
 mod exif_data_tests
 {
+    use std::str::FromStr;
     use super::*;
 
     #[test]

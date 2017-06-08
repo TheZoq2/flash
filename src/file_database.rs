@@ -15,16 +15,15 @@ use chrono::NaiveDateTime;
 
 use iron::typemap::Key;
 
-
 /**
   A reference to a file stored in the file database
  */
-#[derive(Queryable, Identifiable, Associations, Clone, RustcEncodable)]
+#[derive(Queryable, Identifiable, Associations, Clone, RustcEncodable, PartialEq, Debug)]
 pub struct File
 {
-    //The unique ID of this file in the db
+    // The unique ID of this file in the db
     pub id: i32,
-    //The path to the actual file
+    // The path to the actual file
     pub filename: String,
 
     pub thumbnail_path: String,
@@ -94,7 +93,7 @@ impl FileDatabase
     pub fn add_new_file(&mut self,
                         filename: &str,
                         thumb_name: &str, 
-                        tags: &Vec<String>,
+                        tags: &[String],
                         timestamp: u64
                     ) -> File
     {
@@ -103,7 +102,7 @@ impl FileDatabase
                 filename,
                 thumb_name,
                 NaiveDateTime::from_timestamp(timestamp, 0),
-                tags.clone()
+                tags.to_owned()
             );
 
         let file: File = diesel::insert(&new_file).into(files::table)
@@ -117,7 +116,7 @@ impl FileDatabase
       Changes the tags of a specified file. Returns the new file object
     */
     #[must_use]
-    pub fn change_file_tags(&self, file: File, tags: &Vec<String>) -> Result<File, String>
+    pub fn change_file_tags(&self, file: &File, tags: &[String]) -> Result<File, String>
     {
         let result = 
             diesel::update(files::table.find(file.id))
@@ -134,7 +133,7 @@ impl FileDatabase
     /**
       Returns all files that have all the tags in the list
      */
-    pub fn get_files_with_tags(&self, tags: Vec<String>) -> Vec<File>
+    pub fn get_files_with_tags(&self, tags: &[String]) -> Vec<File>
     {
         files::table.filter(files::tags.contains(tags))
             .get_results(&self.connection)
@@ -143,7 +142,7 @@ impl FileDatabase
 
     pub fn get_file_paths_with_tags(&self, tags: Vec<String>) -> Vec<String>
     {
-        self.get_files_with_tags(tags).iter().map(|x|{x.filename.clone()}).collect()
+        self.get_files_with_tags(&tags).iter().map(|x|{x.filename.clone()}).collect()
     }
 
     pub fn get_file_with_id(&self, id: i32) -> Option<File>
@@ -166,7 +165,7 @@ impl FileDatabase
     */
     pub fn get_file_save_path(&self) -> String
     {
-        return self.file_save_path.clone();
+        self.file_save_path.clone()
     }
 
     fn get_file_amount(&self) -> i64
@@ -174,6 +173,12 @@ impl FileDatabase
         use schema::files::dsl::*;
 
         files.count().get_result(&self.connection).unwrap()
+    }
+
+    #[cfg(test)]
+    pub fn reset(&self)
+    {
+        diesel::delete(files::table).execute(&self.connection).unwrap();
     }
 }
 
@@ -193,22 +198,21 @@ pub fn get_file_paths_from_files(files: Vec<File>) -> Vec<String>
 }
 
 
-/*
-   Tests
- */
 #[cfg(test)]
-mod db_tests
+pub mod db_test_helpers
 {
     use file_database::*;
+
+    use std::sync::Mutex;
+    use std::sync::Arc;
 
     use dotenv::dotenv;
     use std::env;
 
-    use diesel;
-    use schema;
-
-    use diesel::prelude::*;
     use diesel::pg::PgConnection;
+
+    use std::fs;
+    use std::io;
 
     //Establish a connection to the postgres database
     fn establish_connection() -> PgConnection
@@ -221,19 +225,62 @@ mod db_tests
             .expect(&format!("Error connecting to {}", database_url))
     }
 
-    fn get_file_database() -> FileDatabase
+    fn get_test_storage_path() -> String
     {
-        let connection = establish_connection();
+        dotenv().ok();
+        env::var("TEST_FILE_STORAGE_PATH")
+            .expect("TEST_FILE_STORAGE_PATH must be set. Perhaps .env is missing?")
+    }
 
-        //Clear the tables
-        diesel::delete(schema::files::table).execute(&connection).unwrap();
+    fn create_db() -> FileDatabase
+    {
+        let test_file_storage_path = get_test_storage_path();
 
-        let fdb = FileDatabase::new(establish_connection(), String::from("/tmp/flash"));
+        match fs::create_dir(test_file_storage_path.clone()) {
+            Ok(_) => {},
+            Err(e) => {
+                if e.kind() != io::ErrorKind::AlreadyExists
+                {
+                    panic!("{:?}", e)
+                }
+            }
+        };
 
-        assert_eq!(fdb.get_file_amount(), 0);
+        let fdb = FileDatabase::new(establish_connection(), String::from(test_file_storage_path));
 
         fdb
     }
+
+    lazy_static! {
+        // Most functions that modify the database already want
+        // `Arc<Mutex<fdb>>` so it has to have two layers of mutex
+        static ref FDB: Arc<Mutex<Arc<Mutex<FileDatabase>>>>
+                = Arc::new(Mutex::new(Arc::new(Mutex::new(create_db()))));
+    }
+
+    pub fn get_database() -> Arc<Mutex<Arc<Mutex<FileDatabase>>>>
+    {
+        FDB.clone()
+    }
+
+    pub fn run_test<F: Fn(&mut FileDatabase)>(test: F)
+    {
+        let fdb = FDB.lock().unwrap();
+        let mut fdb = fdb.lock().unwrap();
+        fdb.reset();
+        assert_eq!(fdb.get_file_amount(), 0);
+
+        test(&mut fdb);
+    }
+}
+
+/*
+   Tests
+ */
+#[cfg(test)]
+mod db_tests
+{
+    use file_database::*;
 
     /**
       Since the results of these tests depend on the database state,
@@ -242,21 +289,19 @@ mod db_tests
     #[test]
     fn database_test()
     {
-        add_test();
-        multi_tag_test();
-        modify_tags_test();
+        db_test_helpers::run_test(add_test);
+        db_test_helpers::run_test(multi_tag_test);
+        db_test_helpers::run_test(modify_tags_test);
     }
 
-    fn add_test()
+    fn add_test(fdb: &mut FileDatabase)
     {
-        let mut fdb = get_file_database();
-
-        let id1 = fdb.add_new_file(
+        fdb.add_new_file(
             &"test1".to_string(), 
             &"thumb1".to_string(),
             &vec!("tag1".to_string(), "tag2".to_string()),
             0);
-        let id2 = fdb.add_new_file(
+        fdb.add_new_file(
             &"test2".to_string(),
             &"thumb2".to_string(),
             &vec!("tag1".to_string(), "tag3".to_string()),
@@ -279,43 +324,39 @@ mod db_tests
         assert!(fdb.get_file_paths_with_tags(vec!("unused_tag".to_string())).is_empty());
     }
 
-    fn multi_tag_test()
+    fn multi_tag_test(fdb: &mut FileDatabase)
     {
-        let mut fdb = get_file_database();
-
         fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("common_tag".to_string(), "only1_tag".to_string()), 0);
         fdb.add_new_file(&"test2".to_string(), &"thumb2".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()), 0);
         fdb.add_new_file(&"test3".to_string(), &"thumb3".to_string(), &vec!("common_tag".to_string(), "only2_3_tag".to_string()), 0);
 
-        let common_2_3 = fdb.get_files_with_tags(vec!("common_tag".to_string(), "only2_3_tag".to_string()));
+        let common_2_3 = fdb.get_files_with_tags(&vec!("common_tag".to_string(), "only2_3_tag".to_string()));
         assert!(get_file_paths_from_files(common_2_3.clone()).contains(&"test1".to_string()) == false);
         assert!(get_file_paths_from_files(common_2_3.clone()).contains(&"test2".to_string()));
         assert!(get_file_paths_from_files(common_2_3.clone()).contains(&"test3".to_string()));
 
-        let common_1 = fdb.get_files_with_tags(vec!("common_tag".to_string()));
+        let common_1 = fdb.get_files_with_tags(&vec!("common_tag".to_string()));
         assert!(get_file_paths_from_files(common_1.clone()).contains(&"test1".to_string()));
         assert!(get_file_paths_from_files(common_1.clone()).contains(&"test2".to_string()));
         assert!(get_file_paths_from_files(common_1.clone()).contains(&"test3".to_string()));
 
-        let only_1 = fdb.get_files_with_tags(vec!("only1_tag".to_string()));
+        let only_1 = fdb.get_files_with_tags(&vec!("only1_tag".to_string()));
         assert!(get_file_paths_from_files(only_1.clone()).contains(&"test1".to_string()));
         assert!(get_file_paths_from_files(only_1.clone()).contains(&"test2".to_string()) == false);
         assert!(get_file_paths_from_files(only_1.clone()).contains(&"test3".to_string()) == false);
 
-        let no_tags = fdb.get_files_with_tags(vec!());
+        let no_tags = fdb.get_files_with_tags(&vec!());
         assert!(no_tags.len() == 3);
     }
 
-    fn modify_tags_test()
+    fn modify_tags_test(fdb: &mut FileDatabase)
     {
-        let mut fdb = get_file_database();
+        let file = fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("old_tag".to_string()), 0);
 
-        let id = fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("old_tag".to_string()), 0);
+        fdb.change_file_tags(&file, &vec!("new_tag".to_string())).unwrap();
 
-        fdb.change_file_tags(id, &vec!("new_tag".to_string())).unwrap();
-
-        assert!(fdb.get_files_with_tags(vec!("new_tag".to_string())).len() == 1);
-        assert!(fdb.get_files_with_tags(vec!("old_tag".to_string())).len() == 0);
+        assert!(fdb.get_files_with_tags(&vec!("new_tag".to_string())).len() == 1);
+        assert!(fdb.get_files_with_tags(&vec!("old_tag".to_string())).len() == 0);
     }
 
     /*

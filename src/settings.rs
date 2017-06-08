@@ -19,7 +19,7 @@ impl Settings
 
     pub fn get_file_storage_path(&self) -> String
     {
-        return self.file_storage_path.clone();
+        self.file_storage_path.clone()
     }
     pub fn get_database_save_path(&self) -> String
     {

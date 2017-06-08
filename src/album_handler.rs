@@ -52,46 +52,7 @@ pub fn handle_album_list_request(request: &mut Request) -> IronResult<Response>
     let db = mutex.lock().unwrap();
 
     //let filenames = db_container.get_db().get_file_paths_with_tags(tags);
-    let files = db.get_files_with_tags(tags);
+    let files = db.get_files_with_tags(&tags);
 
-    Ok(Response::with((status::Ok, format!("{}", json::encode(&files).unwrap()))))
-}
-
-
-pub fn handle_album_image_request(request: &mut Request) -> IronResult<Response> 
-{
-    let id_string = match request.get_ref::<UrlEncodedQuery>()
-    {
-        Ok(hash_map) => {
-            match hash_map.get("id")
-            {
-                Some(val) => val.first().unwrap().clone(),
-                None => {
-                    println!("Failed to get file, no such tag");
-                    return Ok(Response::with(iron::status::NotFound));
-                }
-            }
-        },
-        Err(e) =>
-        {
-            println!("Failed to get GET variable: {:?}", e); 
-            return Ok(Response::with(iron::status::NotFound));//This is a lie. TODO: Update response
-        }
-    };
-    
-    let id = match id_string.parse::<i32>()
-    {
-        Ok(val) => val,
-        Err(e) => {
-            println!("Failed to decode image_request. ID: {} is not an integer. {}", id_string, e); 
-            return Ok(Response::with(iron::status::NotFound));//This is a lie. TODO: Update response
-        }
-    };
-
-    let mutex = request.get::<Write<FileDatabase>>().unwrap();
-    let db = mutex.lock().unwrap();
-
-    let file = db.get_file_with_id(id);
-
-    Ok(Response::with((status::Ok, format!("{}", json::encode(&file).unwrap()))))
+    Ok(Response::with((status::Ok, json::encode(&files).unwrap())))
 }

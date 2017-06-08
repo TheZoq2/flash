@@ -3,284 +3,705 @@ use std::path::PathBuf;
 use urlencoded::UrlEncodedQuery;
 use rustc_serialize::json;
 
-use std::thread;
+use serde_json;
+
 use iron::*;
+
 use persistent::{Write};
 use std::option::Option;
-
-use file_database::{FileDatabase};
-
-use file_util::{
-    generate_thumbnail,
-    get_file_extension,
-    get_semi_unique_identifier,
-    get_file_timestamp,
-};
-
-use std::sync::{Mutex};
-
 use std::fs;
+
+use std::sync::Mutex;
+use std::sync::Arc;
+
+use std::thread;
 use std::path::Path;
 
-use std::ops::Deref;
+use std::io;
+use std::sync::mpsc::{channel, Receiver};
 
-use file_list::{FileList};
+use file_database;
+use file_database::{FileDatabase};
+use file_list::{FileList, FileListList, FileListSource, FileLocation};
 use file_util::{sanitize_tag_names};
+use file_util::{
+    generate_thumbnail,
+    get_semi_unique_identifier,
+    get_file_timestamp
+};
 
-use file_list::File;
+use file_request_error::{
+    FileRequestError,
+    err_invalid_variable_type
+};
+
+////////////////////////////////////////////////////////////////////////////////
+//                      Helper types used for passing
+//                      response data between functions
+////////////////////////////////////////////////////////////////////////////////
+#[derive(Serialize)]
+struct FileData
+{
+    file_path: String,
+    thumbnail_path: String,
+    tags: Vec<String>,
+}
+
+impl FileData
+{
+    fn from_database(source: file_database::File) -> FileData
+    {
+        FileData {
+            file_path: source.filename,
+            thumbnail_path: source.thumbnail_path,
+            tags: source.tags
+        }
+    }
+
+    fn from_path(source: PathBuf) -> FileData
+    {
+        FileData {
+            file_path: String::from(source.to_string_lossy()),
+            thumbnail_path: String::from(source.to_string_lossy()),
+            tags: vec!()
+        }
+    }
+}
+
 
 /**
- Handler for requests for new files in the list
+  Serializable list response that contains data about a file list
 */
-pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
+#[derive(Serialize)]
+struct ListResponse
 {
-    let action = match get_get_variable(request, "action".to_string())
-    {
-        Some(val) => val,
-        None => {
-            println!("Action not part of GET for request. Assuming 'current'");
-            "current".to_string()
+    pub id: usize,
+    pub length: Option<usize>
+}
+
+#[derive(Debug)]
+enum FileSavingResult
+{
+    Success,
+    Failure(io::Error)
+}
+
+#[derive(Debug)]
+enum FileSaveRequestResult
+{
+    NewDatabaseEntry(FileLocation, Receiver<FileSavingResult>),
+    UpdatedDatabaseEntry(FileLocation)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//                      Public request handlers
+////////////////////////////////////////////////////////////////////////////////
+
+/**
+  Handles requests for creating a filelist from a directory path
+*/
+pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
+{
+    let path = get_get_variable(request, "path")?;
+
+    let file_list_list = request.get::<Write<FileListList>>().unwrap();
+
+    // Check if path is a valid path
+    let path = PathBuf::from(&path);
+
+    // Lock the file list and insert a new list
+    let file_list_id = {
+        let mut file_list_list = file_list_list.lock().unwrap();
+
+        match file_list_list.get_id_with_source(FileListSource::Folder(path.clone()))
+        {
+            Some(id) => id,
+            None => file_list_list.add(FileList::from_directory(path))
         }
     };
 
-    //Get the current file list
-    let mutex = request.get::<Write<FileList>>().unwrap();
-    match action.as_str()
-    {
-        "current" => {}
-        "next" => mutex.lock().unwrap().select_next_file(),
-        "prev" => mutex.lock().unwrap().select_prev_file(),
-        "save" => handle_save_request(request, &mutex),
-        other => println!("Unknown list action: {}", other),
-    }
-
-    let filename = {
-        let file_list = mutex.lock().unwrap();
-        file_list.get_current_file()
-    };
-
-    let response = {
-        let mutex = request.get::<Write<FileDatabase>>().unwrap();
-        let db = mutex.lock().unwrap();
-        generate_file_list_response(filename, &db.deref())
-    };
-
-    Ok(Response::with((status::Ok, format!("{}", response))))
+    let list_response = reply_to_file_list_request(file_list_list, file_list_id);
+    Ok(Response::with((status::Ok, serde_json::to_string(&list_response).unwrap())))
 }
 
-pub fn handle_save_request(request: &mut Request, file_list_mutex: &Mutex<FileList>)
+/**
+  Handles requests for actions dealing with specific entries in file lists
+*/
+pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 {
-    //Get the original filename from the File list. 
-    let (original_filename, old_id) = {
-        let file_list = file_list_mutex.lock().unwrap();
+    let action = get_get_variable(request, "action")?;
 
-        let filename = match file_list.get_current_file()
-        {
-            Some(file) => file.path.into_os_string().into_string().unwrap(),
-            None => {
-                println!("Failed to save file.Crrent file is None");
-                return;
-            }
-        };
+    let (list_id, file_index) = read_request_list_id_index(request)?;
 
-        (filename, file_list.get_current_file_save_id())
+    let file_location = {
+        let mutex = request.get::<Write<FileListList>>().unwrap();
+        let file_list_list = mutex.lock().unwrap();
+
+        get_file_list_object(&*file_list_list, list_id, file_index)?
     };
 
-    let file_extension = get_file_extension(&original_filename);
+    match action.as_str() {
+        "get_data" => {
+            let file_data = file_data_from_file_location(&file_location);
+            Ok(Response::with(
+                    (status::Ok, serde_json::to_string(&file_data).unwrap())
+                ))
+        },
+        "get_file" => {
+            let path = get_file_location_path(&file_location);
+            Ok(Response::with((status::Ok, path)))
+        },
+        "get_thumbnail" => {
+            let path = get_file_list_thumbnail(&file_location);
+            Ok(Response::with((status::Ok, path)))
+        }
+        "save" => {
+            let db = request.get::<Write<FileDatabase>>().unwrap();
+            let tags = get_tags_from_request(request)?;
+
+            match handle_save_request(db, &file_location, &tags)? {
+                FileSaveRequestResult::NewDatabaseEntry(new_location, _) 
+                | FileSaveRequestResult::UpdatedDatabaseEntry(new_location)
+                => {
+                    update_file_list(
+                                &mut request.get::<Write<FileListList>>().unwrap(),
+                                list_id,
+                                file_index,
+                                &new_location
+                            );
+                    Ok(Response::with((status::Ok, "")))
+                },
+            }
+        }
+        val => {
+            let message = format!("Unrecognised `action`: {}", val);
+            Ok(Response::with((status::NotFound, message)))
+        }
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+///                     Private functions for getting data
+///                     out of iron requests
+////////////////////////////////////////////////////////////////////////////////
+fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), FileRequestError>
+{
+    let list_id = get_get_variable(request, "list_id")?;
+
+    let list_id = match list_id.parse::<usize>() {
+        Ok(val) => val,
+        Err(_) => {
+            return Err(err_invalid_variable_type("list_id", "usize"));
+        }
+    };
+
+    let file_index = get_get_variable(request, "index")?;
+
+    let file_index = match file_index.parse::<usize>() {
+        Ok(val) => val,
+        Err(_) => {
+            return Err(err_invalid_variable_type("index", "usize"));
+        }
+    };
+
+    Ok((list_id, file_index))
+}
+
+fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, FileRequestError>
+{
+    //Get the important information from the request.
+    let tag_string = get_get_variable(request, "tags")?;
+
+    match json::decode::<Vec<String>>(&tag_string){
+        Ok(result) => Ok(sanitize_tag_names(&result).unwrap()),
+        Err(e) => {
+            Err(err_invalid_variable_type("tags", &format!("{:?}", e)))
+        }
+    }
+}
+
+fn get_get_variable(request: &mut Request, name: &str) -> Result<String, FileRequestError>
+{
+    match request.get_ref::<UrlEncodedQuery>()
+    {
+        Ok(hash_map) => {
+            match hash_map.get(name)
+            {
+                Some(val) => Ok(val.first().unwrap().clone()),
+                None => Err(FileRequestError::NoSuchVariable(name.to_owned()))
+            }
+        },
+        _ => Err(FileRequestError::NoUrlEncodedQuery)
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//                      Private functions for generating
+//                      replies to file requests
+////////////////////////////////////////////////////////////////////////////////
+
+fn reply_to_file_list_request(file_list_list: Arc<Mutex<FileListList>>, id: usize)
+        -> ListResponse
+{
+    // Fetch the file list
+    let file_amount = {
+        let file_list_list = file_list_list.lock().unwrap();
+
+        match file_list_list.get(id)
+        {
+            Some(list) => Some(list.len()),
+            None => None
+        }
+    };
+
+    ListResponse{ id, length: file_amount }
+}
+
+/**
+  Updates the specified `file_list` with a new `FileLocation`
+*/
+fn update_file_list(
+        file_list_list: &mut Arc<Mutex<FileListList>>,
+        list_id: usize,
+        file_index: usize,
+        new_location: &FileLocation
+    )
+{
+    let mut file_list_list = file_list_list.lock().unwrap();
+    file_list_list.edit_file_list_entry(list_id, file_index, new_location);
+}
+
+/**
+  Saves the specified tags for the file. If a new `FileLocation` has been created,
+  it is returned. Otherwise None. If saving failed an error is returned
+*/
+fn handle_save_request(db: Arc<Mutex<FileDatabase>>, file_location: &FileLocation, tags: &[String])
+        -> Result<FileSaveRequestResult, FileRequestError>
+{
+    match *file_location {
+        FileLocation::Unsaved(ref path) => {
+            match save_new_file(db, path, tags)
+            {
+                Ok((db_entry, save_result_rx)) => {
+                    Ok(FileSaveRequestResult::NewDatabaseEntry(
+                        FileLocation::Database(db_entry),
+                        save_result_rx
+                    ))
+                },
+                Err(e) => Err(e)
+            }
+        },
+        FileLocation::Database(ref old_file) => {
+            match update_stored_file(db, old_file, tags)
+            {
+                Ok(db_entry) => {
+                    Ok(FileSaveRequestResult::UpdatedDatabaseEntry(
+                        FileLocation::Database(db_entry)
+                    ))
+                },
+                Err(e) => Err(e)
+            }
+        }
+    }
+}
+
+/**
+  Saves a specified file in the `Filedatabase`
+*/
+fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[String])
+        -> Result<(file_database::File, Receiver<FileSavingResult>), FileRequestError>
+{
+    let file_extension = match (*original_path).extension()
+    {
+        Some(val) => val,
+        None => return Err(FileRequestError::NoFileExtension(original_path.clone()))
+    };
 
     //Get the folder where we want to place the stored file
     let destination_dir = {
-        let mutex = request.get::<Write<FileDatabase>>().unwrap();
-        let db = mutex.lock().unwrap();
+        let db = db.lock().unwrap();
 
         db.get_file_save_path()
     };
 
     let file_identifier = get_semi_unique_identifier();
 
-    let tags = get_tags_from_request(request).unwrap();
-
     let thumbnail_path_without_extension = format!("{}/thumb_{}", destination_dir.clone(), &file_identifier);
 
 
     //Generate the thumbnail
-    let thumbnail_info = match generate_thumbnail(&original_filename, &thumbnail_path_without_extension, 300) {
-        Ok(val) => val,
-        Err(e) => {
-            //TODO: The user needs to be alerted when this happens
-            //TODO: Also, test this
-            println!("Failed to generate thumbnail: {}", e); 
-            return;
-        }
-    };
+    let original_path_string = original_path.to_string_lossy();
+    let thumbnail_info = generate_thumbnail(
+                &original_path_string,
+                &thumbnail_path_without_extension,
+                300
+            )?;
 
     //Copy the file to the destination
     //Get the name and path of the new file
-    let new_file_path = destination_dir + "/" + &file_identifier + &file_extension;
+    let new_file_path =
+            destination_dir + "/" + &file_identifier + "." + &file_extension.to_string_lossy();
 
 
     let thumbnail_filename = 
             Path::new(&thumbnail_info.path).file_name().unwrap().to_str().unwrap();
     let new_filename = 
     {
-        let filename = Path::new(&new_file_path).file_name().unwrap();
+        let filename = Path::new(&*new_file_path).file_name().unwrap();
 
         String::from(filename.to_str().unwrap())
     };
 
 
-    let timestamp = get_file_timestamp(&PathBuf::from(original_filename.clone()));
+    let timestamp = get_file_timestamp(&PathBuf::from((*original_path).clone()));
 
-    match old_id
+    //Store the file in the database
+    let saved_id = {
+        let mut db = db.lock().unwrap();
+
+        db.add_new_file(
+                &new_filename.to_string(),
+                &thumbnail_filename.to_string(),
+                tags,
+                timestamp
+            )
+    };
+
+    let save_result_rx = {
+        let original_path = original_path.clone();
+        let new_file_path = new_file_path.clone();
+
+        let (tx, rx) = channel();
+
+        thread::spawn(move || {
+            let save_result = match fs::copy(original_path, new_file_path)
+            {
+                Ok(_) => FileSavingResult::Success,
+                Err(e) => FileSavingResult::Failure(e)
+            };
+
+            // We ignore any failures to send the file save result since
+            // it most likely means that the caller of the save function
+            // does not care about the result
+            match tx.send(save_result) {
+                _ => {}
+            }
+        });
+
+        rx
+    };
+
+    Ok((saved_id, save_result_rx))
+}
+
+
+/**
+  Updates a specified file in the database with new tags
+*/
+fn update_stored_file(db: Arc<Mutex<FileDatabase>>, old_entry: &file_database::File, tags: &[String])
+    -> Result<file_database::File, FileRequestError>
+{
+    let db = db.lock().unwrap();
+    match db.change_file_tags(old_entry, tags)
     {
-        Some(id) =>
-        {
-            //Modify the old image
-            let mutex = request.get::<Write<FileDatabase>>().unwrap();
-            let mut db = mutex.lock().unwrap();
+        Ok(result) => Ok(result),
+        Err(e) => Err(FileRequestError::DatabaseSaveError(e))
+    }
+}
 
-            let file = db.get_file_with_id(id);
 
-            if file.is_some()
-            {
-                db.change_file_tags(file.unwrap(), &tags);
-            }
+/**
+  Returns a `FileData` struct for the specified file location
+*/
+fn file_data_from_file_location(file: &FileLocation)
+        -> FileData
+{
+    // Lock the file list and try to fetch the file
+    match *file {
+        FileLocation::Unsaved(ref path) => FileData::from_path(path.clone()),
+        FileLocation::Database(ref db_entry) => {
+            FileData::from_database(db_entry.clone())
         }
-        None =>
+    }
+}
+
+/**
+  Returns a the path to a `FileLocation`
+*/
+fn get_file_location_path(file: &FileLocation)
+        -> PathBuf
+{
+    match *file {
+        FileLocation::Unsaved(ref path) => path.clone(),
+        FileLocation::Database(ref db_entry) => {
+            PathBuf::from(db_entry.filename.clone())
+        }
+    }
+}
+
+/**
+  Returns the path to the thumbnail of a `FileLocation`
+*/
+fn get_file_list_thumbnail(file: &FileLocation) -> PathBuf
+{
+    match *file {
+        FileLocation::Unsaved(ref path) => path.clone(),
+        FileLocation::Database(ref db_entry) => {
+            PathBuf::from(db_entry.thumbnail_path.clone())
+        }
+    }
+}
+
+/**
+  Returns a `FileLocation` from a `FileListList`, a list id and a file id
+*/
+fn get_file_list_object(file_list_list: &FileListList, list_id: usize, file_index: usize)
+    -> Result<FileLocation, FileRequestError>
+{
+    let file_list = match file_list_list.get(list_id)
+    {
+        Some(list) => list,
+        None => {
+            return Err(FileRequestError::NoSuchList(list_id));
+        }
+    };
+
+    match file_list.get(file_index)
+    {
+        Some(file) => Ok(file.clone()),
+        None => {
+            Err(FileRequestError::NoSuchFile(list_id, file_index))
+        }
+    }
+}
+
+
+
+/*
+  Database tests are not currently run because the database can't be shared
+  between test threads
+*/
+#[cfg(test)]
+mod file_request_tests
+{
+    use super::*;
+
+
+    fn dummy_database_entry(file_path: &str, thumbnail_path: &str)
+            -> file_database::File
+    {
+        file_database::File {
+            id: 0,
+            filename: file_path.to_owned(),
+            thumbnail_path: thumbnail_path.to_owned(),
+            creation_date: None,
+            is_uploaded: true,
+            tags: vec!()
+        }
+    }
+
+    fn make_dummy_file_list_list() -> FileListList
+    {
+        let mut fll = FileListList::new();
+
+        let flist1 = FileList::from_locations(
+                vec!( FileLocation::Unsaved(PathBuf::from("l0f0"))
+                    , FileLocation::Unsaved(PathBuf::from("l0f1"))
+                    , FileLocation::Unsaved(PathBuf::from("l0f2"))
+                    ),
+                FileListSource::Search
+            );
+
+        let flist2 = FileList::from_locations(
+                vec!( FileLocation::Unsaved(PathBuf::from("l1f0"))
+                    , FileLocation::Unsaved(PathBuf::from("l1f1"))
+                    ),
+                FileListSource::Search
+            );
+
+        let flist3 = FileList::from_locations(
+                vec!( FileLocation::Database(dummy_database_entry("test1", "thumb1"))
+                    , FileLocation::Database(dummy_database_entry("test2", "thumb2"))
+                    ),
+                FileListSource::Search
+            );
+
+        fll.add(flist1);
+        fll.add(flist2);
+        fll.add(flist3);
+
+        fll
+    }
+
+    #[test]
+    fn file_list_object_test()
+    {
+        let fll = make_dummy_file_list_list();
+
+        // Getting files from the first list works
+        assert_eq!(get_file_list_object(&fll, 0, 0).unwrap(), FileLocation::Unsaved(PathBuf::from("l0f0")));
+        assert_eq!(get_file_list_object(&fll, 0, 2).unwrap(), FileLocation::Unsaved(PathBuf::from("l0f2")));
+        // Getting files from the second list works
+        assert_eq!(get_file_list_object(&fll, 1, 1).unwrap(), FileLocation::Unsaved(PathBuf::from("l1f1")));
+
+        //Out of bounds 
+        assert!(get_file_list_object(&fll, 0, 3).is_err());
+        assert!(get_file_list_object(&fll, 1, 2).is_err());
+        assert!(get_file_list_object(&fll, 3, 2).is_err());
+    }
+
+    #[test]
+    fn database_related_tests()
+    {
+        let outer_fdb = file_database::db_test_helpers::get_database();
+
+        let fdb = outer_fdb.lock().unwrap();
+
+        fdb.lock().unwrap().reset();
+        saving_a_file_without_extension_fails(fdb.clone());
+
+        fdb.lock().unwrap().reset();
+        file_list_saving_works(fdb.clone());
+
+        fdb.lock().unwrap().reset();
+        file_list_updates_work(fdb.clone());
+
+        fdb.lock().unwrap().reset();
+        file_list_save_requests_work(fdb.clone());
+    }
+
+    fn saving_a_file_without_extension_fails(fdb: Arc<Mutex<FileDatabase>>)
+    {
+        let tags = vec!("test1".to_owned(), "test2".to_owned());
+        assert_matches!(
+                save_new_file(fdb.clone(), &PathBuf::from("test"), &tags),
+                Err(FileRequestError::NoFileExtension(_))
+            );
+    }
+
+    fn file_list_saving_works(fdb: Arc<Mutex<FileDatabase>>)
+    {
+        let tags = vec!("test1".to_owned(), "test2".to_owned());
+
+        let src_path = PathBuf::from("test/media/DSC_0001.JPG");
+        let (result, save_result_rx) =
+                save_new_file(fdb.clone(), &src_path, &tags).unwrap();
+
+
+        let save_result = save_result_rx.recv().unwrap();
+        assert_matches!(save_result, FileSavingResult::Success);
+
+        let full_path = {
+            let fdb = fdb.lock().unwrap();
+            PathBuf::from(fdb.get_file_save_path())
+                .join(PathBuf::from(&result.filename))
+        };
+
+        // Make sure that the saved file exists
+        assert!(full_path.exists());
+
+        //Make sure that the file was actually added to the database
+        match fdb.lock()
         {
-            let saved_id;
-            //Store the file in the database
-            {
-                let mutex = request.get::<Write<FileDatabase>>().unwrap();
-                let mut db_container = mutex.lock().unwrap();
-
-                saved_id = db_container.add_new_file(
-                        &new_filename.to_string(),
-                        &thumbnail_filename.to_string(),
-                        &tags,
-                        timestamp
-                    ).id;
-            }
-
-            //Remember that the current image has been saved
-            {
-                let mut file_list = file_list_mutex.lock().unwrap();
-                file_list.mark_current_file_as_saved(saved_id);
+            Ok(fdb) => {
+                assert!(
+                    fdb.get_files_with_tags(&tags)
+                        .iter()
+                        .fold(false, |acc, file| { acc || file.id == result.id })
+                    )
+            },
+            Err(e) => {
+                panic!("{:?}", e)
             }
         }
     }
 
-    thread::spawn(move ||{
-        match fs::copy(original_filename, new_file_path)
-        {
-            Ok(_) => {},
-            Err(e) => {
-                println!("Failed to copy file to destination: {}", e);
-                //TODO: Probably remove the thumbnail here
-                return
+    fn file_list_save_requests_work(fdb: Arc<Mutex<FileDatabase>>)
+    {
+        let old_path = PathBuf::from("test/media/DSC_0001.JPG");
+
+        let tags = vec!("new1".to_owned());
+
+        let saved_entry = {
+            let result = handle_save_request(fdb.clone(), &FileLocation::Unsaved(old_path), &tags);
+
+            assert_matches!(result, Ok(_));
+            let result = result.unwrap();
+
+            assert_matches!(result, FileSaveRequestResult::NewDatabaseEntry(FileLocation::Database(_), _));
+            match result {
+                FileSaveRequestResult::NewDatabaseEntry(file_entry, receiver) => {
+                    assert_matches!(receiver.recv().unwrap(), FileSavingResult::Success);
+
+                    match file_entry {
+                        FileLocation::Database(result) => {
+                            assert!(result.tags.contains(&String::from("new1")));
+                            assert!(!result.tags.contains(&String::from("old")));
+                            result
+                        }
+                        _ => {panic!("Unreachable branch")}
+                    }
+                },
+                _ => {panic!("Unreachable branch")}
             }
         };
-    });
-}
 
-
-
-fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, String>
-{
-    //Get the important information from the request.
-    let tag_string = match request.get_ref::<UrlEncodedQuery>()
-    {
-        Ok(hash_map) => {
-            match hash_map.get("tags")
-            {
-                Some(val) => val.first().unwrap().clone(), //The request contains a vec each occurence of the variable
-                None => {
-                    return Err(String::from("Failed to decode tag list. 'tags' variable not
-                                        in GET ilist"));
-                }
-            }
-        },
-        Err(e) => {
-            return Err(String::from(format!("Failed to get GET variable: {:?}", e)));
-        }
-    };
-
-    match json::decode::<Vec<String>>(&tag_string){
-        Ok(result) => Ok(sanitize_tag_names(&result).unwrap()),
-        Err(e) => {
-            println!("Failed to decode tag list. Error: {}", e);
-            return Err(format!("{}", e));
-        }
-    }
-}
-
-fn get_get_variable(request: &mut Request, name: String) -> Option<String>
-{
-    //return Some("".to_string());
-    match request.get_ref::<UrlEncodedQuery>()
-    {
-        Ok(hash_map) => {
-            match hash_map.get(&name)
-            {
-                Some(val) => Some(val.first().unwrap().clone()),
-                None => None
-            }
-        },
-        _ => None
-    }
-}
-/**
-    Generates a json string as a reply to a request for a file
- */
-fn generate_file_list_response(file: Option<File>, db: &FileDatabase) -> String
-{
-    /**
-      Helper class for generating json data about the current files
-     */
-    #[derive(RustcDecodable, RustcEncodable)]
-    struct Response
-    {
-        status: String,
-        file_path: String,
-        file_type: String,
-
-        tags: Vec<String>,
-        old_id: Option<i32>
+        //Make sure that the file was actually added to the database
+        assert!(
+                fdb.lock().unwrap().get_files_with_tags(&tags)
+                    .iter()
+                    .fold(false, |acc, file| { acc || file.id == saved_entry.id })
+            );
     }
 
-    let mut response = Response{
-        status: "".to_string(),
-        file_path: "".to_string(),
-        file_type: "image".to_string(),
-
-        tags: vec!(),
-        old_id: None
-    };
-
-    match file
+    fn file_list_updates_work(fdb: Arc<Mutex<FileDatabase>>)
     {
-        Some(file_obj) => {
-            let path = file_obj.path;
-            let filename = path.file_name().unwrap().to_str().unwrap();
-            
-            response.status = "ok".to_string();
-            response.file_path = "file/".to_string() + &filename;
-            response.file_type = "image".to_string();
+        let old_tags = vec!(String::from("old"));
+        let old_location = {
+            let mut fdb = fdb.lock().unwrap();
+            fdb.add_new_file("test", "thumb", &old_tags, 0)
+        };
 
-            match file_obj.saved_id
-            {
-                Some(id) => {
-                    //Fetch the data about the image in the database
-                    response.tags = db.get_file_with_id(id).unwrap().tags.clone();
-                    response.old_id = Some(id);
+        let tags = vec!("new1".to_owned());
+
+        let saved_entry = {
+            let result = handle_save_request(fdb.clone(), &FileLocation::Database(old_location), &tags);
+
+            assert_matches!(result, Ok(_));
+            let result = result.unwrap();
+
+            assert_matches!(result, FileSaveRequestResult::UpdatedDatabaseEntry(FileLocation::Database(_)));
+            match result {
+                FileSaveRequestResult::UpdatedDatabaseEntry(result) => {
+                    match result {
+                        FileLocation::Database(result) => {
+                            assert!(result.tags.contains(&String::from("new1")));
+                            assert!(!result.tags.contains(&String::from("old")));
+                            result
+                        }
+                        _ => {panic!("Unreachable branch")}
+                    }
                 },
-                None => {}
+                _ => {panic!("Unreachable branch")}
             }
-        },
-        None => response.status = "no_file".to_string(),
+        };
+
+        // Make sure that the file was actually added to the database
+        assert!(
+                fdb.lock().unwrap().get_files_with_tags(&tags)
+                    .iter()
+                    .fold(false, |acc, file| { acc || file.id == saved_entry.id })
+            );
+
+        // Make sure the old entry was removed
+        assert!(
+                fdb.lock().unwrap().get_files_with_tags(&old_tags)
+                    .iter()
+                    .fold(false, |acc, file| { acc || file.id == saved_entry.id })
+                ==
+                false
+            );
     }
-
-    let result = json::encode(&response).unwrap();
-
-    result
 }

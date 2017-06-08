@@ -3,99 +3,232 @@ use std::path::PathBuf;
 use iron::typemap::Key;
 use std::option::Option;
 
+use file_util::{get_files_in_dir};
 
-#[derive(Clone)]
-pub struct File
+use file_database;
+
+/**
+  The location of a file stored in a file list.
+*/
+#[derive(Clone, PartialEq, Debug)]
+pub enum FileLocation
 {
-    pub path: PathBuf,
-    pub saved_id: Option<i32>
+    ///Not yet stored in the database.
+    Unsaved(PathBuf),
+    ///Stored in the database with the specified ID
+    Database(file_database::File)
 }
 
+/**
+  Original source of creation of a `FileList`.
+*/
+#[derive(Clone, PartialEq, Eq, Serialize)]
+pub enum FileListSource
+{
+    ///Result of a search query
+    Search,
+    ///Created from folder content
+    Folder(PathBuf)
+}
+
+/**
+  A list of files that are either from a file query or files stored in 
+  a directry. Files can go from directory storage to database
+*/
 #[derive(Clone)]
 pub struct FileList
 {
-    files: Vec<File>,
-    current_index: usize,
+    files: Vec<FileLocation>,
+    source: FileListSource
 }
 
 impl FileList
 {
-    pub fn new(file_paths: Vec<PathBuf>) -> FileList 
+    #[cfg(test)]
+    pub fn from_locations(files: Vec<FileLocation>, source: FileListSource) -> FileList
     {
-        let mut files = vec!();
-        for path in file_paths
-        {
-            files.push(File{path:path, saved_id: None})
+        FileList {
+            files,
+            source
         }
-        
+    }
+
+    pub fn from_directory(path: PathBuf) -> FileList
+    {
+        let file_paths = get_files_in_dir(&path);
+
+        let files = file_paths
+                .into_iter()
+                .map(|path|{ FileLocation::Unsaved(path) })
+                .collect();
+
         FileList {
             files: files,
-            current_index: 0,
+            source: FileListSource::Folder(path)
         }
     }
 
-    pub fn get_current_file(&self) -> Option<File>
+    pub fn get(&self, index: usize) -> Option<&FileLocation>
     {
-        if self.current_index < self.files.len()
-        {
-            return Some(self.files[self.current_index].clone());
-        }
-
-        None
-    }
-    pub fn get_current_file_save_id(&self) -> Option<i32>
-    {
-        match self.get_current_file()
-        {
-            Some(val) => val.saved_id,
-            None => None
-        }
+        self.files.get(index)
     }
 
-    /**
-      Returns the file after the current file without incrementing the current index. This can
-      be used to preload the images in order to prevent the small lag when loading new images.
-     */
-    pub fn peak_next_file(&self) -> Option<File> 
+    pub fn set(&mut self, index: usize, new_location: FileLocation) -> Result<(), ()>
     {
-        if self.current_index + 1 < self.files.len()
+        if index < self.files.len()
         {
-            return Some(self.files[self.current_index + 1].clone());
+            self.files[index] = new_location;
+            Ok(())
         }
-        None
-    }
-    /**
-      Increments current index by one while making sure it doesn't go too far out of bounds
-     */
-    pub fn select_next_file(&mut self)
-    {
-        self.current_index += 1;
-
-        if self.current_index > self.files.len()
+        else
         {
-            self.current_index = self.files.len();
-        }
-    }
-    /**
-      Decrements current index by one while making sure it doesn't go too far out of bounds
-     */
-    pub fn select_prev_file(&mut self)
-    {
-        if self.current_index > 1
-        {
-            self.current_index -= 1;
+            Err(())
         }
     }
 
-    pub fn mark_current_file_as_saved(&mut self, db_id: i32)
+    pub fn edit_entry(&self, index: usize, new_location: &FileLocation) -> FileList
     {
-        if self.current_index < self.files.len()
-        {
-            self.files[self.current_index].saved_id = Some(db_id);
+        let new_list = self.files
+            .iter()
+            .enumerate()
+            .map(|(i, location): (usize, &FileLocation)| {
+                    if i == index {
+                        new_location.clone()
+                    }
+                    else {
+                        location.clone()
+                    }
+                })
+            .collect();
+
+        FileList {
+            files: new_list,
+            .. self.clone()
         }
+    }
+
+    pub fn len(&self) -> usize
+    {
+        self.files.len()
     }
 }
 
-impl Key for FileList { type Value = FileList; }
+
+
+
+/**
+  A list of file lists
+*/
+pub struct FileListList
+{
+    lists: Vec<FileList>
+}
+
+impl FileListList
+{
+    pub fn new() -> FileListList
+    {
+        FileListList {
+            lists: vec!()
+        }
+    }
+
+    pub fn get(&self, index: usize) -> Option<&FileList>
+    {
+        self.lists.get(index)
+    }
+
+    pub fn add(&mut self, list: FileList) -> usize
+    {
+        self.lists.push(list);
+        self.lists.len() - 1
+    }
+
+    pub fn get_id_with_source(&self, source: FileListSource) -> Option<usize>
+    {
+        //self.lists.iter().fold(None, |acc, elem| { acc || elem.source == source })
+        for i in 0..self.lists.len()
+        {
+            if self.lists[i].source == source
+            {
+                return Some(i)
+            }
+        }
+        None
+    }
+
+    /**
+      Set the `FileLocation` in file `file_index` in list `list_id` to
+      `file_entry`
+
+      Does nothing if `file_index` or `list_id` are out of bounds
+    */
+    pub fn edit_file_list_entry(
+            &mut self,
+            list_id: usize,
+            file_index: usize,
+            file_entry: &FileLocation
+        )
+    {
+        self.lists = self.lists
+            .iter()
+            .enumerate()
+            .map(|enumerable| {
+                    let (i, list) = enumerable;
+                    if i == list_id {
+                        list.edit_entry(file_index, file_entry)
+                    }
+                    else {
+                        list.clone()
+                    }
+                })
+            .collect()
+    }
+}
+
+impl Key for FileListList { type Value = FileListList; }
+
+
+
+
+#[cfg(test)]
+mod file_list_tests
+{
+    use super::*;
+
+    #[test]
+    fn file_entry_update_test()
+    {
+        let mut fll = FileListList::new();
+
+        let list1 = FileList::from_locations(
+                vec!( FileLocation::Unsaved(PathBuf::from("test1"))
+                    , FileLocation::Unsaved(PathBuf::from("test2"))
+                    , FileLocation::Unsaved(PathBuf::from("test3"))
+                    ),
+                FileListSource::Search
+            );
+        let list2 = FileList::from_locations(
+                vec!( FileLocation::Unsaved(PathBuf::from("test1"))
+                    , FileLocation::Unsaved(PathBuf::from("test2"))
+                    , FileLocation::Unsaved(PathBuf::from("test3"))
+                    ),
+                FileListSource::Search
+            );
+
+        fll.add(list1);
+        fll.add(list2);
+
+        fll.edit_file_list_entry(0,0, &FileLocation::Unsaved(PathBuf::from("changed")));
+
+        assert_eq!(fll.get(0).unwrap().get(0).unwrap(), &FileLocation::Unsaved(PathBuf::from("changed")));
+        assert_eq!(fll.get(0).unwrap().get(1).unwrap(), &FileLocation::Unsaved(PathBuf::from("test2")));
+        assert_eq!(fll.get(0).unwrap().get(2).unwrap(), &FileLocation::Unsaved(PathBuf::from("test3")));
+
+        assert_eq!(fll.get(1).unwrap().get(0).unwrap(), &FileLocation::Unsaved(PathBuf::from("test1")));
+        assert_eq!(fll.get(1).unwrap().get(1).unwrap(), &FileLocation::Unsaved(PathBuf::from("test2")));
+        assert_eq!(fll.get(1).unwrap().get(2).unwrap(), &FileLocation::Unsaved(PathBuf::from("test3")));
+    }
+}
 
 

@@ -12,6 +12,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use std::thread;
 
+use glob::glob;
+
 
 /**
   Enum for different types of media
@@ -51,16 +53,17 @@ pub struct ThumbnailInfo
 
   If the thumbnail generation fails for any reason it will return an error
 
-  The result_max_size variable is the biggest allowed size on either axis.
-  An image in portrait mode will be at most max_size tall and an image in 
-  landscape mode will be at most max_width tall
+  The `max_size` variable is the biggest allowed size on either axis.
+  An image in portrait mode will be at most `max_size` tall and an image in 
+  landscape mode will be at most `max_width` tall
  */
 
+//TODO: Rewrite to use std::path instead of &str
 pub fn generate_thumbnail(source_path: &str, destination_path_without_extension: &str, max_size: u32)
         -> Result<ThumbnailInfo, image::ImageError>
 {
     //Generating the filenames
-    let file_extension = get_file_extension(&source_path);
+    let file_extension = get_file_extension(source_path);
     let full_path = String::from(destination_path_without_extension) + &file_extension;
 
     let full_path_clone = full_path.clone();
@@ -74,9 +77,9 @@ pub fn generate_thumbnail(source_path: &str, destination_path_without_extension:
             Err(_) => return
         };
 
-        let thumb_data = generate_thumbnail_from_generic_image(img, max_size);
+        let thumb_data = generate_thumbnail_from_generic_image(&img, max_size);
 
-        let ref mut fout = File::create(&Path::new(&full_path_clone)).unwrap();
+        let fout = &mut File::create(&Path::new(&full_path_clone)).unwrap();
         thumb_data.save(fout, image::PNG).unwrap();
     });
 
@@ -98,9 +101,9 @@ pub fn get_file_extension(path: &str) -> String
 }
 
 /**
-  Takes an image::GenericImage and generates a thumbnail image from that
+  Takes a `image::GenericImage` and generates a thumbnail image from that
  */
-fn generate_thumbnail_from_generic_image(src: image::DynamicImage, max_size: u32) -> image::DynamicImage
+fn generate_thumbnail_from_generic_image(src: &image::DynamicImage, max_size: u32) -> image::DynamicImage
 {
     //Calculating the dimensions of the new image
     let src_dimensions = src.dimensions();
@@ -143,8 +146,9 @@ pub fn system_time_as_unix_timestamp(time: SystemTime) -> u64
     For now, this is the timestamp of the file
     in the file system because there is no good library for reading EXIF data.
     
-    If the file doesn't exist, an error is printed and SystemTime::now() is returned
+    If the file doesn't exist, an error is printed and `SystemTime::now()` is returned
 */
+//TODO: Rewrite to return an option
 pub fn get_file_timestamp(filename: &PathBuf) -> u64
 {
     let metadata = match fs::metadata(&filename)
@@ -158,7 +162,7 @@ pub fn get_file_timestamp(filename: &PathBuf) -> u64
 
     let timestamp = metadata.modified().unwrap();
 
-    return system_time_as_unix_timestamp(timestamp)
+    system_time_as_unix_timestamp(timestamp)
 }
 
 
@@ -166,7 +170,7 @@ pub fn get_file_timestamp(filename: &PathBuf) -> u64
   Checks a list of tags for unallowed characters and converts it into a storeable format,
   which at the moment is just removal of capital letters
  */
-pub fn sanitize_tag_names(tag_list: &Vec<String>) -> Result<Vec<String>, String>
+pub fn sanitize_tag_names(tag_list: &[String]) -> Result<Vec<String>, String>
 {
     let mut new_list = vec!();
 
@@ -184,6 +188,28 @@ pub fn sanitize_tag_names(tag_list: &Vec<String>) -> Result<Vec<String>, String>
 }
 
 
+/**
+  Returns a list of all the files in a directory
+*/
+pub fn get_files_in_dir(dir: &PathBuf) -> Vec<PathBuf> 
+{
+    let mut result = Vec::<PathBuf>::new();
+
+    let full_path = String::from(dir.to_string_lossy()).clone() + "/*";
+
+    for entry in glob(&full_path).expect("Failed to read glob")
+    {
+        match entry
+        {
+            Ok(path) => result.push(path),
+            Err(e) => println!("{}", e)
+        }
+    }
+
+    result
+}
+
+
 #[cfg(test)]
 mod thumbnail_tests
 {
@@ -195,7 +221,7 @@ mod thumbnail_tests
     {
         let img = image::DynamicImage::new_rgba8(500, 500);
 
-        let thumbnail = super::generate_thumbnail_from_generic_image(img, 300);
+        let thumbnail = super::generate_thumbnail_from_generic_image(&img, 300);
 
         assert!(thumbnail.dimensions() == (300, 300));
     }
@@ -204,7 +230,7 @@ mod thumbnail_tests
     {
         let img = image::DynamicImage::new_rgba8(500, 250);
 
-        let thumbnail = super::generate_thumbnail_from_generic_image(img, 300);
+        let thumbnail = super::generate_thumbnail_from_generic_image(&img, 300);
 
         assert!(thumbnail.dimensions() == (300, 150));
     }
@@ -214,7 +240,7 @@ mod thumbnail_tests
     {
         let img = image::DynamicImage::new_rgba8(250, 500);
 
-        let thumbnail = super::generate_thumbnail_from_generic_image(img, 300);
+        let thumbnail = super::generate_thumbnail_from_generic_image(&img, 300);
 
         assert!(thumbnail.dimensions() == (150, 300));
     }

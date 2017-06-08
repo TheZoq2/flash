@@ -1,0 +1,26 @@
+language: rust
+rust:
+  - stable
+  - nightly
+matrix:
+  allow_failures:
+    - rust
+      - stable
+
+cache: cargo
+
+services:
+    - postgresql
+
+before_script:
+    - cargo install diesel_cli --force
+    - psql -c 'create database flash_development;' -U postgres
+    - psql -c 'create database flash_test;' -U postgres
+    - diesel database setup
+    - DATABASE_URL=$DATABASE_TEST_URL diesel database setup
+
+# Ignore submodules since the backend does not care about frontend
+git:
+    submodules: false
+
+
