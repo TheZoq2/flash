@@ -116,7 +116,7 @@ impl FileDatabase
       Changes the tags of a specified file. Returns the new file object
     */
     #[must_use]
-    pub fn change_file_tags(&self, file: File, tags: &[String]) -> Result<File, String>
+    pub fn change_file_tags(&self, file: &File, tags: &[String]) -> Result<File, String>
     {
         let result = 
             diesel::update(files::table.find(file.id))
@@ -347,9 +347,9 @@ mod db_tests
 
     fn modify_tags_test(fdb: &mut FileDatabase)
     {
-        let id = fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("old_tag".to_string()), 0);
+        let file = fdb.add_new_file(&"test1".to_string(), &"thumb1".to_string(), &vec!("old_tag".to_string()), 0);
 
-        fdb.change_file_tags(id, &vec!("new_tag".to_string())).unwrap();
+        fdb.change_file_tags(&file, &vec!("new_tag".to_string())).unwrap();
 
         assert!(fdb.get_files_with_tags(&vec!("new_tag".to_string())).len() == 1);
         assert!(fdb.get_files_with_tags(&vec!("old_tag".to_string())).len() == 0);

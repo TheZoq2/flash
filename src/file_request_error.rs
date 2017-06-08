@@ -26,7 +26,9 @@ pub enum FileRequestError
     ThumbnailGenerationError(image::ImageError),
     /// Error thrown when a function expected a path with an extension but
     /// got a file without one
-    NoFileExtension(PathBuf)
+    NoFileExtension(PathBuf),
+    /// Database save error
+    DatabaseSaveError(String)
 }
 
 impl fmt::Display for FileRequestError
@@ -64,7 +66,9 @@ impl Error for FileRequestError
             &FileRequestError::ThumbnailGenerationError(_) =>
                 "Failed to generate thumbnail",
             &FileRequestError::NoFileExtension(_) =>
-                "The specified path does not have an extension"
+                "The specified path does not have an extension",
+            &FileRequestError::DatabaseSaveError(_) =>
+                "There was an error saving to the database"
         }
     }
 }

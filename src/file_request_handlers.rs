@@ -86,6 +86,13 @@ enum FileSavingResult
     Failure(io::Error)
 }
 
+#[derive(Debug)]
+enum FileSaveRequestResult
+{
+    NewDatabaseEntry(FileLocation, Receiver<FileSavingResult>),
+    UpdatedDatabaseEntry(FileLocation)
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //                      Public request handlers
 ////////////////////////////////////////////////////////////////////////////////
@@ -149,12 +156,11 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
             Ok(Response::with((status::Ok, path)))
         }
         "save" => {
-            //TODO Maybe break this out into its own function
             let db = request.get::<Write<FileDatabase>>().unwrap();
             let tags = get_tags_from_request(request)?;
 
             match handle_save_request(db, &file_location, &tags)? {
-                Some(new_location) => {
+                FileSaveRequestResult::NewDatabaseEntry(new_location, _) => {
                     update_file_list(
                                 &mut request.get::<Write<FileListList>>().unwrap(),
                                 list_id,
@@ -163,7 +169,15 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
                             );
                     Ok(Response::with((status::Ok, "")))
                 },
-                None => Ok(Response::with((status::Ok, "")))
+                FileSaveRequestResult::UpdatedDatabaseEntry(new_location) => {
+                    update_file_list(
+                                &mut request.get::<Write<FileListList>>().unwrap(),
+                                list_id,
+                                file_index,
+                                new_location
+                            );
+                    Ok(Response::with((status::Ok, "")))
+                }
             }
         }
         val => {
@@ -272,20 +286,35 @@ fn update_file_list(
   Saves the specified tags for the file. If a new `FileLocation` has been created,
   it is returned. Otherwise None. If saving failed an error is returned
 */
-// TODO: Write tests for this
+// TODO: Write tests for new db entries
 fn handle_save_request(db: Arc<Mutex<FileDatabase>>, file_location: &FileLocation, tags: &[String])
-        -> Result<Option<FileLocation>, FileRequestError>
+        -> Result<FileSaveRequestResult, FileRequestError>
 {
     match *file_location {
         FileLocation::Unsaved(ref path) => {
             match save_new_file(db, path, tags)
             {
                 // TODO: Handle issues sent back through the channel
-                Ok((db_entry, _)) => Ok(Some(FileLocation::Database(db_entry))),
+                Ok((db_entry, save_result_rx)) => {
+                    Ok(FileSaveRequestResult::NewDatabaseEntry(
+                        FileLocation::Database(db_entry),
+                        save_result_rx
+                    ))
+                },
                 Err(e) => Err(e)
             }
         },
-        FileLocation::Database(_) => Ok(None) //TODO: Actually update things
+        FileLocation::Database(ref old_file) => {
+            match update_stored_file(db, old_file, tags)
+            {
+                Ok(db_entry) => {
+                    Ok(FileSaveRequestResult::UpdatedDatabaseEntry(
+                        FileLocation::Database(db_entry)
+                    ))
+                },
+                Err(e) => Err(e)
+            }
+        }
     }
 }
 
@@ -379,6 +408,21 @@ fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[
 }
 
 
+/**
+  Updates a specified file in the database with new tags
+*/
+fn update_stored_file(db: Arc<Mutex<FileDatabase>>, old_entry: &file_database::File, tags: &[String])
+    -> Result<file_database::File, FileRequestError>
+{
+    let db = db.lock().unwrap();
+    match db.change_file_tags(old_entry, tags)
+    {
+        Ok(result) => Ok(result),
+        Err(e) => Err(FileRequestError::DatabaseSaveError(e))
+    }
+}
+
+
 fn file_data_from_file_location(file: &FileLocation)
         -> FileData
 {
@@ -441,8 +485,6 @@ fn get_file_list_object(file_list_list: &FileListList, list_id: usize, file_inde
 /*
   Database tests are not currently run because the database can't be shared
   between test threads
-
-  TODO: Create a database test module which tests the db
 */
 #[cfg(test)]
 mod file_request_tests
@@ -520,6 +562,7 @@ mod file_request_tests
 
         saving_a_file_without_extension_fails(fdb.clone());
         file_list_saving_works(fdb.clone());
+        file_list_updates_work(fdb.clone());
     }
 
     // pub fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[String])
@@ -533,6 +576,7 @@ mod file_request_tests
             );
     }
 
+    //TODO: Make sure the correct tags are added to the database
     fn file_list_saving_works(fdb: Arc<Mutex<FileDatabase>>)
     {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
@@ -552,6 +596,53 @@ mod file_request_tests
 
         // Make sure that the saved file exists
         assert!(full_path.exists());
+
+        //Make sure that the file was actually added to the database
+        assert!(
+                fdb.lock().unwrap().get_files_with_tags(&tags)
+                    .iter()
+                    .fold(false, |acc, file| { acc || file.id == result.id })
+            )
     }
-    //TODO: Make sure the correct tags are added to the database
+
+    // TODO: Make sure a db search can find the new entry, and that the old one can no longer be
+    // found
+    fn file_list_updates_work(fdb: Arc<Mutex<FileDatabase>>)
+    {
+        let old_location = {
+            let mut fdb = fdb.lock().unwrap();
+            fdb.add_new_file("test", "thumb", &vec!(String::from("old")), 0)
+        };
+
+        let tags = vec!("new1".to_owned());
+
+        let saved_entry = {
+            let result = handle_save_request(fdb.clone(), &FileLocation::Database(old_location), &tags);
+
+            assert_matches!(result, Ok(_));
+            let result = result.unwrap();
+
+            assert_matches!(result, FileSaveRequestResult::UpdatedDatabaseEntry(FileLocation::Database(_)));
+            match result {
+                FileSaveRequestResult::UpdatedDatabaseEntry(result) => {
+                    match result {
+                        FileLocation::Database(result) => {
+                            assert!(result.tags.contains(&String::from("new1")));
+                            assert!(!result.tags.contains(&String::from("old")));
+                            result
+                        }
+                        _ => {panic!("Unreachable branch")}
+                    }
+                },
+                _ => {panic!("Unreachable branch")}
+            }
+        };
+
+        //Make sure that the file was actually added to the database
+        assert!(
+                fdb.lock().unwrap().get_files_with_tags(&tags)
+                    .iter()
+                    .fold(false, |acc, file| { acc || file.id == saved_entry.id })
+            );
+    }
 }
