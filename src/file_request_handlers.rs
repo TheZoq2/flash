@@ -17,6 +17,9 @@ use std::sync::Arc;
 use std::thread;
 use std::path::Path;
 
+use std::io;
+use std::sync::mpsc::{channel, Receiver};
+
 use file_database;
 use file_database::{FileDatabase};
 use file_list::{FileList, FileListList, FileListSource, FileLocation};
@@ -75,23 +78,12 @@ struct ListResponse
     pub id: usize,
     pub length: Option<usize>
 }
-fn reply_to_file_list_request(file_list_list: Arc<Mutex<FileListList>>, id: usize)
-        -> ListResponse
+
+#[derive(Debug)]
+enum FileSavingResult
 {
-    // Fetch the file list
-    let file_amount = {
-        let file_list_list = file_list_list.lock().unwrap();
-
-        match file_list_list.get(id)
-        {
-            Some(list) => Some(list.len()),
-            None => None
-        }
-    };
-
-    let result = ListResponse{ id, length: file_amount };
-
-    result
+    Success,
+    Failure(io::Error)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -243,6 +235,25 @@ fn get_get_variable(request: &mut Request, name: &str) -> Result<String, FileReq
 //                      replies to file requests
 ////////////////////////////////////////////////////////////////////////////////
 
+fn reply_to_file_list_request(file_list_list: Arc<Mutex<FileListList>>, id: usize)
+        -> ListResponse
+{
+    // Fetch the file list
+    let file_amount = {
+        let file_list_list = file_list_list.lock().unwrap();
+
+        match file_list_list.get(id)
+        {
+            Some(list) => Some(list.len()),
+            None => None
+        }
+    };
+
+    let result = ListResponse{ id, length: file_amount };
+
+    result
+}
+
 /**
   Updates the specified file_list with a new FileLocation
 */
@@ -261,6 +272,7 @@ fn update_file_list(
   Saves the specified tags for the file. If a new `FileLocation` has been created,
   it is returned. Otherwise None. If saving failed an error is returned
 */
+// TODO: Write tests for this
 fn handle_save_request(db: Arc<Mutex<FileDatabase>>, file_location: &FileLocation, tags: &[String])
         -> Result<Option<FileLocation>, FileRequestError>
 {
@@ -268,7 +280,8 @@ fn handle_save_request(db: Arc<Mutex<FileDatabase>>, file_location: &FileLocatio
         FileLocation::Unsaved(ref path) => {
             match save_new_file(db, path, tags)
             {
-                Ok(db_entry) => Ok(Some(FileLocation::Database(db_entry))),
+                // TODO: Handle issues sent back through the channel
+                Ok((db_entry, _)) => Ok(Some(FileLocation::Database(db_entry))),
                 Err(e) => Err(e)
             }
         },
@@ -279,8 +292,8 @@ fn handle_save_request(db: Arc<Mutex<FileDatabase>>, file_location: &FileLocatio
 /**
   Saves a specified file in the `Filedatabase`
 */
-pub fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[String])
-        -> Result<file_database::File, FileRequestError>
+fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[String])
+        -> Result<(file_database::File, Receiver<FileSavingResult>), FileRequestError>
 {
     let file_extension = match (*original_path).extension()
     {
@@ -311,7 +324,7 @@ pub fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags
     //Copy the file to the destination
     //Get the name and path of the new file
     let new_file_path =
-            destination_dir + "/" + &file_identifier + &file_extension.to_string_lossy();
+            destination_dir + "/" + &file_identifier + "." + &file_extension.to_string_lossy();
 
 
     let thumbnail_filename = 
@@ -338,23 +351,31 @@ pub fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags
             )
     };
 
-    {
+    let save_result_rx = {
         let original_path = original_path.clone();
         let new_file_path = new_file_path.clone();
-        thread::spawn(move ||{
-            match fs::copy(original_path, new_file_path)
-            {
-                Ok(_) => {},
-                Err(e) => {
-                    println!("Failed to copy file to destination: {}", e);
-                    //TODO: Probably remove the thumbnail here
-                    return
-                }
-            };
-        });
-    }
 
-    Ok(saved_id)
+        let (tx, rx) = channel();
+
+        thread::spawn(move || {
+            let save_result = match fs::copy(original_path, new_file_path)
+            {
+                Ok(_) => FileSavingResult::Success,
+                Err(e) => FileSavingResult::Failure(e)
+            };
+
+            // We ignore any failures to send the file save result since
+            // it most likely means that the caller of the save function
+            // does not care about the result
+            match tx.send(save_result) {
+                _ => {}
+            }
+        });
+
+        rx
+    };
+
+    Ok((saved_id, save_result_rx))
 }
 
 
@@ -470,6 +491,7 @@ mod file_request_tests
 
         fll.add(flist1);
         fll.add(flist2);
+        fll.add(flist3);
 
         fll
     }
@@ -496,31 +518,40 @@ mod file_request_tests
     {
         let fdb = file_database::db_test_helpers::get_database();
 
-        file_list_saving_tests(fdb);
+        saving_a_file_without_extension_fails(fdb.clone());
+        file_list_saving_works(fdb.clone());
     }
 
     // pub fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[String])
             // -> Result<file_database::File, FileRequestError>
-    fn file_list_saving_tests(fdb: Arc<Mutex<FileDatabase>>)
+    fn saving_a_file_without_extension_fails(fdb: Arc<Mutex<FileDatabase>>)
     {
-        assert_matches!(save_new_file
-                (
-                    fdb.clone(),
-                    &PathBuf::from("test"), 
-                    &vec!("test1".to_owned(), "test2".to_owned())
-                ),
+        let tags = vec!("test1".to_owned(), "test2".to_owned());
+        assert_matches!(
+                save_new_file(fdb.clone(), &PathBuf::from("test"), &tags),
                 Err(FileRequestError::NoFileExtension(_))
             );
-
-        assert_matches!(save_new_file
-                (
-                    fdb.clone(), 
-                    &PathBuf::from("test/media/DSC_0001.JPG"), 
-                    &vec!("test1".to_owned(), "test2".to_owned())
-                ),
-                Ok(_)
-            );
-        //TODO: Make sure file saving works
-        //TODO: Make sure the correct tags are added to the database
     }
+
+    fn file_list_saving_works(fdb: Arc<Mutex<FileDatabase>>)
+    {
+        let tags = vec!("test1".to_owned(), "test2".to_owned());
+        let src_path = PathBuf::from("test/media/DSC_0001.JPG");
+        let (result, save_result_rx) =
+                save_new_file(fdb.clone(), &src_path, &tags).unwrap();
+
+
+        let save_result = save_result_rx.recv().unwrap();
+        assert_matches!(save_result, FileSavingResult::Success);
+
+        let full_path = {
+            let fdb = fdb.lock().unwrap();
+            PathBuf::from(fdb.get_file_save_path())
+                .join(PathBuf::from(&result.filename))
+        };
+
+        // Make sure that the saved file exists
+        assert!(full_path.exists());
+    }
+    //TODO: Make sure the correct tags are added to the database
 }

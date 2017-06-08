@@ -209,10 +209,10 @@ pub mod db_test_helpers
     use dotenv::dotenv;
     use std::env;
 
-    use diesel;
-    use schema;
-
     use diesel::pg::PgConnection;
+
+    use std::fs;
+    use std::io;
 
     //Establish a connection to the postgres database
     fn establish_connection() -> PgConnection
@@ -234,9 +234,18 @@ pub mod db_test_helpers
 
     fn create_db() -> FileDatabase
     {
-        let connection = establish_connection();
-
         let test_file_storage_path = get_test_storage_path();
+
+        match fs::create_dir(test_file_storage_path.clone()) {
+            Ok(_) => {},
+            Err(e) => {
+                if e.kind() != io::ErrorKind::AlreadyExists
+                {
+                    panic!("{:?}", e)
+                }
+            }
+        };
+
         let fdb = FileDatabase::new(establish_connection(), String::from(test_file_storage_path));
 
         fdb
