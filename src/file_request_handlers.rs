@@ -563,6 +563,7 @@ mod file_request_tests
         saving_a_file_without_extension_fails(fdb.clone());
         file_list_saving_works(fdb.clone());
         file_list_updates_work(fdb.clone());
+        file_list_save_requests_work(fdb.clone());
     }
 
     // pub fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[String])
@@ -576,7 +577,6 @@ mod file_request_tests
             );
     }
 
-    //TODO: Make sure the correct tags are added to the database
     fn file_list_saving_works(fdb: Arc<Mutex<FileDatabase>>)
     {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
@@ -605,13 +605,50 @@ mod file_request_tests
             )
     }
 
-    // TODO: Make sure a db search can find the new entry, and that the old one can no longer be
-    // found
+    fn file_list_save_requests_work(fdb: Arc<Mutex<FileDatabase>>)
+    {
+        let old_path = PathBuf::from("test/media/DSC_0001.JPG");
+
+        let tags = vec!("new1".to_owned());
+
+        let saved_entry = {
+            let result = handle_save_request(fdb.clone(), &FileLocation::Unsaved(old_path), &tags);
+
+            assert_matches!(result, Ok(_));
+            let result = result.unwrap();
+
+            assert_matches!(result, FileSaveRequestResult::NewDatabaseEntry(FileLocation::Database(_), _));
+            match result {
+                FileSaveRequestResult::NewDatabaseEntry(file_entry, receiver) => {
+                    assert_matches!(receiver.recv().unwrap(), FileSavingResult::Success);
+
+                    match file_entry {
+                        FileLocation::Database(result) => {
+                            assert!(result.tags.contains(&String::from("new1")));
+                            assert!(!result.tags.contains(&String::from("old")));
+                            result
+                        }
+                        _ => {panic!("Unreachable branch")}
+                    }
+                },
+                _ => {panic!("Unreachable branch")}
+            }
+        };
+
+        //Make sure that the file was actually added to the database
+        assert!(
+                fdb.lock().unwrap().get_files_with_tags(&tags)
+                    .iter()
+                    .fold(false, |acc, file| { acc || file.id == saved_entry.id })
+            );
+    }
+
     fn file_list_updates_work(fdb: Arc<Mutex<FileDatabase>>)
     {
+        let old_tags = vec!(String::from("old"));
         let old_location = {
             let mut fdb = fdb.lock().unwrap();
-            fdb.add_new_file("test", "thumb", &vec!(String::from("old")), 0)
+            fdb.add_new_file("test", "thumb", &old_tags, 0)
         };
 
         let tags = vec!("new1".to_owned());
@@ -638,11 +675,20 @@ mod file_request_tests
             }
         };
 
-        //Make sure that the file was actually added to the database
+        // Make sure that the file was actually added to the database
         assert!(
                 fdb.lock().unwrap().get_files_with_tags(&tags)
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
+            );
+
+        // Make sure the old entry was removed
+        assert!(
+                fdb.lock().unwrap().get_files_with_tags(&old_tags)
+                    .iter()
+                    .fold(false, |acc, file| { acc || file.id == saved_entry.id })
+                ==
+                false
             );
     }
 }
