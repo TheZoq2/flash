@@ -176,7 +176,7 @@ impl FileDatabase
     }
 
     #[cfg(test)]
-    fn reset(&self)
+    pub fn reset(&self)
     {
         diesel::delete(files::table).execute(&self.connection).unwrap();
     }
@@ -252,17 +252,21 @@ pub mod db_test_helpers
     }
 
     lazy_static! {
-        static ref FDB: Arc<Mutex<FileDatabase>> = Arc::new(Mutex::new(create_db()));
+        // Most functions that modify the database already want
+        // `Arc<Mutex<fdb>>` so it has to have two layers of mutex
+        static ref FDB: Arc<Mutex<Arc<Mutex<FileDatabase>>>>
+                = Arc::new(Mutex::new(Arc::new(Mutex::new(create_db()))));
     }
 
-    pub fn get_database() -> Arc<Mutex<FileDatabase>>
+    pub fn get_database() -> Arc<Mutex<Arc<Mutex<FileDatabase>>>>
     {
         FDB.clone()
     }
 
     pub fn run_test<F: Fn(&mut FileDatabase)>(test: F)
     {
-        let mut fdb = FDB.lock().unwrap();
+        let fdb = FDB.lock().unwrap();
+        let mut fdb = fdb.lock().unwrap();
         fdb.reset();
         assert_eq!(fdb.get_file_amount(), 0);
 

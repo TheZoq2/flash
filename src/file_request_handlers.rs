@@ -558,16 +558,23 @@ mod file_request_tests
     #[test]
     fn database_related_tests()
     {
-        let fdb = file_database::db_test_helpers::get_database();
+        let outer_fdb = file_database::db_test_helpers::get_database();
 
+        let fdb = outer_fdb.lock().unwrap();
+
+        fdb.lock().unwrap().reset();
         saving_a_file_without_extension_fails(fdb.clone());
+
+        fdb.lock().unwrap().reset();
         file_list_saving_works(fdb.clone());
+
+        fdb.lock().unwrap().reset();
         file_list_updates_work(fdb.clone());
+
+        fdb.lock().unwrap().reset();
         file_list_save_requests_work(fdb.clone());
     }
 
-    // pub fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[String])
-            // -> Result<file_database::File, FileRequestError>
     fn saving_a_file_without_extension_fails(fdb: Arc<Mutex<FileDatabase>>)
     {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
@@ -580,6 +587,7 @@ mod file_request_tests
     fn file_list_saving_works(fdb: Arc<Mutex<FileDatabase>>)
     {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
+
         let src_path = PathBuf::from("test/media/DSC_0001.JPG");
         let (result, save_result_rx) =
                 save_new_file(fdb.clone(), &src_path, &tags).unwrap();
@@ -598,11 +606,19 @@ mod file_request_tests
         assert!(full_path.exists());
 
         //Make sure that the file was actually added to the database
-        assert!(
-                fdb.lock().unwrap().get_files_with_tags(&tags)
-                    .iter()
-                    .fold(false, |acc, file| { acc || file.id == result.id })
-            )
+        match fdb.lock()
+        {
+            Ok(fdb) => {
+                assert!(
+                    fdb.get_files_with_tags(&tags)
+                        .iter()
+                        .fold(false, |acc, file| { acc || file.id == result.id })
+                    )
+            },
+            Err(e) => {
+                panic!("{:?}", e)
+            }
+        }
     }
 
     fn file_list_save_requests_work(fdb: Arc<Mutex<FileDatabase>>)
