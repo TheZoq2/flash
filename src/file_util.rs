@@ -28,25 +28,21 @@ pub enum MediaType
 /**
   Returns the filetype of a specified file based on its extension
 */
-pub fn get_mediatype(path: &str) -> MediaType
+pub fn get_mediatype(path: &Path) -> MediaType
 {
-    let extension = get_file_extension(path);
+    let extension = path.extension().unwrap();
 
-    match extension.to_lowercase().as_str()
+    match extension.to_string_lossy().to_lowercase().as_str()
     {
-        ".jpg" | ".png" | ".gif" => MediaType::Image,
-        ".mov" | ".mp4" | ".webm" => MediaType::Video,
+        "jpg" | "png" | "gif" => MediaType::Image,
+        "mov" | "mp4" | "webm" => MediaType::Video,
         _ => {
-            println!("Unrecognised extension: {} assuming image", extension);
+            println!("Unrecognised extension: {} assuming image", extension.to_string_lossy());
             MediaType::Image
         }
     }
 }
 
-pub struct ThumbnailInfo
-{
-    pub path: String,
-}
 /**
   Generates a thumbnail for the given source file and stores that file in a unique location which
   is returned by the function. 
@@ -58,43 +54,34 @@ pub struct ThumbnailInfo
   landscape mode will be at most `max_width` tall
  */
 
-//TODO: Rewrite to use std::path instead of &str
-pub fn generate_thumbnail(source_path: &str, destination_path_without_extension: &str, max_size: u32)
-        -> Result<ThumbnailInfo, image::ImageError>
+//TODO: Send errors back to caller over a channel instead of ignoring them
+pub fn generate_thumbnail(source_path: &Path, destination_path: &Path, max_size: u32)
+        -> Result<(), image::ImageError>
 {
-    //Generating the filenames
-    let file_extension = get_file_extension(source_path);
-    let full_path = String::from(destination_path_without_extension) + &file_extension;
-
-    let full_path_clone = full_path.clone();
-    let source_path_clone = String::from(source_path);
-    thread::spawn(move || {
-        let path_obj = Path::new(&source_path_clone);
-
-        let img = match image::open(path_obj)
-        {
-            Ok(val) => val,
-            Err(_) => return
-        };
-
-        let thumb_data = generate_thumbnail_from_generic_image(&img, max_size);
-
-        let fout = &mut File::create(&Path::new(&full_path_clone)).unwrap();
-        thumb_data.save(fout, image::PNG).unwrap();
-    });
-
-    Ok(ThumbnailInfo
     {
-        path:full_path
-    })
+        let destination_path = destination_path.to_owned();
+        let source_path_clone = source_path.to_owned();
+        thread::spawn(move || {
+            let img = match image::open(source_path_clone)
+            {
+                Ok(val) => val,
+                Err(_) => return
+            };
+
+            let thumb_data = generate_thumbnail_from_generic_image(&img, max_size);
+
+            let fout = &mut File::create(&destination_path).unwrap();
+            thumb_data.save(fout, image::PNG).unwrap();
+        });
+    }
+
+    Ok(())
 }
 
 
-pub fn get_file_extension(path: &str) -> String
+pub fn get_file_extension(path: &Path) -> String
 {
-    let path_obj = Path::new(&path);
-
-    match path_obj.extension(){
+    match path.extension(){
         Some(val) => ".".to_string() + val.to_str().unwrap(),
         None => "".to_string()
     }
@@ -278,13 +265,13 @@ mod util_tests
     #[test]
     fn file_type_test()
     {
-        assert_eq!(get_mediatype("yolo.jpg"), MediaType::Image);
-        assert_eq!(get_mediatype("yolo.png"), MediaType::Image);
-        assert_eq!(get_mediatype("yolo.mov"), MediaType::Video);
-        assert_eq!(get_mediatype("yolo.mp4"), MediaType::Video);
+        assert_eq!(get_mediatype(&PathBuf::from("yolo.jpg")), MediaType::Image);
+        assert_eq!(get_mediatype(&PathBuf::from("yolo.png")), MediaType::Image);
+        assert_eq!(get_mediatype(&PathBuf::from("yolo.mov")), MediaType::Video);
+        assert_eq!(get_mediatype(&PathBuf::from("yolo.mp4")), MediaType::Video);
 
-        assert_eq!(get_mediatype("yolo.MOV"), MediaType::Video);
-        assert_eq!(get_mediatype("some/path.yoloswag/1234/yolo.MOV"), MediaType::Video);
+        assert_eq!(get_mediatype(&PathBuf::from("yolo.MOV")), MediaType::Video);
+        assert_eq!(get_mediatype(&PathBuf::from("some/path.yoloswag/1234/yolo.MOV")), MediaType::Video);
     }
 }
 

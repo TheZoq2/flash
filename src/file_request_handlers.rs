@@ -14,8 +14,9 @@ use std::fs;
 use std::sync::Mutex;
 use std::sync::Arc;
 
-use std::thread;
 use std::path::Path;
+
+use std::thread;
 
 use std::io;
 use std::sync::mpsc::{channel, Receiver};
@@ -140,6 +141,13 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
         get_file_list_object(&*file_list_list, list_id, file_index)?
     };
 
+    let file_storage_folder = {
+        let mutex = request.get::<Write<FileDatabase>>().unwrap();
+        let db = mutex.lock().unwrap();
+
+        db.get_file_save_path()
+    };
+
     match action.as_str() {
         "get_data" => {
             let file_data = file_data_from_file_location(&file_location);
@@ -148,11 +156,11 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
                 ))
         },
         "get_file" => {
-            let path = get_file_location_path(&file_location);
+            let path = get_file_location_path(&file_storage_folder, &file_location);
             Ok(Response::with((status::Ok, path)))
         },
         "get_thumbnail" => {
-            let path = get_file_list_thumbnail(&file_location);
+            let path = get_file_list_thumbnail(&file_storage_folder, &file_location);
             Ok(Response::with((status::Ok, path)))
         }
         "save" => {
@@ -323,36 +331,26 @@ fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[
     let destination_dir = {
         let db = db.lock().unwrap();
 
-        db.get_file_save_path()
+        PathBuf::from(db.get_file_save_path())
     };
 
     let file_identifier = get_semi_unique_identifier();
 
-    let thumbnail_path_without_extension = format!("{}/thumb_{}", destination_dir.clone(), &file_identifier);
+    let filename = format!("thumb_{}.jpg", file_identifier);
+
+    let thumbnail_path = destination_dir.join(&PathBuf::from(filename));
 
 
     //Generate the thumbnail
-    let original_path_string = original_path.to_string_lossy();
-    let thumbnail_info = generate_thumbnail(
-                &original_path_string,
-                &thumbnail_path_without_extension,
-                300
-            )?;
+    generate_thumbnail(original_path, &thumbnail_path, 300)?;
 
     //Copy the file to the destination
     //Get the name and path of the new file
-    let new_file_path =
-            destination_dir + "/" + &file_identifier + "." + &file_extension.to_string_lossy();
+    let filename = format!("{}.{}", file_identifier, file_extension.to_string_lossy());
+    let new_file_path = destination_dir.join(PathBuf::from(filename.clone()));
 
 
-    let thumbnail_filename = 
-            Path::new(&thumbnail_info.path).file_name().unwrap().to_str().unwrap();
-    let new_filename = 
-    {
-        let filename = Path::new(&*new_file_path).file_name().unwrap();
-
-        String::from(filename.to_str().unwrap())
-    };
+    let thumbnail_filename = thumbnail_path.file_name().unwrap().to_string_lossy();
 
 
     let timestamp = get_file_timestamp(&PathBuf::from((*original_path).clone()));
@@ -362,7 +360,7 @@ fn save_new_file(db: Arc<Mutex<FileDatabase>>, original_path: &PathBuf, tags: &[
         let mut db = db.lock().unwrap();
 
         db.add_new_file(
-                &new_filename.to_string(),
+                &filename.to_owned(),
                 &thumbnail_filename.to_string(),
                 tags,
                 timestamp
@@ -430,13 +428,13 @@ fn file_data_from_file_location(file: &FileLocation)
 /**
   Returns a the path to a `FileLocation`
 */
-fn get_file_location_path(file: &FileLocation)
+fn get_file_location_path(storage_folder: &Path, file: &FileLocation)
         -> PathBuf
 {
     match *file {
         FileLocation::Unsaved(ref path) => path.clone(),
         FileLocation::Database(ref db_entry) => {
-            PathBuf::from(db_entry.filename.clone())
+            PathBuf::from(storage_folder.join(db_entry.filename.clone()))
         }
     }
 }
@@ -444,12 +442,12 @@ fn get_file_location_path(file: &FileLocation)
 /**
   Returns the path to the thumbnail of a `FileLocation`
 */
-fn get_file_list_thumbnail(file: &FileLocation) -> PathBuf
+fn get_file_list_thumbnail(storage_folder: &Path, file: &FileLocation) -> PathBuf
 {
     match *file {
         FileLocation::Unsaved(ref path) => path.clone(),
         FileLocation::Database(ref db_entry) => {
-            PathBuf::from(db_entry.thumbnail_path.clone())
+            PathBuf::from(storage_folder.join(db_entry.thumbnail_path.clone()))
         }
     }
 }
@@ -551,6 +549,21 @@ mod file_request_tests
         assert!(get_file_list_object(&fll, 1, 2).is_err());
         assert!(get_file_list_object(&fll, 3, 2).is_err());
     }
+
+    #[test]
+    fn updating_file_list_entries_works()
+    {
+        let mut fll = Arc::new(Mutex::new(make_dummy_file_list_list()));
+
+        let new_db_entry = FileLocation::Database(dummy_database_entry("yolo", "swag"));
+
+        update_file_list(&mut fll, 0, 0, &new_db_entry);
+
+        let fll = fll.lock().unwrap();
+        assert_matches!(get_file_list_object(&fll, 0, 0).unwrap()
+                        , FileLocation::Database(_))
+    }
+
 
     #[test]
     fn database_related_tests()

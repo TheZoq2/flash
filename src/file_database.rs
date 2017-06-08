@@ -15,6 +15,8 @@ use chrono::NaiveDateTime;
 
 use iron::typemap::Key;
 
+use std::path::PathBuf;
+
 /**
   A reference to a file stored in the file database
  */
@@ -163,9 +165,9 @@ impl FileDatabase
 
       TODO: Move out of database code
     */
-    pub fn get_file_save_path(&self) -> String
+    pub fn get_file_save_path(&self) -> PathBuf
     {
-        self.file_save_path.clone()
+        PathBuf::from(self.file_save_path.clone())
     }
 
     fn get_file_amount(&self) -> i64
