@@ -60,6 +60,10 @@ fn get_tag_list_from_query(query: &str) -> Option<Cow<str>>
     Some(AND_RE.replace_all(&list_str, ", "))
 }
 
+/**
+  Takes a string of tags separated by commas and optionally by whitespace
+  and returns a vector the tags. The tags can be on the form <name> or <not name>
+*/
 fn get_tags_from_list_string(list_string: &str) -> Vec<Cow<str>>
 {
     lazy_static! {
@@ -73,6 +77,11 @@ fn get_tags_from_list_string(list_string: &str) -> Vec<Cow<str>>
             capture.name("tag").map(|val| Cow::from(val.as_str()))
         })
         .collect()
+}
+
+fn get_positive_and_negative_tags(unparsed_tags: &Vec<Cow<str>>) -> (Vec<Cow<str>>, Vec<Cow<str>>)
+{
+
 }
 
 
