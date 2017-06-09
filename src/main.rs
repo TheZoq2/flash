@@ -26,6 +26,9 @@ extern crate assert_matches;
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
+#[cfg(test)]
+#[macro_use]
+mod test_macros;
 
 mod file_list;
 mod file_database;
@@ -35,12 +38,11 @@ mod file_util;
 mod file_request_handlers;
 mod file_request_error;
 mod exiftool;
-//mod search;
+mod search;
 mod schema;
 
 #[macro_use]
 extern crate serde_derive;
-
 extern crate serde;
 extern crate serde_json;
 
