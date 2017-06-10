@@ -11,7 +11,7 @@ const TAG_LIST_REGEX: &str = r"of (?P<list>[\w[:blank:],]+);{0,1}";
 /**
   Returns all the tags specified in a search query
 */
-pub fn get_tags_from_query(query: &str) -> Vec<String>
+pub fn get_tags_from_query(query: &str) -> (Vec<String>, Vec<String>)
 {
     lazy_static!{
         static ref TAG_RE: Regex = Regex::new(r"\w+").unwrap();
@@ -20,13 +20,12 @@ pub fn get_tags_from_query(query: &str) -> Vec<String>
     let list_string = match get_tag_list_from_query(query)
     {
         Some(val) => val,
-        None => return vec!()
+        None => return (vec!(), vec!())
     };
 
-    get_tags_from_list_string(&list_string)
-        .iter()
-        .map(|cow| String::from(cow.clone()))
-        .collect()
+    let tag_vec = get_tags_from_list_string(&list_string);
+
+    separate_negated_tags(&tag_vec)
 }
 
 /**
@@ -85,19 +84,20 @@ fn get_tags_from_list_string(list_string: &str) -> Vec<Cow<str>>
 
   returns (non-negated, negated)
 */
-fn separate_negated_tags(tags: Vec<Cow<str>>) -> (Vec<Cow<str>>, Vec<Cow<str>>)
+fn separate_negated_tags(tags: &[Cow<str>]) -> (Vec<String>, Vec<String>)
 {
     lazy_static! {
         static ref NEGATED_REGEX: Regex =Regex::new(r"not (P<tag>.+)").unwrap();
     };
 
-    tags.into_iter()
+    tags.iter()
         .fold((vec!(), vec!()), |(mut non_negated, mut negated), tag| {
-            match NEGATED_REGEX.captures(&tag) {
+            let captures = NEGATED_REGEX.captures(tag);
+            match captures {
                 // We can be sure that 1 exists since the capture grouop must be matched
                 // Therefore unwrap is safe
-                Some(captures) => negated.push(Cow::from(captures.get(1).unwrap().as_str())),
-                None => non_negated.push(tag.clone())
+                Some(captures) => negated.push(String::from(captures.get(1).unwrap().as_str())),
+                None => non_negated.push(tag.to_string())
             }
 
             (non_negated, negated)
@@ -142,35 +142,36 @@ mod public_query_tests
     #[test]
     fn query_with_only_tags()
     {
-        assert_eq!(get_tags_from_query("of things and stuff"), mapvec!(String::from: "things", "stuff"));
-        assert_eq!(get_tags_from_query("of things"), mapvec!(String::from: "things"));
+        assert_eq!(get_tags_from_query("of things and stuff"), 
+                   (mapvec!(String::from: "things", "stuff"), vec!()));
+        assert_eq!(get_tags_from_query("of things"), (mapvec!(String::from: "things"), vec!()));
         assert_eq!(get_tags_from_query("of things, stuff and items"),
-                mapvec!(String::from: "things", "stuff", "items"));
+                   (mapvec!(String::from: "things", "stuff", "items"), vec!()));
     }
 
     #[test]
     fn no_tags_should_return_empty_vector()
     {
-        assert_eq!(get_tags_from_query("of"), Vec::<String>::new());
-        assert_eq!(get_tags_from_query(""), Vec::<String>::new());
-        assert_eq!(get_tags_from_query("in linköping"), Vec::<String>::new());
-        assert_eq!(get_tags_from_query("from this year"), Vec::<String>::new());
+        assert_eq!(get_tags_from_query("of"), (vec!(), vec!()));
+        assert_eq!(get_tags_from_query(""), (vec!(), vec!()));
+        assert_eq!(get_tags_from_query("in linköping"), (vec!(), vec!()));
+        assert_eq!(get_tags_from_query("from this year"), (vec!(), vec!()));
     }
 
     #[test]
     fn more_things_specified_should_give_correct_tags()
     {
         assert_eq!(get_tags_from_query("of things and stuff; from last year"), 
-                   mapvec!(String::from: "things", "stuff"));
+                   (mapvec!(String::from: "things", "stuff"), vec!()));
         assert_eq!(get_tags_from_query("of things and stuff ;from last year in linköping"),
-                   mapvec!(String::from: "things", "stuff"));
+                   (mapvec!(String::from: "things", "stuff"), vec!()));
     }
 
     #[test]
     fn searching_for_not_tags_should_work()
     {
         assert_eq!(get_tags_from_query("of things and not stuff"),
-                mapvec!(String::from: "things", "not stuff"));
+                (mapvec!(String::from: "things", "not stuff"), vec!()));
     }
 }
 
@@ -216,7 +217,7 @@ mod private_query_tests
 
     fn tag_negation_tests()
     {
-        assert_eq!(separate_negated_tags(mapvec!(Cow::from: "yolo", "not swag")),
-                (mapvec!(Cow::from: "yolo"), mapvec!(Cow::from: "swag")));
+        assert_eq!(separate_negated_tags(&mapvec!(Cow::from: "yolo", "not swag")),
+                (mapvec!(String::from: "yolo"), mapvec!(String::from: "swag")));
     }
 }
