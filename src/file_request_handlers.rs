@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use urlencoded::UrlEncodedQuery;
 use rustc_serialize::json;
 
 use serde_json;
@@ -8,7 +7,6 @@ use serde_json;
 use iron::*;
 
 use persistent::{Write};
-use std::option::Option;
 use std::fs;
 
 use std::sync::Mutex;
@@ -30,10 +28,15 @@ use file_util::{
     get_semi_unique_identifier,
     get_file_timestamp
 };
+use request_helpers::get_get_variable;
 
 use file_request_error::{
     FileRequestError,
     err_invalid_variable_type
+};
+
+use file_list_response::{
+    reply_to_file_list_request
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -69,16 +72,6 @@ impl FileData
     }
 }
 
-
-/**
-  Serializable list response that contains data about a file list
-*/
-#[derive(Serialize)]
-struct ListResponse
-{
-    pub id: usize,
-    pub length: Option<usize>
-}
 
 #[derive(Debug)]
 enum FileSavingResult
@@ -121,8 +114,7 @@ pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
         }
     };
 
-    let list_response = reply_to_file_list_request(file_list_list, file_list_id);
-    Ok(Response::with((status::Ok, serde_json::to_string(&list_response).unwrap())))
+    reply_to_file_list_request(file_list_list, file_list_id)
 }
 
 /**
@@ -229,43 +221,11 @@ fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, FileReque
     }
 }
 
-fn get_get_variable(request: &mut Request, name: &str) -> Result<String, FileRequestError>
-{
-    match request.get_ref::<UrlEncodedQuery>()
-    {
-        Ok(hash_map) => {
-            match hash_map.get(name)
-            {
-                Some(val) => Ok(val.first().unwrap().clone()),
-                None => Err(FileRequestError::NoSuchVariable(name.to_owned()))
-            }
-        },
-        _ => Err(FileRequestError::NoUrlEncodedQuery)
-    }
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 //                      Private functions for generating
 //                      replies to file requests
 ////////////////////////////////////////////////////////////////////////////////
-
-fn reply_to_file_list_request(file_list_list: Arc<Mutex<FileListList>>, id: usize)
-        -> ListResponse
-{
-    // Fetch the file list
-    let file_amount = {
-        let file_list_list = file_list_list.lock().unwrap();
-
-        match file_list_list.get(id)
-        {
-            Some(list) => Some(list.len()),
-            None => None
-        }
-    };
-
-    ListResponse{ id, length: file_amount }
-}
 
 /**
   Updates the specified `file_list` with a new `FileLocation`

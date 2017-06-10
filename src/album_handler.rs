@@ -1,60 +1,49 @@
-/*
 extern crate iron;
-
-use urlencoded::UrlEncodedQuery;
-use rustc_serialize::json;
 
 use iron::*;
 use persistent::{Write};
 
-use file_util::sanitize_tag_names;
-
 use file_database::FileDatabase;
+use request_helpers::get_get_variable;
+
+use file_list_response::{reply_to_file_list_request};
+
+use file_list::{
+    FileLocation,
+    FileList,
+    FileListList,
+    FileListSource
+};
+
+use search;
 
 
-pub fn handle_album_list_request(request: &mut Request) -> IronResult<Response>
+pub fn handle_image_search(request: &mut Request) -> IronResult<Response>
 {
-    //Get the important information from the request.
-    let tag_string = match request.get_ref::<UrlEncodedQuery>()
-    {
-        Ok(hash_map) => {
-            match hash_map.get("tags")
-            {
-                //The request contains a vec each occurence of the variable
-                Some(val) => val.first().unwrap().clone(), 
-                None => {
-                    println!("Failed to save, tag list not included in the string");
+    let file_list_list = request.get::<Write<FileListList>>().unwrap();
+    // Get the important information from the request.
+    let query = get_get_variable(request, "query")?;
 
-                    //This is a lie. TODO: Update response
-                    return Ok(Response::with(iron::status::NotFound));
-                }
-            }
-        },
-        Err(e) => {
-            println!("Failed to get GET variable: {:?}", e); 
+    let (tags, negated_tags) = search::get_tags_from_query(&query);
 
-            //This is a lie. TODO: Update response
-            return Ok(Response::with(iron::status::NotFound));
-        }
+    // Fetch the files in the database
+    let files = {
+        let mutex = request.get::<Write<FileDatabase>>().unwrap();
+        let db = mutex.lock().unwrap();
+
+        db.get_files_with_tags(&tags, &negated_tags)
     };
 
-    //Decoding the json list
-    let tags = match json::decode::<Vec<String>>(&tag_string){
-        Ok(result) => sanitize_tag_names(&result).unwrap(),
-        Err(e) => {
-            println!("Failed to decode tag list. Error: {}", e);
-            return Ok(Response::with(iron::status::NotFound));
-        }
+    // Build a file_list from the tags
+    let file_locations = files.into_iter()
+        .map(FileLocation::Database)
+        .collect();
+
+    let file_list_id = {
+        let mut file_list_list = file_list_list.lock().unwrap();
+
+        file_list_list.add(FileList::from_locations(file_locations, FileListSource::Search))
     };
 
-    //Get the database and search through it for the tags
-    //Store the file in the database
-    let mutex = request.get::<Write<FileDatabase>>().unwrap();
-    let db = mutex.lock().unwrap();
-
-    //let filenames = db_container.get_db().get_file_paths_with_tags(tags);
-    let files = db.get_files_with_tags(&tags);
-
-    Ok(Response::with((status::Ok, json::encode(&files).unwrap())))
+    reply_to_file_list_request(file_list_list, file_list_id)
 }
-*/

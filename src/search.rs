@@ -56,7 +56,7 @@ fn get_tag_list_from_query(query: &str) -> Option<Cow<str>>
     };
 
     // Replace 'and' with ','
-    Some(AND_RE.replace_all(&list_str, ", "))
+    Some(AND_RE.replace_all(list_str, ", "))
 }
 
 /**
@@ -71,7 +71,7 @@ fn get_tags_from_list_string(list_string: &str) -> Vec<Cow<str>>
             .unwrap();
     };
 
-    TAG_RE.captures_iter(&list_string)
+    TAG_RE.captures_iter(list_string)
         .filter_map(|capture| {
             capture.name("tag").map(|val| Cow::from(val.as_str()))
         })
@@ -118,19 +118,11 @@ pub fn get_time_from_query(query: &str) -> Time
         static ref TIME_INTERVAL_REGEX: Regex = Regex::new(r"from (this|last|the past) (\w*)").unwrap();
     }
 
-    match TIME_INTERVAL_REGEX.captures(query)
+    if let Some(cap) = TIME_INTERVAL_REGEX.captures(query)
     {
-        Some(cap) => 
-        {
-            let descriptor = cap.get(1).unwrap().as_str();
-            let time = cap.get(2).unwrap().as_str();
-        },
-        None =>
-        {
-
-        }
+        let descriptor = cap.get(1).unwrap().as_str();
+        let time = cap.get(2).unwrap().as_str();
     }
-
     unimplemented!()
 }
 
@@ -176,6 +168,7 @@ mod public_query_tests
     }
 }
 
+#[cfg(test)]
 mod private_query_tests
 {
     use super::*;

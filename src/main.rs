@@ -40,6 +40,8 @@ mod file_request_error;
 mod exiftool;
 mod search;
 mod schema;
+mod request_helpers;
+mod file_list_response;
 
 #[macro_use]
 extern crate serde_derive;
@@ -103,6 +105,7 @@ fn main()
     mount.mount("/file", Static::new(Path::new(&target_dir)));
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())));
     mount.mount("/file_list/from_path", file_request_handlers::directory_list_handler);
+    mount.mount("/search", album_handler::handle_image_search);
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list::FileListList::new()));
