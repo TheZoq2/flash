@@ -620,7 +620,7 @@ mod file_request_tests
         {
             Ok(fdb) => {
                 assert!(
-                    fdb.get_files_with_tags(&tags)
+                    fdb.get_files_with_tags(&tags, &vec!())
                         .iter()
                         .fold(false, |acc, file| { acc || file.id == result.id })
                     )
@@ -663,7 +663,7 @@ mod file_request_tests
 
         //Make sure that the file was actually added to the database
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&tags)
+                fdb.lock().unwrap().get_files_with_tags(&tags, &vec!())
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
             );
@@ -703,14 +703,14 @@ mod file_request_tests
 
         // Make sure that the file was actually added to the database
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&tags)
+                fdb.lock().unwrap().get_files_with_tags(&tags, &vec!())
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
             );
 
         // Make sure the old entry was removed
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&old_tags)
+                fdb.lock().unwrap().get_files_with_tags(&old_tags, &vec!())
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
                 ==

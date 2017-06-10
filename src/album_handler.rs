@@ -1,3 +1,4 @@
+/*
 extern crate iron;
 
 use urlencoded::UrlEncodedQuery;
@@ -56,3 +57,4 @@ pub fn handle_album_list_request(request: &mut Request) -> IronResult<Response>
 
     Ok(Response::with((status::Ok, json::encode(&files).unwrap())))
 }
+*/

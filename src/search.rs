@@ -144,7 +144,8 @@ mod public_query_tests
     {
         assert_eq!(get_tags_from_query("of things and stuff"), 
                    (mapvec!(String::from: "things", "stuff"), vec!()));
-        assert_eq!(get_tags_from_query("of things"), (mapvec!(String::from: "things"), vec!()));
+        assert_eq!(get_tags_from_query("of things"),
+                   (mapvec!(String::from: "things"), vec!()));
         assert_eq!(get_tags_from_query("of things, stuff and items"),
                    (mapvec!(String::from: "things", "stuff", "items"), vec!()));
     }
