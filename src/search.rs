@@ -79,9 +79,29 @@ fn get_tags_from_list_string(list_string: &str) -> Vec<Cow<str>>
         .collect()
 }
 
-fn get_positive_and_negative_tags(unparsed_tags: &Vec<Cow<str>>) -> (Vec<Cow<str>>, Vec<Cow<str>>)
-{
+/**
+  Separates a list of possibly negated tags 'not <tag>' into a list
+  of non-negated tags and a list of negated tags
 
+  returns (non-negated, negated)
+*/
+fn separate_negated_tags(tags: Vec<Cow<str>>) -> (Vec<Cow<str>>, Vec<Cow<str>>)
+{
+    lazy_static! {
+        static ref NEGATED_REGEX: Regex =Regex::new(r"not (P<tag>.+)").unwrap();
+    };
+
+    tags.into_iter()
+        .fold((vec!(), vec!()), |(mut non_negated, mut negated), tag| {
+            match NEGATED_REGEX.captures(&tag) {
+                // We can be sure that 1 exists since the capture grouop must be matched
+                // Therefore unwrap is safe
+                Some(captures) => negated.push(Cow::from(captures.get(1).unwrap().as_str())),
+                None => non_negated.push(tag.clone())
+            }
+
+            (non_negated, negated)
+        })
 }
 
 
@@ -192,5 +212,11 @@ mod private_query_tests
         //Whitespace
         assert_eq!(get_tags_from_list_string("not some,  thing   , not yo lo "),
                   mapvec!(Cow::from: "not some", "thing", "not yo lo"));
+    }
+
+    fn tag_negation_tests()
+    {
+        assert_eq!(separate_negated_tags(mapvec!(Cow::from: "yolo", "not swag")),
+                (mapvec!(Cow::from: "yolo"), mapvec!(Cow::from: "swag")));
     }
 }
