@@ -26,6 +26,8 @@ pub fn handle_image_search(request: &mut Request) -> IronResult<Response>
 
     let (tags, negated_tags) = search::get_tags_from_query(&query);
 
+    println!("tags: {:?}, {:?}", tags, negated_tags);
+
     // Fetch the files in the database
     let files = {
         let mutex = request.get::<Write<FileDatabase>>().unwrap();

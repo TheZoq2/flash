@@ -87,7 +87,7 @@ fn get_tags_from_list_string(list_string: &str) -> Vec<Cow<str>>
 fn separate_negated_tags(tags: &[Cow<str>]) -> (Vec<String>, Vec<String>)
 {
     lazy_static! {
-        static ref NEGATED_REGEX: Regex =Regex::new(r"not (P<tag>.+)").unwrap();
+        static ref NEGATED_REGEX: Regex =Regex::new(r"not (?P<tag>.+)").unwrap();
     };
 
     tags.iter()
@@ -164,7 +164,7 @@ mod public_query_tests
     fn searching_for_not_tags_should_work()
     {
         assert_eq!(get_tags_from_query("of things and not stuff"),
-                (mapvec!(String::from: "things", "not stuff"), vec!()));
+                (mapvec!(String::from: "things"), mapvec!(String::from: "stuff")));
     }
 }
 
@@ -213,5 +213,25 @@ mod private_query_tests
     {
         assert_eq!(separate_negated_tags(&mapvec!(Cow::from: "yolo", "not swag")),
                 (mapvec!(String::from: "yolo"), mapvec!(String::from: "swag")));
+    }
+
+    /**
+      Tries to replicate a bug where searching for negated tags would not propperly negate them
+    */
+    #[test]
+    fn negation_bug_test()
+    {
+        let search_string = "of not snödroppe";
+
+        let tag_list = get_tag_list_from_query(search_string).unwrap();
+        assert_eq!(tag_list, Cow::from("not snödroppe"));
+
+        let tags = get_tags_from_list_string(&tag_list);
+        assert_eq!(tags, mapvec!(Cow::from: "not snödroppe"));
+
+        let (tags, negated) = separate_negated_tags(&tags);
+
+        assert_eq!(tags, vec!());
+        assert_eq!(negated, mapvec!(String::from: "snödroppe"));
     }
 }
