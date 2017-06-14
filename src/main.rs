@@ -106,6 +106,7 @@ fn main()
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())));
     mount.mount("/file_list/from_path", file_request_handlers::directory_list_handler);
     mount.mount("/search", album_handler::handle_image_search);
+    mount.mount("file_list", file_request_handlers::get_file_list_handler);
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list::FileListList::new()));

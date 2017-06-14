@@ -181,20 +181,25 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 }
 
 
+/**
+  Handles requests for getting the data about a file list
+*/
+pub fn get_file_list_handler(request: &mut Request) -> IronResult<Response>
+{
+    let list_id = read_request_list_id(request)?;
+
+    let file_list_list = request.get::<Write<FileListList>>().unwrap();
+
+    reply_to_file_list_request(file_list_list, list_id)
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 ///                     Private functions for getting data
 ///                     out of iron requests
 ////////////////////////////////////////////////////////////////////////////////
 fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), FileRequestError>
 {
-    let list_id = get_get_variable(request, "list_id")?;
-
-    let list_id = match list_id.parse::<usize>() {
-        Ok(val) => val,
-        Err(_) => {
-            return Err(err_invalid_variable_type("list_id", "usize"));
-        }
-    };
+    let list_id = read_request_list_id(request)?;
 
     let file_index = get_get_variable(request, "index")?;
 
@@ -207,6 +212,20 @@ fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), F
 
     Ok((list_id, file_index))
 }
+
+pub fn read_request_list_id(request: &mut Request) -> Result<usize, FileRequestError>
+{
+    let list_id = get_get_variable(request, "list_id")?;
+
+    match list_id.parse::<usize>() {
+        Ok(val) => Ok(val),
+        Err(_) => {
+            Err(err_invalid_variable_type("list_id", "usize"))
+        }
+    }
+}
+
+
 
 fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, FileRequestError>
 {
