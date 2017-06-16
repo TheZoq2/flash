@@ -138,7 +138,6 @@ impl FileDatabase
      */
     pub fn get_files_with_tags(&self, tags: &[String], negated_tags: &[String]) -> Vec<File>
     {
-        //TODO: Figure out how to filter negated tags using SQL instead of in rust
         files::table.filter(files::tags.contains(tags))
             .get_results(&self.connection)
             .expect("Error retrieving photos with tags")
