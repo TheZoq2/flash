@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use urlencoded::UrlEncodedQuery;
 use rustc_serialize::json;
 
 use serde_json;
@@ -8,7 +7,6 @@ use serde_json;
 use iron::*;
 
 use persistent::{Write};
-use std::option::Option;
 use std::fs;
 
 use std::sync::Mutex;
@@ -30,10 +28,15 @@ use file_util::{
     get_semi_unique_identifier,
     get_file_timestamp
 };
+use request_helpers::get_get_variable;
 
 use file_request_error::{
     FileRequestError,
     err_invalid_variable_type
+};
+
+use file_list_response::{
+    reply_to_file_list_request
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -69,16 +72,6 @@ impl FileData
     }
 }
 
-
-/**
-  Serializable list response that contains data about a file list
-*/
-#[derive(Serialize)]
-struct ListResponse
-{
-    pub id: usize,
-    pub length: Option<usize>
-}
 
 #[derive(Debug)]
 enum FileSavingResult
@@ -121,8 +114,7 @@ pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
         }
     };
 
-    let list_response = reply_to_file_list_request(file_list_list, file_list_id);
-    Ok(Response::with((status::Ok, serde_json::to_string(&list_response).unwrap())))
+    reply_to_file_list_request(file_list_list, file_list_id)
 }
 
 /**
@@ -189,20 +181,25 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
 }
 
 
+/**
+  Handles requests for getting the data about a file list
+*/
+pub fn get_file_list_handler(request: &mut Request) -> IronResult<Response>
+{
+    let list_id = read_request_list_id(request)?;
+
+    let file_list_list = request.get::<Write<FileListList>>().unwrap();
+
+    reply_to_file_list_request(file_list_list, list_id)
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 ///                     Private functions for getting data
 ///                     out of iron requests
 ////////////////////////////////////////////////////////////////////////////////
 fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), FileRequestError>
 {
-    let list_id = get_get_variable(request, "list_id")?;
-
-    let list_id = match list_id.parse::<usize>() {
-        Ok(val) => val,
-        Err(_) => {
-            return Err(err_invalid_variable_type("list_id", "usize"));
-        }
-    };
+    let list_id = read_request_list_id(request)?;
 
     let file_index = get_get_variable(request, "index")?;
 
@@ -215,6 +212,20 @@ fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), F
 
     Ok((list_id, file_index))
 }
+
+pub fn read_request_list_id(request: &mut Request) -> Result<usize, FileRequestError>
+{
+    let list_id = get_get_variable(request, "list_id")?;
+
+    match list_id.parse::<usize>() {
+        Ok(val) => Ok(val),
+        Err(_) => {
+            Err(err_invalid_variable_type("list_id", "usize"))
+        }
+    }
+}
+
+
 
 fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, FileRequestError>
 {
@@ -229,43 +240,11 @@ fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, FileReque
     }
 }
 
-fn get_get_variable(request: &mut Request, name: &str) -> Result<String, FileRequestError>
-{
-    match request.get_ref::<UrlEncodedQuery>()
-    {
-        Ok(hash_map) => {
-            match hash_map.get(name)
-            {
-                Some(val) => Ok(val.first().unwrap().clone()),
-                None => Err(FileRequestError::NoSuchVariable(name.to_owned()))
-            }
-        },
-        _ => Err(FileRequestError::NoUrlEncodedQuery)
-    }
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 //                      Private functions for generating
 //                      replies to file requests
 ////////////////////////////////////////////////////////////////////////////////
-
-fn reply_to_file_list_request(file_list_list: Arc<Mutex<FileListList>>, id: usize)
-        -> ListResponse
-{
-    // Fetch the file list
-    let file_amount = {
-        let file_list_list = file_list_list.lock().unwrap();
-
-        match file_list_list.get(id)
-        {
-            Some(list) => Some(list.len()),
-            None => None
-        }
-    };
-
-    ListResponse{ id, length: file_amount }
-}
 
 /**
   Updates the specified `file_list` with a new `FileLocation`
@@ -620,7 +599,7 @@ mod file_request_tests
         {
             Ok(fdb) => {
                 assert!(
-                    fdb.get_files_with_tags(&tags)
+                    fdb.get_files_with_tags(&tags, &vec!())
                         .iter()
                         .fold(false, |acc, file| { acc || file.id == result.id })
                     )
@@ -663,7 +642,7 @@ mod file_request_tests
 
         //Make sure that the file was actually added to the database
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&tags)
+                fdb.lock().unwrap().get_files_with_tags(&tags, &vec!())
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
             );
@@ -703,14 +682,14 @@ mod file_request_tests
 
         // Make sure that the file was actually added to the database
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&tags)
+                fdb.lock().unwrap().get_files_with_tags(&tags, &vec!())
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
             );
 
         // Make sure the old entry was removed
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&old_tags)
+                fdb.lock().unwrap().get_files_with_tags(&old_tags, &vec!())
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
                 ==

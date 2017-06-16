@@ -26,6 +26,9 @@ extern crate assert_matches;
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
+#[cfg(test)]
+#[macro_use]
+mod test_macros;
 
 mod file_list;
 mod file_database;
@@ -35,12 +38,13 @@ mod file_util;
 mod file_request_handlers;
 mod file_request_error;
 mod exiftool;
-//mod search;
+mod search;
 mod schema;
+mod request_helpers;
+mod file_list_response;
 
 #[macro_use]
 extern crate serde_derive;
-
 extern crate serde;
 extern crate serde_json;
 
@@ -100,8 +104,9 @@ fn main()
     mount.mount("/", Static::new(Path::new("frontend/output")));
     mount.mount("/file", Static::new(Path::new(&target_dir)));
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())));
-    mount.mount("/album", album_handler::handle_album_list_request);
     mount.mount("/file_list/from_path", file_request_handlers::directory_list_handler);
+    mount.mount("/search", album_handler::handle_image_search);
+    mount.mount("file_list", file_request_handlers::get_file_list_handler);
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list::FileListList::new()));
