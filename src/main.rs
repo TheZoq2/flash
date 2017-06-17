@@ -100,10 +100,13 @@ fn main()
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list::FileListList::new()));
     chain.link(Write::<FileDatabase>::both(db));
-    match Iron::new(chain).http("localhost:3000")
+
+    let port = settings.get_port();
+    let url = format!("localhost:{}", port);
+    match Iron::new(chain).http(url)
     {
         Ok(_) => {
-            println!("Server running on port 3000");
+            println!("Server running on port {}", port);
             println!("Open localhost/tag_editor.html or album.html")
         },
         Err(e) => println!("Failed to start iron: {}", e)

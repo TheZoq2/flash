@@ -8,18 +8,11 @@ use std::env;
 pub struct Settings
 {
     file_storage_path: String,
+    port: u32
 }
 
 impl Settings
 {
-    pub fn get_defaults() -> Settings
-    {
-        Settings
-        {
-            file_storage_path: "/home/frans/Pictures/flash".to_string(),
-        }
-    }
-
     pub fn from_env() -> Settings
     {
         dotenv().ok();
@@ -27,14 +20,25 @@ impl Settings
         let file_storage_path = env::var("FILE_STORAGE_PATH")
             .expect("FILE_STORAGE_PATH must be set, is .env missing?");
 
+        let port = env::var("FLASH_PORT")
+            .unwrap_or("3000".to_owned())
+            .parse::<u32>()
+            .expect("FLASH_PORT must be a positive integer");
+
         Settings
         {
-            file_storage_path
+            file_storage_path,
+            port
         }
     }
 
     pub fn get_file_storage_path(&self) -> String
     {
         self.file_storage_path.clone()
+    }
+
+    pub fn get_port(&self) -> u32
+    {
+        self.port
     }
 }
