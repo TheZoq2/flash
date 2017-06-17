@@ -6,12 +6,47 @@ use regex::Regex;
 
 use std::borrow::Cow;
 
+/**
+  The type of a search, it could either be a search for previously
+  saved files in the database, or for new files at a specified path
+*/
+#[derive(Debug)]
+pub enum SearchType
+{
+    Path(String),
+    Saved((Vec<String>, Vec<String>))
+}
+
+
+/**
+  Parses a search query to determine what the user searched for
+*/
+pub fn parse_search_query(query: &str) -> SearchType
+{
+    lazy_static! {
+        static ref PATH_RE: Regex = Regex::new(r"^/.*").unwrap();
+    }
+
+    if PATH_RE.is_match(query)
+    {
+        // Strip the first /
+        SearchType::Path(query[1..].to_owned())
+    }
+    else
+    {
+        SearchType::Saved(get_tags_from_query(query))
+    }
+}
+
+
+
 const TAG_LIST_REGEX: &str = r"of (?P<list>[\w[:blank:],]+);{0,1}";
+
 
 /**
   Returns all the tags specified in a search query
 */
-pub fn get_tags_from_query(query: &str) -> (Vec<String>, Vec<String>)
+fn get_tags_from_query(query: &str) -> (Vec<String>, Vec<String>)
 {
     lazy_static!{
         static ref TAG_RE: Regex = Regex::new(r"\w+").unwrap();
@@ -165,6 +200,17 @@ mod public_query_tests
     {
         assert_eq!(get_tags_from_query("of things and not stuff"),
                 (mapvec!(String::from: "things"), mapvec!(String::from: "stuff")));
+    }
+
+    #[test]
+    fn searching_for_directories_should_work()
+    {
+        assert_matches!(parse_search_query("/something/other"), SearchType::Path(_));
+        assert_matches!(parse_search_query("/something/folder with space"), SearchType::Path(_));
+        assert_matches!(parse_search_query("/other"), SearchType::Path(_));
+        assert_matches!(parse_search_query("/"), SearchType::Path(_));
+        assert_matches!(parse_search_query(" /"), SearchType::Saved(_));
+        assert_matches!(parse_search_query("of things/stuff"), SearchType::Saved(_));
     }
 }
 
