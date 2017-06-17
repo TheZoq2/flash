@@ -169,7 +169,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
                                 file_index,
                                 &new_location
                             );
-                    Ok(Response::with((status::Ok, "")))
+                    Ok(Response::with((status::Ok, "\"ok\"")))
                 },
             }
         }

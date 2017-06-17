@@ -75,17 +75,6 @@ pub fn establish_connection() -> PgConnection
         .expect(&format!("Error connecting to {}", database_url))
 }
 
-//TODO: Rewrite this comment 
-/**
-    Process for saving an image:
-
-    Reserve an ID in the database and store the tags of the image in it.
-
-    Start a worker thread that generates the data that takes a lot of time and stores
-    that data in the database
- */
-
-
 fn main()
 {
     //let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
