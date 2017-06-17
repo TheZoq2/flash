@@ -21,7 +21,7 @@ use std::sync::mpsc::{channel, Receiver};
 
 use file_database;
 use file_database::{FileDatabase};
-use file_list::{FileList, FileListList, FileListSource, FileLocation};
+use file_list::{FileListList, FileLocation};
 use file_util::{sanitize_tag_names};
 use file_util::{
     generate_thumbnail,
@@ -90,32 +90,6 @@ enum FileSaveRequestResult
 ////////////////////////////////////////////////////////////////////////////////
 //                      Public request handlers
 ////////////////////////////////////////////////////////////////////////////////
-
-/**
-  Handles requests for creating a filelist from a directory path
-*/
-pub fn directory_list_handler(request: &mut Request) -> IronResult<Response>
-{
-    let path = get_get_variable(request, "path")?;
-
-    let file_list_list = request.get::<Write<FileListList>>().unwrap();
-
-    // Check if path is a valid path
-    let path = PathBuf::from(&path);
-
-    // Lock the file list and insert a new list
-    let file_list_id = {
-        let mut file_list_list = file_list_list.lock().unwrap();
-
-        match file_list_list.get_id_with_source(FileListSource::Folder(path.clone()))
-        {
-            Some(id) => id,
-            None => file_list_list.add(FileList::from_directory(path))
-        }
-    };
-
-    reply_to_file_list_request(file_list_list, file_list_id)
-}
 
 /**
   Handles requests for actions dealing with specific entries in file lists
@@ -464,6 +438,8 @@ fn get_file_list_object(file_list_list: &FileListList, list_id: usize, file_inde
 mod file_request_tests
 {
     use super::*;
+
+    use file_list::{FileList, FileListSource};
 
 
     fn dummy_database_entry(file_path: &str, thumbnail_path: &str)

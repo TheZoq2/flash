@@ -4,11 +4,16 @@ use std::string::String;
 use dotenv::dotenv;
 use std::env;
 
+use iron::typemap::Key;
+
+use std::path::PathBuf;
+
 #[derive(RustcEncodable, RustcDecodable)]
 pub struct Settings
 {
     file_storage_path: String,
-    port: u32
+    port: u32,
+    file_read_path: PathBuf
 }
 
 impl Settings
@@ -25,10 +30,18 @@ impl Settings
             .parse::<u32>()
             .expect("FLASH_PORT must be a positive integer");
 
+        let file_read_path = {
+            let as_str = env::var("FILE_READ_PATH")
+                .expect("FILE_READ_PATH must be set, is .env missing?");
+
+            PathBuf::from(as_str)
+        };
+
         Settings
         {
             file_storage_path,
-            port
+            port,
+            file_read_path
         }
     }
 
@@ -41,4 +54,11 @@ impl Settings
     {
         self.port
     }
+
+    pub fn get_file_read_path(&self) -> PathBuf
+    {
+        self.file_read_path.clone()
+    }
 }
+
+impl Key for Settings { type Value = Settings; }

@@ -33,7 +33,7 @@ mod test_macros;
 mod file_list;
 mod file_database;
 mod settings;
-mod album_handler;
+mod search_handler;
 mod file_util;
 mod file_request_handlers;
 mod file_request_error;
@@ -56,7 +56,7 @@ use std::path::{Path};
 
 use file_database::FileDatabase;
 
-use persistent::{Write};
+use persistent::{Write, Read};
 
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
@@ -84,6 +84,8 @@ fn main()
 
     let settings = settings::Settings::from_env();
 
+    let port = settings.get_port();
+
     //Loading or creating the database
     let db = FileDatabase::new(establish_connection(), settings.get_file_storage_path());
 
@@ -93,15 +95,14 @@ fn main()
     mount.mount("/", Static::new(Path::new("frontend/output")));
     mount.mount("/file", Static::new(Path::new(&target_dir)));
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())));
-    mount.mount("/file_list/from_path", file_request_handlers::directory_list_handler);
-    mount.mount("/search", album_handler::handle_image_search);
+    mount.mount("/search", search_handler::handle_file_search);
     mount.mount("file_list", file_request_handlers::get_file_list_handler);
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list::FileListList::new()));
     chain.link(Write::<FileDatabase>::both(db));
+    chain.link(Read::<settings::Settings>::both(settings));
 
-    let port = settings.get_port();
     let url = format!("localhost:{}", port);
     match Iron::new(chain).http(url)
     {
