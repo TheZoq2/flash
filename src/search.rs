@@ -2,6 +2,8 @@
 extern crate lazy_static;
 extern crate regex;
 
+use chrono::{NaiveDate, NaiveTime, NaiveDateTime};
+
 use regex::Regex;
 
 use std::borrow::Cow;
@@ -14,7 +16,7 @@ use std::borrow::Cow;
 pub enum SearchType
 {
     Path(String),
-    Saved((Vec<String>, Vec<String>))
+    Saved((Vec<String>, Vec<String>), Option<(NaiveDateTime, NaiveDateTime)>)
 }
 
 
@@ -34,7 +36,7 @@ pub fn parse_search_query(query: &str) -> SearchType
     }
     else
     {
-        SearchType::Saved(get_tags_from_query(query))
+        SearchType::Saved(get_tags_from_query(query), None)
     }
 }
 
@@ -279,5 +281,17 @@ mod private_query_tests
 
         assert_eq!(tags, vec!());
         assert_eq!(negated, mapvec!(String::from: "snödroppe"));
+    }
+
+
+    #[test]
+    fn absolute_dates()
+    {
+        let date = NaiveDateTime::new(NaiveDate::from_ymd(2017, 6, 25), NaiveTime::from_hms(12, 33, 15));
+
+        {
+            let query = "from today";
+            let result = get_date_from_query(NaiveDateTime::new(NaiveDate::from_ymd(2017)))
+        }
     }
 }

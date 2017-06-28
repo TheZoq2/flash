@@ -27,7 +27,7 @@ pub fn handle_file_search(request: &mut Request) -> IronResult<Response>
     match parse_search_query(&query)
     {
         SearchType::Path(path) => handle_directory_search(request, path),
-        SearchType::Saved(tags) => handle_search_for_saved_files(request, tags)
+        SearchType::Saved(tags, interval) => handle_search_for_saved_files(request, tags)
     }
 }
 
