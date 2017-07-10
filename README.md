@@ -27,7 +27,10 @@ To search for previously saved photos, search for `of <list of tags>`
 
 To add new photos, search for `/path/to/subfolder/of/FILE_READ_PATH`
 
+## Future plans
 
-
-
+The files are currently stored on a server in their original format. This works when
+the server and the client are on the same computer or network but might be too
+slow for mobile connections. A decentralised system where files are cached on each
+device might be a good idea.
 
