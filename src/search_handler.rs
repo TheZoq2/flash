@@ -26,7 +26,7 @@ pub fn handle_file_search(request: &mut Request) -> IronResult<Response>
 
     match parse_search_query(&query)
     {
-        SearchType::Path(path) => handle_directory_search(request, path),
+        SearchType::Path(path) => handle_directory_search(request, &path),
         SearchType::Saved(tags) => handle_search_for_saved_files(request, tags)
     }
 }
@@ -61,7 +61,7 @@ fn handle_search_for_saved_files(request: &mut Request, searched_tags: (Vec<Stri
     reply_to_file_list_request(file_list_list, file_list_id)
 }
 
-fn handle_directory_search(request: &mut Request, path_str: String) -> IronResult<Response>
+fn handle_directory_search(request: &mut Request, path_str: &str) -> IronResult<Response>
 {
     let file_list_list = request.get::<Write<FileListList>>().unwrap();
 

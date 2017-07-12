@@ -147,6 +147,7 @@ pub enum Time {
     Interval(u32, u32),
 }
 
+/*
 pub fn get_time_from_query(query: &str) -> Time
 {
     lazy_static!{
@@ -160,6 +161,7 @@ pub fn get_time_from_query(query: &str) -> Time
     }
     unimplemented!()
 }
+*/
 
 #[cfg(test)]
 mod public_query_tests
