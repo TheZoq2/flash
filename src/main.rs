@@ -9,6 +9,8 @@ extern crate image;
 #[macro_use]
 extern crate lazy_static;
 extern crate regex;
+#[macro_use]
+extern crate error_chain;
 
 #[macro_use]
 extern crate diesel;
@@ -20,6 +22,7 @@ extern crate glob;
 extern crate rustc_serialize;
 extern crate chrono;
 
+// Imports used by tests
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
@@ -27,6 +30,8 @@ extern crate assert_matches;
 #[macro_use]
 extern crate pretty_assertions;
 #[cfg(test)]
+
+// Modules used by tests
 #[macro_use]
 mod test_macros;
 

@@ -261,7 +261,10 @@ pub mod db_test_helpers
             }
         };
 
-        let fdb = FileDatabase::new(establish_connection(), PathBuf::from(test_file_storage_path));
+        let fdb = FileDatabase::new(
+                establish_connection(),
+                PathBuf::from(test_file_storage_path)
+            );
 
         fdb
     }
