@@ -18,7 +18,7 @@ use glob::glob;
 /**
   Enum for different types of media
 */
-#[derive(RustcDecodable, RustcEncodable, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum MediaType
 {
     Image,

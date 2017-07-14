@@ -17,7 +17,6 @@ extern crate dotenv;
 extern crate diesel_codegen;
 
 extern crate glob;
-extern crate rustc_serialize;
 extern crate chrono;
 
 #[cfg(test)]

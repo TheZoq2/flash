@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use rustc_serialize::json;
-
 use serde_json;
 
 use iron::*;
@@ -206,7 +204,7 @@ fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, FileReque
     //Get the important information from the request.
     let tag_string = get_get_variable(request, "tags")?;
 
-    match json::decode::<Vec<String>>(&tag_string){
+    match serde_json::from_str::<Vec<String>>(&tag_string){
         Ok(result) => Ok(sanitize_tag_names(&result).unwrap()),
         Err(e) => {
             Err(err_invalid_variable_type("tags", &format!("{:?}", e)))

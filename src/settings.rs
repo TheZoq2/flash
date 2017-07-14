@@ -5,7 +5,6 @@ use iron::typemap::Key;
 
 use std::path::PathBuf;
 
-#[derive(RustcEncodable, RustcDecodable)]
 pub struct Settings
 {
     file_storage_path: PathBuf,
