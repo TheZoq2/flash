@@ -279,7 +279,7 @@ mod private_query_tests
 
         let (tags, negated) = separate_negated_tags(&tags);
 
-        assert_eq!(tags, vec!());
+        assert_eq!(tags, ::std::vec::Vec::<String>::new());
         assert_eq!(negated, mapvec!(String::from: "snödroppe"));
     }
 }

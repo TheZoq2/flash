@@ -30,7 +30,7 @@ serde_json = "1.0.2"
 error-chain = "0.10"
 
 [dependencies.chrono]
-version = "*"
+version = "0.3.*"
 features = ["rustc-serialize"]
 
 
