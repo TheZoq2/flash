@@ -12,7 +12,6 @@ urlencoded = "*"
 
 rand = "*"
 glob = "*"
-rustc-serialize = "*"
 regex = "*"
 lazy_static = "*"
 
@@ -30,7 +29,6 @@ serde_json = "1.0.2"
 
 [dependencies.chrono]
 version = "0.3.*"
-features = ["rustc-serialize"]
 
 
 

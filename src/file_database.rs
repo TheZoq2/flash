@@ -1,7 +1,6 @@
 
 extern crate image;
 extern crate rand;
-extern crate rustc_serialize;
 
 use std::vec::Vec;
 
@@ -20,7 +19,7 @@ use std::path::PathBuf;
 /**
   A reference to a file stored in the file database
  */
-#[derive(Queryable, Identifiable, Associations, Clone, RustcEncodable, PartialEq, Debug)]
+#[derive(Queryable, Identifiable, Associations, Clone, PartialEq, Debug)]
 pub struct File
 {
     // The unique ID of this file in the db
