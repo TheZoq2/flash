@@ -147,6 +147,7 @@ pub enum Time {
     Interval(u32, u32),
 }
 
+/*
 pub fn get_time_from_query(query: &str) -> Time
 {
     lazy_static!{
@@ -160,6 +161,7 @@ pub fn get_time_from_query(query: &str) -> Time
     }
     unimplemented!()
 }
+*/
 
 #[cfg(test)]
 mod public_query_tests
@@ -277,7 +279,7 @@ mod private_query_tests
 
         let (tags, negated) = separate_negated_tags(&tags);
 
-        assert_eq!(tags, vec!());
+        assert_eq!(tags, ::std::vec::Vec::<String>::new());
         assert_eq!(negated, mapvec!(String::from: "snödroppe"));
     }
 }

@@ -70,14 +70,15 @@ impl<'a> NewFile<'a>
 pub struct FileDatabase
 {
     connection: PgConnection,
-    file_save_path: String
+    file_save_path: PathBuf
 }
 impl Key for FileDatabase { type Value = FileDatabase; }
 
 impl FileDatabase
 {
-    pub fn new(connection: PgConnection, file_save_path: String) -> FileDatabase
+    pub fn new(connection: PgConnection, file_save_path: PathBuf) -> FileDatabase
     {
+        // If the destination folder does not exist, it should be created
         FileDatabase{
             connection,
             file_save_path
@@ -178,7 +179,7 @@ impl FileDatabase
     */
     pub fn get_file_save_path(&self) -> PathBuf
     {
-        PathBuf::from(self.file_save_path.clone())
+        self.file_save_path.clone()
     }
 
     fn get_file_amount(&self) -> i64
@@ -260,7 +261,7 @@ pub mod db_test_helpers
             }
         };
 
-        let fdb = FileDatabase::new(establish_connection(), String::from(test_file_storage_path));
+        let fdb = FileDatabase::new(establish_connection(), PathBuf::from(test_file_storage_path));
 
         fdb
     }

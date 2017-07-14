@@ -1,6 +1,3 @@
-
-use std::string::String;
-
 use dotenv::dotenv;
 use std::env;
 
@@ -11,7 +8,7 @@ use std::path::PathBuf;
 #[derive(RustcEncodable, RustcDecodable)]
 pub struct Settings
 {
-    file_storage_path: String,
+    file_storage_path: PathBuf,
     port: u32,
     file_read_path: PathBuf
 }
@@ -22,11 +19,15 @@ impl Settings
     {
         dotenv().ok();
 
-        let file_storage_path = env::var("FILE_STORAGE_PATH")
-            .expect("FILE_STORAGE_PATH must be set, is .env missing?");
+        let file_storage_path = {
+            let as_str = env::var("FILE_STORAGE_PATH")
+                    .expect("FILE_STORAGE_PATH must be set, is .env missing?");
+
+            PathBuf::from(as_str)
+        };
 
         let port = env::var("FLASH_PORT")
-            .unwrap_or("3000".to_owned())
+            .unwrap_or_else(|_| "3000".to_owned())
             .parse::<u32>()
             .expect("FLASH_PORT must be a positive integer");
 
@@ -45,7 +46,7 @@ impl Settings
         }
     }
 
-    pub fn get_file_storage_path(&self) -> String
+    pub fn get_file_storage_path(&self) -> PathBuf
     {
         self.file_storage_path.clone()
     }
