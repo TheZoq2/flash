@@ -138,6 +138,13 @@ impl FileListList
         }
     }
 
+    pub fn from_lists(lists: Vec<FileList>) -> FileListList
+    {
+        FileListList {
+            lists
+        }
+    }
+
     pub fn get(&self, index: usize) -> Option<&FileList>
     {
         self.lists.get(index)
@@ -188,6 +195,11 @@ impl FileListList
                     }
                 })
             .collect()
+    }
+
+    pub fn get_lists(&self) -> &Vec<FileList>
+    {
+        return &self.lists;
     }
 }
 
