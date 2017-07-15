@@ -31,6 +31,7 @@ mod test_macros;
 
 
 mod file_list;
+mod persistent_file_list;
 mod file_database;
 mod settings;
 mod search_handler;

@@ -112,33 +112,6 @@ impl FileList
     }
 }
 
-
-
-#[derive(Serialize)]
-enum SaveableFileLocation
-{
-    Unsaved(PathBuf),
-    Database(i32)
-}
-
-pub fn save_file_list(list: &FileList, filename: PathBuf)
-{
-    let saveable = list.iter()
-        .map(|location| {
-            match *location
-            {
-                FileLocation::Unsaved(path) => SaveableFileLocation::Unsaved(path),
-                FileLocation::Database(entry) => SaveableFileLocation::Database(entry.id)
-            }
-        })
-        .collect();
-
-    let as_str = serde_json::to_string(saveable);
-}
-
-
-
-
 /**
   A list of file lists
 */
