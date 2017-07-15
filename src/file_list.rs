@@ -22,7 +22,7 @@ pub enum FileLocation
 /**
   Original source of creation of a `FileList`.
 */
-#[derive(Clone, PartialEq, Eq, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum FileListSource
 {
     ///Result of a search query
@@ -109,6 +109,15 @@ impl FileList
     pub fn len(&self) -> usize
     {
         self.files.len()
+    }
+
+    pub fn get_files(&self) -> &Vec<FileLocation>
+    {
+        return &self.files;
+    }
+    pub fn get_source(&self) -> &FileListSource
+    {
+        return &self.source;
     }
 }
 

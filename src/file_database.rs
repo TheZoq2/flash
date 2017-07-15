@@ -89,7 +89,7 @@ impl FileDatabase
       file is added to the tags which it should be part of. If some of those tags don't 
       exist yet, then they are added
 
-      Returns the ID of the added image
+      Returns a `File` struct of the added image
      */
     //TODO: Handle errors when writing to the database
     pub fn add_new_file(&mut self,
