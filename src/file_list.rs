@@ -15,7 +15,7 @@ pub enum FileLocation
 {
     ///Not yet stored in the database.
     Unsaved(PathBuf),
-    ///Stored in the database with the specified ID
+    ///Stored in the database as the specified file entry
     Database(file_database::File)
 }
 
@@ -110,6 +110,30 @@ impl FileList
     {
         self.files.len()
     }
+}
+
+
+
+#[derive(Serialize)]
+enum SaveableFileLocation
+{
+    Unsaved(PathBuf),
+    Database(i32)
+}
+
+pub fn save_file_list(list: &FileList, filename: PathBuf)
+{
+    let saveable = list.iter()
+        .map(|location| {
+            match *location
+            {
+                FileLocation::Unsaved(path) => SaveableFileLocation::Unsaved(path),
+                FileLocation::Database(entry) => SaveableFileLocation::Database(entry.id)
+            }
+        })
+        .collect();
+
+    let as_str = serde_json::to_string(saveable);
 }
 
 
