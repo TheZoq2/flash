@@ -3,9 +3,10 @@ extern crate serde_json;
 use file_list::{FileList, FileLocation, FileListSource, FileListList};
 use file_database;
 
-use std::path::{PathBuf, Path};
+use std::path::{PathBuf};
 
 use std::{io, fs};
+use std::io::Write;
 
 #[derive(Serialize, Deserialize)]
 enum SaveableFileLocation
@@ -21,16 +22,16 @@ struct SaveableFileList
 }
 
 /**
-  Converts a FileList to a json string
+  Converts a `FileList` to a json string
 */
 fn saveable_file_list(list: &FileList) -> SaveableFileList
 {
     let files = list.get_files().iter()
         .map(|location| {
-            match location
+            match *location
             {
-                &FileLocation::Unsaved(ref path) => SaveableFileLocation::Unsaved(path.clone()),
-                &FileLocation::Database(ref entry) => SaveableFileLocation::Database(entry.id)
+                FileLocation::Unsaved(ref path) => SaveableFileLocation::Unsaved(path.clone()),
+                FileLocation::Database(ref entry) => SaveableFileLocation::Database(entry.id)
             }
         })
         .collect();
@@ -73,14 +74,14 @@ fn list_from_saveable(saveable_list: SaveableFileList, db: &file_database::FileD
 
 
 /**
-  Generates a vector of `SaveableFileList`s from a FileListList. Only file lists
+  Generates a vector of `SaveableFileList`s from a `FileListList`. Only file lists
   originating from a directory will be saved
 */
 fn saveable_file_list_list(list: &FileListList) -> Vec<SaveableFileList>
 {
     list.get_lists().iter()
-        .filter(|file_list| match file_list.get_source(){
-            &FileListSource::Search => false,
+        .filter(|file_list| match *file_list.get_source(){
+            FileListSource::Search => false,
             _ => true
         })
         .map(saveable_file_list)
@@ -107,9 +108,9 @@ pub fn save_file_list_list(list: &FileListList, destination: PathBuf) -> Result<
 {
     let mut file = fs::File::open(destination)?;
 
-    let as_json = serde_json::from_value(saveable_file_list)?;
+    let as_json = serde_json::to_string(&saveable_file_list_list(list))?;
 
-    file.write_all(as_json.into_bytes())
+    file.write_all(&as_json.into_bytes())
 }
 
 

@@ -113,11 +113,11 @@ impl FileList
 
     pub fn get_files(&self) -> &Vec<FileLocation>
     {
-        return &self.files;
+        &self.files
     }
     pub fn get_source(&self) -> &FileListSource
     {
-        return &self.source;
+        &self.source
     }
 }
 
@@ -199,7 +199,7 @@ impl FileListList
 
     pub fn get_lists(&self) -> &Vec<FileList>
     {
-        return &self.lists;
+        &self.lists
     }
 }
 
