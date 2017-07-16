@@ -5,6 +5,8 @@ use file_database;
 
 use std::path::{PathBuf, Path};
 
+use std::{io, fs};
+
 #[derive(Serialize, Deserialize)]
 enum SaveableFileLocation
 {
@@ -71,15 +73,23 @@ fn list_from_saveable(saveable_list: SaveableFileList, db: &file_database::FileD
 
 
 /**
-  Generates a vector of `SaveableFileList`s from a FileListList
+  Generates a vector of `SaveableFileList`s from a FileListList. Only file lists
+  originating from a directory will be saved
 */
 fn saveable_file_list_list(list: &FileListList) -> Vec<SaveableFileList>
 {
     list.get_lists().iter()
+        .filter(|file_list| match file_list.get_source(){
+            &FileListSource::Search => false,
+            _ => true
+        })
         .map(saveable_file_list)
         .collect()
 }
 
+/**
+  Converts a vector of `SaveableFileList` to a `FileListList`
+*/
 fn file_list_list_from_saveable(saveable: Vec<SaveableFileList>, db: &file_database::FileDatabase)
     -> FileListList
 {
@@ -88,6 +98,18 @@ fn file_list_list_from_saveable(saveable: Vec<SaveableFileList>, db: &file_datab
         .collect();
 
     FileListList::from_lists(file_lists)
+}
+
+/**
+  Saves a `FileListList` to the specified directory
+*/
+pub fn save_file_list_list(list: &FileListList, destination: PathBuf) -> Result<(), io::Error>
+{
+    let mut file = fs::File::open(destination)?;
+
+    let as_json = serde_json::from_value(saveable_file_list)?;
+
+    file.write_all(as_json.into_bytes())
 }
 
 
@@ -122,6 +144,8 @@ mod file_list_persistence_tests
     {
         for (original, read) in list1.get_files().iter().zip(list2.get_files().iter())
         {
+            assert_eq!(list1.get_source(), list2.get_source());
+
             assert_eq!(original, read);
         }
     }
@@ -141,7 +165,6 @@ mod file_list_persistence_tests
             let saveable = saveable_file_list(&file_list);
             let decoded = list_from_saveable(saveable, db);
 
-            assert_eq!(file_list.get_source(), decoded.get_source());
 
             assert_lists_are_equal(&file_list, &decoded);
         })
@@ -156,7 +179,7 @@ mod file_list_persistence_tests
                                 FileLocation::Database(db.add_new_file("filename", "thumbname", &vec!(), 0)),
                                 FileLocation::Database(db.add_new_file("filename", "thumbname", &vec!(), 0)),
                                 FileLocation::Unsaved(PathBuf::from("path"))
-                            ), FileListSource::Search),
+                            ), FileListSource::Folder(PathBuf::from("test/media"))),
                     FileList::from_directory(PathBuf::from("test/media"))
                 );
 
