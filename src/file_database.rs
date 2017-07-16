@@ -239,7 +239,7 @@ pub mod db_test_helpers
             .expect(&format!("Error connecting to {}", database_url))
     }
 
-    fn get_test_storage_path() -> String
+    pub fn get_test_storage_path() -> String
     {
         dotenv().ok();
         env::var("TEST_FILE_STORAGE_PATH")
