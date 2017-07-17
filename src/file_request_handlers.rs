@@ -20,6 +20,7 @@ use std::sync::mpsc::{channel, Receiver};
 use file_database;
 use file_database::{FileDatabase};
 use file_list::{FileListList, FileLocation};
+use persistent_file_list::save_file_list_list;
 use file_util::{sanitize_tag_names};
 use file_util::{
     generate_thumbnail,
@@ -141,6 +142,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
                                 file_index,
                                 &new_location
                             );
+
                     Ok(Response::with((status::Ok, "\"ok\"")))
                 },
             }

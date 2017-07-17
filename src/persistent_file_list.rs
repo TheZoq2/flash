@@ -10,14 +10,18 @@ use std::io::{Write, Read};
 
 use error::{Result};
 
+use std::sync::{Mutex, Arc, mpsc};
+use std::thread;
+
 #[derive(Serialize, Deserialize)]
-enum SaveableFileLocation
+pub enum SaveableFileLocation
 {
     Unsaved(PathBuf),
     Database(i32)
 }
+
 #[derive(Serialize, Deserialize)]
-struct SaveableFileList
+pub struct SaveableFileList
 {
     pub source: FileListSource,
     pub files: Vec<SaveableFileLocation>
@@ -106,11 +110,11 @@ fn file_list_list_from_saveable(saveable: Vec<SaveableFileList>, db: &file_datab
 /**
   Saves a `FileListList` to the specified file
 */
-pub fn save_file_list_list(list: &FileListList, destination: &Path) -> Result<()>
+pub fn save_file_list_list(list: &Vec<SaveableFileList>, destination: &Path) -> Result<()>
 {
     let mut file = fs::File::create(destination)?;
 
-    let as_json = serde_json::to_string(&saveable_file_list_list(list))?;
+    let as_json = serde_json::to_string(&list)?;
 
     Ok(file.write_all(&as_json.into_bytes())?)
 }
@@ -138,6 +142,39 @@ pub fn read_file_list_list(file: &Path, db: &file_database::FileDatabase) -> Res
     }
 }
 
+pub enum FileListListWorkerCommand
+{
+    Save(Vec<SaveableFileList>)
+}
+
+/**
+  A worker thread for taking care of asyncronous changes to file lists
+*/
+pub fn start_file_list_worker(save_path: PathBuf) -> mpsc::Sender<FileListListWorkerCommand>
+{
+    let (sender, receiver) = mpsc::channel();
+
+    thread::spawn(move || {
+        loop
+        {
+            // Listen for new messages on the channel, exit the thread if
+            // the sender has disconnected
+            let message = match receiver.recv()
+            {
+                Ok(msg) => msg,
+                Err(_) => break
+            };
+
+            match message
+            {
+                FileListListWorkerCommand::Save(list) =>
+                    save_file_list_list(&list, &save_path).unwrap()
+            }
+        }
+    });
+
+    sender
+}
 
 
 
@@ -235,7 +272,7 @@ mod file_list_persistence_tests
             let file_list_list = FileListList::from_lists(file_lists);
 
             let save_path = db.get_file_save_path().join(&PathBuf::from("persistent_file_list.json"));
-            save_file_list_list(&file_list_list, &save_path).unwrap();
+            save_file_list_list(&saveable_file_list_list(&file_list_list), &save_path).unwrap();
 
             let decoded = read_file_list_list(&save_path, db).unwrap();
 

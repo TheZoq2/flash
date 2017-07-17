@@ -59,7 +59,7 @@ extern crate serde_json;
 use iron::*;
 use staticfile::Static;
 use mount::Mount;
-use std::path::{Path};
+use std::path::{Path, PathBuf};
 
 use file_database::FileDatabase;
 
@@ -82,6 +82,7 @@ pub fn establish_connection() -> PgConnection
         .expect(&format!("Error connecting to {}", database_url))
 }
 
+
 fn main()
 {
     //let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
@@ -91,10 +92,19 @@ fn main()
 
     let settings = settings::Settings::from_env();
 
-    let port = settings.get_port();
-
     //Loading or creating the database
     let db = FileDatabase::new(establish_connection(), settings.get_file_storage_path());
+
+
+
+    // Read the persistent file list if it exists
+    let file_list_save_path = settings.get_file_storage_path()
+            .join(&PathBuf::from("file_list_lists.json"));
+    let file_list_list = persistent_file_list::read_file_list_list(&file_list_save_path, &db).unwrap();
+
+    let file_list_worker = persistent_file_list::start_file_list_worker(file_list_save_path);
+
+    let port = settings.get_port();
 
     let mut mount = Mount::new();
 
@@ -105,8 +115,10 @@ fn main()
     mount.mount("/search", search_handler::handle_file_search);
     mount.mount("file_list", file_request_handlers::get_file_list_handler);
 
+    let file_list_link = Write::<file_list::FileListList>::both(file_list_list);
+
     let mut chain = Chain::new(mount);
-    chain.link(Write::<file_list::FileListList>::both(file_list::FileListList::new()));
+    chain.link(file_list_link);
     chain.link(Write::<FileDatabase>::both(db));
     chain.link(Read::<settings::Settings>::both(settings));
 
@@ -115,7 +127,7 @@ fn main()
     {
         Ok(_) => {
             println!("Server running on port {}", port);
-            println!("Open localhost/tag_editor.html or album.html")
+            println!("Open localhost/tag_editor.html or album.html");
         },
         Err(e) => println!("Failed to start iron: {}", e)
     }
