@@ -69,8 +69,6 @@ use persistent::{Write, Read};
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
 
-use std::sync::mpsc;
-
 use dotenv::dotenv;
 use std::env;
 
@@ -105,7 +103,7 @@ fn main()
             .join(&PathBuf::from("file_list_lists.json"));
     let file_list_list = persistent_file_list::read_file_list_list(&file_list_save_path, &db).unwrap();
 
-    let file_list_worker_sender = file_list_worker::start_file_list_worker(file_list_save_path);
+    let file_list_worker_commander = file_list_worker::start_worker(file_list_save_path);
 
     let port = settings.get_port();
 
@@ -121,8 +119,7 @@ fn main()
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list_list));
     chain.link(
-        Write::<mpsc::Sender<file_list_worker::FileListListWorkerCommand>>
-             ::both(file_list_worker_sender)
+        Write::<file_list_worker::Commander>::both(file_list_worker_commander)
     );
     chain.link(Write::<FileDatabase>::both(db));
     chain.link(Read::<settings::Settings>::both(settings));

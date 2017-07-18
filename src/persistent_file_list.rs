@@ -10,11 +10,6 @@ use std::io::{Write, Read};
 
 use error::{Result};
 
-use std::sync::{mpsc};
-use std::thread;
-
-use iron::typemap::Key;
-
 #[derive(Serialize, Deserialize)]
 pub enum SaveableFileLocation
 {
@@ -143,39 +138,6 @@ pub fn read_file_list_list(file: &Path, db: &file_database::FileDatabase) -> Res
         Ok(FileListList::new())
     }
 }
-
-pub enum FileListListWorkerCommand
-{
-    Save(Vec<SaveableFileList>)
-}
-
-impl Key for mpsc::Sender<FileListListWorkerCommand> { type Value = FileListListWorkerCommand; }
-
-/**
-  A worker thread for taking care of asyncronous changes to file lists
-*/
-pub fn start_file_list_worker(save_path: PathBuf) -> mpsc::Sender<FileListListWorkerCommand>
-{
-    let (sender, receiver) = mpsc::channel();
-
-    thread::spawn(move || {
-        // Listen for new messages on the channel, exit the thread if
-        // the sender has disconnected
-        while let Ok(message) = receiver.recv()
-        {
-            // Handle the commands
-            match message
-            {
-                FileListListWorkerCommand::Save(list) =>
-                    save_file_list_list(&list, &save_path).unwrap()
-            }
-        }
-    });
-
-    sender
-}
-
-
 
 #[cfg(test)]
 mod file_list_persistence_tests
