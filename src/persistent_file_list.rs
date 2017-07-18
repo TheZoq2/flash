@@ -80,7 +80,7 @@ fn list_from_saveable(saveable_list: SaveableFileList, db: &file_database::FileD
   Generates a vector of `SaveableFileList`s from a `FileListList`. Only file lists
   originating from a directory will be saved
 */
-fn saveable_file_list_list(list: &FileListList) -> Vec<SaveableFileList>
+pub fn saveable_file_list_list(list: &FileListList) -> Vec<SaveableFileList>
 {
     list.get_lists().iter()
         .filter(|file_list| match *file_list.get_source(){
