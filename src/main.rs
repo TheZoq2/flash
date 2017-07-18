@@ -37,6 +37,7 @@ mod test_macros;
 
 mod file_list;
 mod persistent_file_list;
+mod file_list_worker;
 mod file_database;
 mod settings;
 mod search_handler;
@@ -67,6 +68,8 @@ use persistent::{Write, Read};
 
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
+
+use std::sync::mpsc;
 
 use dotenv::dotenv;
 use std::env;
@@ -102,7 +105,7 @@ fn main()
             .join(&PathBuf::from("file_list_lists.json"));
     let file_list_list = persistent_file_list::read_file_list_list(&file_list_save_path, &db).unwrap();
 
-    let file_list_worker = persistent_file_list::start_file_list_worker(file_list_save_path);
+    let file_list_worker_sender = file_list_worker::start_file_list_worker(file_list_save_path);
 
     let port = settings.get_port();
 
@@ -115,10 +118,12 @@ fn main()
     mount.mount("/search", search_handler::handle_file_search);
     mount.mount("file_list", file_request_handlers::get_file_list_handler);
 
-    let file_list_link = Write::<file_list::FileListList>::both(file_list_list);
-
     let mut chain = Chain::new(mount);
-    chain.link(file_list_link);
+    chain.link(Write::<file_list::FileListList>::both(file_list_list));
+    chain.link(
+        Write::<mpsc::Sender<file_list_worker::FileListListWorkerCommand>>
+             ::both(file_list_worker_sender)
+    );
     chain.link(Write::<FileDatabase>::both(db));
     chain.link(Read::<settings::Settings>::both(settings));
 

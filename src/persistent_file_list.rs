@@ -10,8 +10,10 @@ use std::io::{Write, Read};
 
 use error::{Result};
 
-use std::sync::{Mutex, Arc, mpsc};
+use std::sync::{mpsc};
 use std::thread;
+
+use iron::typemap::Key;
 
 #[derive(Serialize, Deserialize)]
 pub enum SaveableFileLocation
@@ -110,7 +112,7 @@ fn file_list_list_from_saveable(saveable: Vec<SaveableFileList>, db: &file_datab
 /**
   Saves a `FileListList` to the specified file
 */
-pub fn save_file_list_list(list: &Vec<SaveableFileList>, destination: &Path) -> Result<()>
+pub fn save_file_list_list(list: &[SaveableFileList], destination: &Path) -> Result<()>
 {
     let mut file = fs::File::create(destination)?;
 
@@ -147,6 +149,8 @@ pub enum FileListListWorkerCommand
     Save(Vec<SaveableFileList>)
 }
 
+impl Key for mpsc::Sender<FileListListWorkerCommand> { type Value = FileListListWorkerCommand; }
+
 /**
   A worker thread for taking care of asyncronous changes to file lists
 */
@@ -155,16 +159,11 @@ pub fn start_file_list_worker(save_path: PathBuf) -> mpsc::Sender<FileListListWo
     let (sender, receiver) = mpsc::channel();
 
     thread::spawn(move || {
-        loop
+        // Listen for new messages on the channel, exit the thread if
+        // the sender has disconnected
+        while let Ok(message) = receiver.recv()
         {
-            // Listen for new messages on the channel, exit the thread if
-            // the sender has disconnected
-            let message = match receiver.recv()
-            {
-                Ok(msg) => msg,
-                Err(_) => break
-            };
-
+            // Handle the commands
             match message
             {
                 FileListListWorkerCommand::Save(list) =>
