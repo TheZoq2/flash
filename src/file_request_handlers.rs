@@ -20,6 +20,8 @@ use std::sync::mpsc::{channel, Receiver};
 use file_database;
 use file_database::{FileDatabase};
 use file_list::{FileListList, FileLocation};
+use file_list_worker;
+use persistent_file_list;
 use file_util::{sanitize_tag_names};
 use file_util::{
     generate_thumbnail,
@@ -135,12 +137,16 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response>
                 FileSaveRequestResult::NewDatabaseEntry(new_location, _) 
                 | FileSaveRequestResult::UpdatedDatabaseEntry(new_location)
                 => {
+                    let mut file_list_list = request.get::<Write<FileListList>>().unwrap();
                     update_file_list(
-                                &mut request.get::<Write<FileListList>>().unwrap(),
+                                &mut file_list_list,
                                 list_id,
                                 file_index,
                                 &new_location
                             );
+
+                    send_file_list_save_command(request);
+
                     Ok(Response::with((status::Ok, "\"ok\"")))
                 },
             }
@@ -210,6 +216,28 @@ fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, FileReque
             Err(err_invalid_variable_type("tags", &format!("{:?}", e)))
         }
     }
+}
+
+
+fn send_file_list_save_command(request: &mut Request)
+{
+    let file_list_list = request.get::<Write<FileListList>>().unwrap();
+
+    // Save the current file lists to disk
+    let saveable_file_list = {
+        let fll = file_list_list.lock().unwrap();
+
+        persistent_file_list::saveable_file_list_list(&fll)
+    };
+
+    let flw = request.get::<Write<file_list_worker::Commander>>()
+        .unwrap();
+
+    flw
+        .lock()
+        .unwrap()
+        .send(file_list_worker::Command::Save(saveable_file_list))
+        .unwrap();
 }
 
 

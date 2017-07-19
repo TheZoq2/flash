@@ -2,8 +2,6 @@ extern crate image;
 extern crate rand;
 extern crate immeta;
 
-use image::{GenericImage};
-
 use std::path::{Path, PathBuf};
 
 use std::fs::File;
@@ -92,23 +90,7 @@ pub fn get_file_extension(path: &Path) -> String
  */
 fn generate_thumbnail_from_generic_image(src: &image::DynamicImage, max_size: u32) -> image::DynamicImage
 {
-    //Calculating the dimensions of the new image
-    let src_dimensions = src.dimensions();
-    let aspect_ratio = src_dimensions.0 as f32 / src_dimensions.1 as f32;
-
-    //If the image is in landscape mode
-    let new_dimensions = if aspect_ratio > 1.
-    {
-        (max_size, (max_size as f32 / aspect_ratio) as u32)
-    }
-    else
-    {
-        ((max_size as f32 * aspect_ratio) as u32, max_size)
-    };
-
-    //Resize the image
-    //image::imageops::resize(&src, new_dimensions.0, new_dimensions.1, image::FilterType::Triangle)
-    src.resize_exact(new_dimensions.0, new_dimensions.1, image::FilterType::Triangle)
+    src.resize(max_size, max_size, image::FilterType::Nearest)
 }
 
 /**
@@ -234,6 +216,28 @@ mod thumbnail_tests
 
 }
 
+
+#[cfg(never)]
+mod thumbnail_bench
+{
+    extern crate test;
+    use self::test::Bencher;
+
+    extern crate image;
+
+
+    #[bench]
+    fn thumbnail_generation_bench(b: &mut Bencher)
+    {
+        let image = image::open("test/media/DSC_0001.JPG").unwrap();
+
+        b.iter(|| {
+            super::generate_thumbnail_from_generic_image(&image, 300);
+        })
+    }
+}
+
+
 #[cfg(test)]
 mod util_tests
 {
@@ -274,4 +278,5 @@ mod util_tests
         assert_eq!(get_mediatype(&PathBuf::from("some/path.yoloswag/1234/yolo.MOV")), MediaType::Video);
     }
 }
+
 

@@ -89,7 +89,7 @@ impl FileDatabase
       file is added to the tags which it should be part of. If some of those tags don't 
       exist yet, then they are added
 
-      Returns the ID of the added image
+      Returns a `File` struct of the added image
      */
     //TODO: Handle errors when writing to the database
     pub fn add_new_file(&mut self,
@@ -239,7 +239,7 @@ pub mod db_test_helpers
             .expect(&format!("Error connecting to {}", database_url))
     }
 
-    fn get_test_storage_path() -> String
+    pub fn get_test_storage_path() -> String
     {
         dotenv().ok();
         env::var("TEST_FILE_STORAGE_PATH")
@@ -260,7 +260,10 @@ pub mod db_test_helpers
             }
         };
 
-        let fdb = FileDatabase::new(establish_connection(), PathBuf::from(test_file_storage_path));
+        let fdb = FileDatabase::new(
+                establish_connection(),
+                PathBuf::from(test_file_storage_path)
+            );
 
         fdb
     }

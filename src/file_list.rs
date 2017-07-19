@@ -15,14 +15,14 @@ pub enum FileLocation
 {
     ///Not yet stored in the database.
     Unsaved(PathBuf),
-    ///Stored in the database with the specified ID
+    ///Stored in the database as the specified file entry
     Database(file_database::File)
 }
 
 /**
   Original source of creation of a `FileList`.
 */
-#[derive(Clone, PartialEq, Eq, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum FileListSource
 {
     ///Result of a search query
@@ -110,10 +110,16 @@ impl FileList
     {
         self.files.len()
     }
+
+    pub fn get_files(&self) -> &Vec<FileLocation>
+    {
+        &self.files
+    }
+    pub fn get_source(&self) -> &FileListSource
+    {
+        &self.source
+    }
 }
-
-
-
 
 /**
   A list of file lists
@@ -129,6 +135,13 @@ impl FileListList
     {
         FileListList {
             lists: vec!()
+        }
+    }
+
+    pub fn from_lists(lists: Vec<FileList>) -> FileListList
+    {
+        FileListList {
+            lists
         }
     }
 
@@ -182,6 +195,11 @@ impl FileListList
                     }
                 })
             .collect()
+    }
+
+    pub fn get_lists(&self) -> &Vec<FileList>
+    {
+        &self.lists
     }
 }
 
