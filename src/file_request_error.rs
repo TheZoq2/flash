@@ -9,8 +9,7 @@ use std::path::PathBuf;
 
 
 #[derive(Debug)]
-pub enum FileRequestError
-{
+pub enum FileRequestError {
     /// There is no `FileList` with the specified ID
     NoSuchList(usize),
     /// The `FileList` with `id` does not contain a file with `id`
@@ -28,60 +27,43 @@ pub enum FileRequestError
     /// got a file without one
     NoFileExtension(PathBuf),
     /// Database save error
-    DatabaseSaveError(String)
+    DatabaseSaveError(String),
 }
 
-impl fmt::Display for FileRequestError
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
-    {
+impl fmt::Display for FileRequestError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", *self)
     }
 }
 
-impl convert::From<image::ImageError> for FileRequestError
-{
-    fn from(source: image::ImageError) -> Self
-    {
+impl convert::From<image::ImageError> for FileRequestError {
+    fn from(source: image::ImageError) -> Self {
         FileRequestError::ThumbnailGenerationError(source)
     }
 }
 
-impl Error for FileRequestError
-{
-    fn description(&self) -> &str
-    {
-        match *self
-        {
-            FileRequestError::NoSuchList(_) =>
-                "Unknown file list",
-            FileRequestError::NoSuchFile(_, _) =>
-                "Unknown file",
-            FileRequestError::NoSuchVariable(_) =>
-                "Missing url variable",
-            FileRequestError::InvalidVariableType(_, _) =>
-                "Wrong url variable type",
-            FileRequestError::NoUrlEncodedQuery =>
-                "No url parameters",
-            FileRequestError::ThumbnailGenerationError(_) =>
-                "Failed to generate thumbnail",
-            FileRequestError::NoFileExtension(_) =>
-                "The specified path does not have an extension",
-            FileRequestError::DatabaseSaveError(_) =>
-                "There was an error saving to the database"
+impl Error for FileRequestError {
+    fn description(&self) -> &str {
+        match *self {
+            FileRequestError::NoSuchList(_) => "Unknown file list",
+            FileRequestError::NoSuchFile(_, _) => "Unknown file",
+            FileRequestError::NoSuchVariable(_) => "Missing url variable",
+            FileRequestError::InvalidVariableType(_, _) => "Wrong url variable type",
+            FileRequestError::NoUrlEncodedQuery => "No url parameters",
+            FileRequestError::ThumbnailGenerationError(_) => "Failed to generate thumbnail",
+            FileRequestError::NoFileExtension(_) => "The specified path does not have an extension",
+            FileRequestError::DatabaseSaveError(_) => "There was an error saving to the database",
         }
     }
 }
 
 impl convert::From<FileRequestError> for IronError {
-    fn from(source: FileRequestError) -> IronError
-    {
+    fn from(source: FileRequestError) -> IronError {
         let message = format!("{}", source);
 
-        IronError
-        {
+        IronError {
             error: Box::new(source),
-            response: Response::with((status::NotFound, message))
+            response: Response::with((status::NotFound, message)),
         }
     }
 }
@@ -91,11 +73,9 @@ impl convert::From<FileRequestError> for IronError {
 
 
 /**
-  Convenience function for avoiding `String::from` for creating 
+  Convenience function for avoiding `String::from` for creating
   `FileRequestError::InvalidVariableType` errors
 */
-pub fn err_invalid_variable_type(var: &str, expected_type: &str) -> FileRequestError
-{
+pub fn err_invalid_variable_type(var: &str, expected_type: &str) -> FileRequestError {
     FileRequestError::InvalidVariableType(var.to_owned(), expected_type.to_owned())
 }
-
