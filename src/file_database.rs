@@ -92,12 +92,13 @@ impl FileDatabase {
      */
     //TODO: Handle errors when writing to the database
     pub fn add_new_file(
-        &mut self,
-        filename: &str,
-        thumb_name: &str,
-        tags: &[String],
-        timestamp: u64,
-    ) -> File {
+            &mut self,
+            filename: &str,
+            thumb_name: &str,
+            tags: &[String],
+            timestamp: u64,
+        ) -> File
+    {
         let timestamp = timestamp as i64;
         let new_file = NewFile::new(
             filename,

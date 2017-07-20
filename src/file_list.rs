@@ -76,12 +76,14 @@ impl FileList {
         let new_list = self.files
             .iter()
             .enumerate()
-            .map(|(i, location): (usize, &FileLocation)| if i == index {
-                new_location.clone()
-            }
-            else {
-                location.clone()
-            })
+            .map(|(i, location): (usize, &FileLocation)|
+                 if i == index {
+                    new_location.clone()
+                }
+                else {
+                    location.clone()
+                }
+            )
             .collect();
 
         FileList {
