@@ -8,7 +8,7 @@ use persistent::{Write, Read};
 use file_database::FileDatabase;
 use request_helpers::get_get_variable;
 
-use file_list_response::reply_to_file_list_request;
+use file_list_response::list_info_request_handler;
 use file_list::{FileLocation, FileList, FileListList, FileListSource};
 use settings::Settings;
 use search::{SearchType, parse_search_query};
@@ -53,7 +53,7 @@ fn handle_search_for_saved_files(
         ))
     };
 
-    reply_to_file_list_request(file_list_list, file_list_id)
+    list_info_request_handler(file_list_list, file_list_id)
 }
 
 fn handle_directory_search(request: &mut Request, path_str: &str) -> IronResult<Response> {
@@ -77,5 +77,5 @@ fn handle_directory_search(request: &mut Request, path_str: &str) -> IronResult<
         }
     };
 
-    reply_to_file_list_request(file_list_list, file_list_id)
+    list_info_request_handler(file_list_list, file_list_id)
 }

@@ -7,6 +7,42 @@ use std::sync::{Arc, Mutex};
 
 use serde_json;
 
+use file_request_error::{FileRequestError, err_invalid_variable_type};
+
+use request_helpers::get_get_variable;
+
+////////////////////////////////////////////////////////////////////////////////
+//                      Request action types
+////////////////////////////////////////////////////////////////////////////////
+pub enum GlobalAction {
+    AllLists,
+}
+
+impl GlobalAction {
+    pub fn try_parse(action_str: &str) -> Option<GlobalAction> {
+        match action_str {
+            "lists" => Some(GlobalAction::AllLists),
+            other => None
+        }
+    }
+}
+
+pub enum ListAction {
+    ListInfo,
+}
+impl ListAction {
+    pub fn try_parse(action_str: &str) -> Option<ListAction> {
+        match action_str {
+            "list_info" => Some(ListAction::ListInfo),
+            other => None
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//                      Internal types
+////////////////////////////////////////////////////////////////////////////////
+
 /**
   Serializable list response that contains data about a file list
 */
@@ -28,16 +64,52 @@ impl ListResponse
     }
 }
 
-fn create_file_list_response(file_list_list: Arc<Mutex<FileListList>>, id: usize) -> Option<ListResponse> {
-    // Fetch the file list
-        let file_list_list = file_list_list.lock().unwrap();
+////////////////////////////////////////////////////////////////////////////////
+//                      Public request handlers
+////////////////////////////////////////////////////////////////////////////////
 
-        file_list_list.get(id).map(|list| {
-            ListResponse::from_file_list(id, list)
-        })
+/**
+  Handles requests for data about specific file lists
+*/
+pub fn list_action_handler(request: &mut Request, action: ListAction) -> IronResult<Response> {
+    let file_list_list = request.get::<Write<FileListList>>().unwrap();
+    let id = read_request_list_id(request)?;
+
+    match action {
+        ListAction::ListInfo => list_info_request_handler(file_list_list, id)
+    }
 }
 
-pub fn reply_to_file_list_request(
+/**
+  Handles file_list requests that are not concerned with specific file lists
+*/
+pub fn global_list_action_handler(request: &mut Request, action: GlobalAction) -> IronResult<Response> {
+    let file_list_list = request.get::<Write<FileListList>>().unwrap();
+
+    match action {
+        GlobalAction::AllLists => reply_to_list_listing_request(file_list_list)
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//                      Private request parsers
+////////////////////////////////////////////////////////////////////////////////
+
+pub fn read_request_list_id(request: &mut Request) -> Result<usize, FileRequestError> {
+    let list_id = get_get_variable(request, "list_id")?;
+
+    match list_id.parse::<usize>() {
+        Ok(val) => Ok(val),
+        Err(_) => Err(err_invalid_variable_type("list_id", "usize")),
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//                      Private helpers
+////////////////////////////////////////////////////////////////////////////////
+
+pub fn list_info_request_handler(
     file_list_list: Arc<Mutex<FileListList>>,
     file_list_id: usize,
 ) -> IronResult<Response> {
@@ -48,19 +120,22 @@ pub fn reply_to_file_list_request(
 }
 
 
-// TODO: This should probably be moved to a more sensible file
-pub fn file_list_listing_handler(request: &mut Request) -> IronResult<Response> {
-    let file_list_list = request.get::<Write<FileListList>>().unwrap();
 
-    reply_to_list_listing_request(file_list_list)
+fn create_file_list_response(file_list_list: Arc<Mutex<FileListList>>, id: usize) -> Option<ListResponse> {
+    // Fetch the file list
+        let file_list_list = file_list_list.lock().unwrap();
+
+        file_list_list.get(id).map(|list| {
+            ListResponse::from_file_list(id, list)
+        })
 }
+
 
 pub fn reply_to_list_listing_request(file_list_list: Arc<Mutex<FileListList>>) -> IronResult<Response> {
     let file_list_list = file_list_list.lock().unwrap();
 
     let lists: Vec<ListResponse> = file_list_list.lists_with_ids().iter()
-        .map(|id_list| {
-            let (id, list) = *id_list;
+        .map(|&(id, list)| {
             ListResponse::from_file_list(id, list)
         }).collect();
 
@@ -68,3 +143,4 @@ pub fn reply_to_list_listing_request(file_list_list: Arc<Mutex<FileListList>>) -
         (status::Ok, serde_json::to_string(&lists).unwrap())
     ))
 }
+
