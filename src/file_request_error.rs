@@ -28,6 +28,8 @@ pub enum FileRequestError {
     NoFileExtension(PathBuf),
     /// Database save error
     DatabaseSaveError(String),
+    /// The specified action does not exist
+    UnknownAction(String)
 }
 
 impl fmt::Display for FileRequestError {
@@ -53,6 +55,7 @@ impl Error for FileRequestError {
             FileRequestError::ThumbnailGenerationError(_) => "Failed to generate thumbnail",
             FileRequestError::NoFileExtension(_) => "The specified path does not have an extension",
             FileRequestError::DatabaseSaveError(_) => "There was an error saving to the database",
+            FileRequestError::UnknownAction(_) => "Unknown action",
         }
     }
 }

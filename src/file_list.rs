@@ -169,6 +169,13 @@ impl FileListList {
     pub fn get_lists(&self) -> &Vec<FileList> {
         &self.lists
     }
+
+    pub fn lists_with_ids<'a>(&'a self) -> Vec<(usize, &'a FileList)>
+    {
+        self.lists.iter()
+            .enumerate()
+            .collect()
+    }
 }
 
 impl Key for FileListList {

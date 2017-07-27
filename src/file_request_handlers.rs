@@ -28,7 +28,28 @@ use request_helpers::get_get_variable;
 
 use file_request_error::{FileRequestError, err_invalid_variable_type};
 
-use file_list_response::reply_to_file_list_request;
+use file_list_response;
+
+enum FileAction {
+    GetData,
+    GetFile,
+    GetThumbnail,
+    Save
+}
+
+impl FileAction {
+    fn try_parse(action: &str) -> Option<FileAction>
+    {
+        match action {
+            "get_data" => Some(FileAction::GetData),
+            "get_file" => Some(FileAction::GetFile),
+            "get_thumbnail" => Some(FileAction::GetThumbnail),
+            "save" => Some(FileAction::Save),
+            other => None
+        }
+    }
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //                      Helper types used for passing
@@ -80,8 +101,26 @@ enum FileSaveRequestResult {
   Handles requests for actions dealing with specific entries in file lists
 */
 pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response> {
-    let action = get_get_variable(request, "action")?;
+    let action_str = get_get_variable(request, "action")?;
 
+    if let Some(action) = file_list_response::GlobalAction::try_parse(&action_str) {
+        file_list_response::global_list_action_handler(request, action)
+    }
+    else if let Some(action) = file_list_response::ListAction::try_parse(&action_str) {
+        file_list_response::list_action_handler(request, action)
+    }
+    else if let Some(action) = FileAction::try_parse(&action_str) {
+        file_request_handler(request, action)
+    }
+    else {
+        Err(FileRequestError::UnknownAction(action_str))?
+    }
+}
+
+/**
+  Handles requests for actions dealing with specific entries in file lists
+*/
+fn file_request_handler(request: &mut Request, action: FileAction) -> IronResult<Response> {
     let (list_id, file_index) = read_request_list_id_index(request)?;
 
     let file_location = {
@@ -98,22 +137,22 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response> 
         db.get_file_save_path()
     };
 
-    match action.as_str() {
-        "get_data" => {
+    match action {
+        FileAction::GetData => {
             let file_data = file_data_from_file_location(&file_location);
             Ok(Response::with(
                 (status::Ok, serde_json::to_string(&file_data).unwrap()),
             ))
         }
-        "get_file" => {
+        FileAction::GetFile => {
             let path = get_file_location_path(&file_storage_folder, &file_location);
             Ok(Response::with((status::Ok, path)))
         }
-        "get_thumbnail" => {
+        FileAction::GetThumbnail => {
             let path = get_file_list_thumbnail(&file_storage_folder, &file_location);
             Ok(Response::with((status::Ok, path)))
         }
-        "save" => {
+        FileAction::Save => {
             let db = request.get::<Write<FileDatabase>>().unwrap();
             let tags = get_tags_from_request(request)?;
 
@@ -129,31 +168,18 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response> 
                 }
             }
         }
-        val => {
-            let message = format!("Unrecognised `action`: {}", val);
-            Ok(Response::with((status::NotFound, message)))
-        }
     }
 }
 
 
-/**
-  Handles requests for getting the data about a file list
-*/
-pub fn get_file_list_handler(request: &mut Request) -> IronResult<Response> {
-    let list_id = read_request_list_id(request)?;
-
-    let file_list_list = request.get::<Write<FileListList>>().unwrap();
-
-    reply_to_file_list_request(file_list_list, list_id)
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 ///                     Private functions for getting data
 ///                     out of iron requests
 ////////////////////////////////////////////////////////////////////////////////
+
 fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), FileRequestError> {
-    let list_id = read_request_list_id(request)?;
+    let list_id = file_list_response::read_request_list_id(request)?;
 
     let file_index = get_get_variable(request, "index")?;
 
@@ -165,15 +191,6 @@ fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), F
     };
 
     Ok((list_id, file_index))
-}
-
-pub fn read_request_list_id(request: &mut Request) -> Result<usize, FileRequestError> {
-    let list_id = get_get_variable(request, "list_id")?;
-
-    match list_id.parse::<usize>() {
-        Ok(val) => Ok(val),
-        Err(_) => Err(err_invalid_variable_type("list_id", "usize")),
-    }
 }
 
 
@@ -412,6 +429,20 @@ fn get_file_list_object(
     }
 }
 
+/**
+  Returns the index of the last file that was saved to the database in a specific file
+*/
+fn get_last_saved(file_list: Vec<FileLocation>) -> Option<usize>
+{
+    file_list.iter()
+        .enumerate()
+        .fold(None, |last, (id, file)| {
+            match file {
+                &FileLocation::Database(_) => Some(id),
+                _ => last
+            }
+        })
+}
 
 
 /*
