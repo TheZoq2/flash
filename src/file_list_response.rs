@@ -1,7 +1,7 @@
 use iron::*;
 use persistent::Write;
 
-use file_list::{FileListList, FileList, FileListSource};
+use file_list::{FileListList, FileList, FileListSource, FileLocation};
 
 use std::sync::{Arc, Mutex};
 
@@ -22,19 +22,21 @@ impl GlobalAction {
     pub fn try_parse(action_str: &str) -> Option<GlobalAction> {
         match action_str {
             "lists" => Some(GlobalAction::AllLists),
-            other => None
+            _ => None
         }
     }
 }
 
 pub enum ListAction {
-    ListInfo,
+    Info,
+    LastSavedIndex
 }
 impl ListAction {
     pub fn try_parse(action_str: &str) -> Option<ListAction> {
         match action_str {
-            "list_info" => Some(ListAction::ListInfo),
-            other => None
+            "list_info" => Some(ListAction::Info),
+            "list_last_saved_index" => Some(ListAction::LastSavedIndex),
+            _ => None
         }
     }
 }
@@ -73,10 +75,18 @@ impl ListResponse
 */
 pub fn list_action_handler(request: &mut Request, action: ListAction) -> IronResult<Response> {
     let file_list_list = request.get::<Write<FileListList>>().unwrap();
+    let file_list_list = file_list_list.lock().unwrap();
+
     let id = read_request_list_id(request)?;
 
+    let file_list = match file_list_list.get(id) {
+        Some(list) => Ok(list),
+        None => Err(FileRequestError::NoSuchList(id))
+    }?;
+
     match action {
-        ListAction::ListInfo => list_info_request_handler(file_list_list, id)
+        ListAction::Info => create_list_info_response(id, file_list),
+        ListAction::LastSavedIndex => last_saved_request_handler(file_list)
     }
 }
 
@@ -89,6 +99,24 @@ pub fn global_list_action_handler(request: &mut Request, action: GlobalAction) -
     match action {
         GlobalAction::AllLists => reply_to_list_listing_request(file_list_list)
     }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//                      Public request responders
+////////////////////////////////////////////////////////////////////////////////
+
+pub fn reply_to_list_listing_request(file_list_list: Arc<Mutex<FileListList>>) -> IronResult<Response> {
+    let file_list_list = file_list_list.lock().unwrap();
+
+    let lists: Vec<ListResponse> = file_list_list.lists_with_ids().iter()
+        .map(|&(id, list)| {
+            ListResponse::from_file_list(id, list)
+        }).collect();
+
+    Ok(Response::with(
+        (status::Ok, serde_json::to_string(&lists).unwrap())
+    ))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -109,38 +137,42 @@ pub fn read_request_list_id(request: &mut Request) -> Result<usize, FileRequestE
 //                      Private helpers
 ////////////////////////////////////////////////////////////////////////////////
 
+
 pub fn list_info_request_handler(
     file_list_list: Arc<Mutex<FileListList>>,
-    file_list_id: usize,
+    id: usize,
 ) -> IronResult<Response> {
-    let list_response = create_file_list_response(file_list_list, file_list_id);
+    let file_list_list = file_list_list.lock().unwrap();
+
+    match file_list_list.get(id) {
+        Some(file_list) => Ok(create_list_info_response(id, file_list)),
+        None => Err(FileRequestError::NoSuchList(id))
+    }?
+}
+
+pub fn create_list_info_response(id: usize, list: &FileList) -> IronResult<Response> {
+    let list_response = ListResponse::from_file_list(id, list);
+
     Ok(Response::with(
         (status::Ok, serde_json::to_string(&list_response).unwrap()),
     ))
 }
 
 
-
-fn create_file_list_response(file_list_list: Arc<Mutex<FileListList>>, id: usize) -> Option<ListResponse> {
-    // Fetch the file list
-        let file_list_list = file_list_list.lock().unwrap();
-
-        file_list_list.get(id).map(|list| {
-            ListResponse::from_file_list(id, list)
-        })
-}
-
-
-pub fn reply_to_list_listing_request(file_list_list: Arc<Mutex<FileListList>>) -> IronResult<Response> {
-    let file_list_list = file_list_list.lock().unwrap();
-
-    let lists: Vec<ListResponse> = file_list_list.lists_with_ids().iter()
-        .map(|&(id, list)| {
-            ListResponse::from_file_list(id, list)
-        }).collect();
+/**
+  Returns the index of the last file that was saved to the database in a specific file
+*/
+fn last_saved_request_handler(file_list: &FileList) -> IronResult<Response> {
+    let index = file_list.get_files().iter()
+        .enumerate()
+        .fold(0, |last, (id, file)| {
+            match file {
+                &FileLocation::Database(_) => id,
+                _ => last
+            }
+        });
 
     Ok(Response::with(
-        (status::Ok, serde_json::to_string(&lists).unwrap())
+        (status::Ok, serde_json::to_string(&index).unwrap())
     ))
 }
-
