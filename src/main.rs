@@ -49,6 +49,7 @@ mod schema;
 mod request_helpers;
 mod file_list_response;
 mod error;
+mod changelog;
 
 #[macro_use]
 extern crate serde_derive;

@@ -75,4 +75,5 @@ If postgres enums are algebraic, they can be used for storage. Otherwise, since 
 are either (id) or (id, name) a table that contains a `type`, an `id` and a `string` field might
 be sufficient.
 
-
+Another option is to store a JSON representation along with a timestamp. This is ugly but would
+work and be expandable.
