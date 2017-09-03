@@ -12,13 +12,11 @@ urlencoded = "*"
 
 rand = "*"
 glob = "*"
-rustc-serialize = "*"
 regex = "*"
 lazy_static = "*"
 
 image = "*"
 immeta = "*"
-#immeta = { git = "https://github.com/tdryer/immeta", branch = "jpeg-exif" }
 
 diesel = { version = "0.11.0", features = ["postgres", "chrono"] }
 diesel_codegen = { version = "0.11.0", features = ["postgres"] }
@@ -28,9 +26,10 @@ serde = "1.0.8"
 serde_derive = "1.0.8"
 serde_json = "1.0.2"
 
+error-chain = "0.10"
+
 [dependencies.chrono]
-version = "*"
-features = ["rustc-serialize"]
+version = "0.3.*"
 
 
 

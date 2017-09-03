@@ -1,0 +1,6 @@
+control_brace_style="ClosingNextLine"
+error_on_line_overflow=false
+fn_return_indent="WithWhereClause"
+imports_indent="Block"
+
+

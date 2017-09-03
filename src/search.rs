@@ -13,30 +13,26 @@ use std::borrow::Cow;
   saved files in the database, or for new files at a specified path
 */
 #[derive(Debug)]
-pub enum SearchType
-{
+pub enum SearchType {
     Path(String),
-    Saved((Vec<String>, Vec<String>), Option<(NaiveDateTime, NaiveDateTime)>)
+    Saved((Vec<String>, Vec<String>)),
 }
 
 
 /**
   Parses a search query to determine what the user searched for
 */
-pub fn parse_search_query(query: &str) -> SearchType
-{
+pub fn parse_search_query(query: &str) -> SearchType {
     lazy_static! {
         static ref PATH_RE: Regex = Regex::new(r"^/.*").unwrap();
     }
 
-    if PATH_RE.is_match(query)
-    {
+    if PATH_RE.is_match(query) {
         // Strip the first /
         SearchType::Path(query[1..].to_owned())
     }
-    else
-    {
-        SearchType::Saved(get_tags_from_query(query), None)
+    else {
+        SearchType::Saved(get_tags_from_query(query))
     }
 }
 
@@ -48,16 +44,14 @@ const TAG_LIST_REGEX: &str = r"of (?P<list>[\w[:blank:],]+);{0,1}";
 /**
   Returns all the tags specified in a search query
 */
-fn get_tags_from_query(query: &str) -> (Vec<String>, Vec<String>)
-{
+fn get_tags_from_query(query: &str) -> (Vec<String>, Vec<String>) {
     lazy_static!{
         static ref TAG_RE: Regex = Regex::new(r"\w+").unwrap();
     }
 
-    let list_string = match get_tag_list_from_query(query)
-    {
+    let list_string = match get_tag_list_from_query(query) {
         Some(val) => val,
-        None => return (vec!(), vec!())
+        None => return (vec![], vec![]),
     };
 
     let tag_vec = get_tags_from_list_string(&list_string);
@@ -66,12 +60,11 @@ fn get_tags_from_query(query: &str) -> (Vec<String>, Vec<String>)
 }
 
 /**
-  Takes a string on the form 
+  Takes a string on the form
   "... of <tag1>, <tag2>, ... [,|and] <tagn>; ..."
   and returns a string containing all the tags separated by ,
 */
-fn get_tag_list_from_query(query: &str) -> Option<Cow<str>>
-{
+fn get_tag_list_from_query(query: &str) -> Option<Cow<str>> {
     lazy_static!{
         static ref AND_RE: Regex = Regex::new(r"\Wand\W").unwrap();
         static ref TAG_LIST_RE: Regex = Regex::new(TAG_LIST_REGEX).unwrap();
@@ -79,17 +72,15 @@ fn get_tag_list_from_query(query: &str) -> Option<Cow<str>>
 
     // Try to match the search string with the tag list regex template
     // and find the list group
-    let captures = match TAG_LIST_RE.captures(query)
-    {
+    let captures = match TAG_LIST_RE.captures(query) {
         None => return None,
-        Some(v) => v
+        Some(v) => v,
     };
 
     // Separate the actual list of tags
-    let list_str = match captures.name("list")
-    {
+    let list_str = match captures.name("list") {
         Some(v) => v.as_str(),
-        None => {return None}
+        None => return None,
     };
 
     // Replace 'and' with ','
@@ -100,15 +91,15 @@ fn get_tag_list_from_query(query: &str) -> Option<Cow<str>>
   Takes a string of tags separated by commas and optionally by whitespace
   and returns a vector the tags. The tags can be on the form <name> or <not name>
 */
-fn get_tags_from_list_string(list_string: &str) -> Vec<Cow<str>>
-{
+fn get_tags_from_list_string(list_string: &str) -> Vec<Cow<str>> {
     lazy_static! {
         static ref TAG_RE: Regex =
             Regex::new(r"[[:blank:]]*(?P<tag>\w[\w[:blank:]]*\w)[,[:blank:]]*")
             .unwrap();
     };
 
-    TAG_RE.captures_iter(list_string)
+    TAG_RE
+        .captures_iter(list_string)
         .filter_map(|capture| {
             capture.name("tag").map(|val| Cow::from(val.as_str()))
         })
@@ -121,24 +112,25 @@ fn get_tags_from_list_string(list_string: &str) -> Vec<Cow<str>>
 
   returns (non-negated, negated)
 */
-fn separate_negated_tags(tags: &[Cow<str>]) -> (Vec<String>, Vec<String>)
-{
+fn separate_negated_tags(tags: &[Cow<str>]) -> (Vec<String>, Vec<String>) {
     lazy_static! {
         static ref NEGATED_REGEX: Regex =Regex::new(r"not (?P<tag>.+)").unwrap();
     };
 
-    tags.iter()
-        .fold((vec!(), vec!()), |(mut non_negated, mut negated), tag| {
+    tags.iter().fold(
+        (vec![], vec![]),
+        |(mut non_negated, mut negated), tag| {
             let captures = NEGATED_REGEX.captures(tag);
             match captures {
                 // We can be sure that 1 exists since the capture grouop must be matched
                 // Therefore unwrap is safe
                 Some(captures) => negated.push(String::from(captures.get(1).unwrap().as_str())),
-                None => non_negated.push(tag.to_string())
+                None => non_negated.push(tag.to_string()),
             }
 
             (non_negated, negated)
-        })
+        },
+    )
 }
 
 
@@ -149,6 +141,7 @@ pub enum Time {
     Interval(u32, u32),
 }
 
+/*
 pub fn get_time_from_query(query: &str) -> Time
 {
     lazy_static!{
@@ -162,51 +155,61 @@ pub fn get_time_from_query(query: &str) -> Time
     }
     unimplemented!()
 }
+*/
 
 #[cfg(test)]
-mod public_query_tests
-{
+mod public_query_tests {
     use super::*;
 
     #[test]
-    fn query_with_only_tags()
-    {
-        assert_eq!(get_tags_from_query("of things and stuff"), 
-                   (mapvec!(String::from: "things", "stuff"), vec!()));
-        assert_eq!(get_tags_from_query("of things"),
-                   (mapvec!(String::from: "things"), vec!()));
-        assert_eq!(get_tags_from_query("of things, stuff and items"),
-                   (mapvec!(String::from: "things", "stuff", "items"), vec!()));
+    fn query_with_only_tags() {
+        assert_eq!(
+            get_tags_from_query("of things and stuff"),
+            (mapvec!(String::from: "things", "stuff"), vec![])
+        );
+        assert_eq!(
+            get_tags_from_query("of things"),
+            (mapvec!(String::from: "things"), vec![])
+        );
+        assert_eq!(
+            get_tags_from_query("of things, stuff and items"),
+            (mapvec!(String::from: "things", "stuff", "items"), vec![])
+        );
     }
 
     #[test]
-    fn no_tags_should_return_empty_vector()
-    {
-        assert_eq!(get_tags_from_query("of"), (vec!(), vec!()));
-        assert_eq!(get_tags_from_query(""), (vec!(), vec!()));
-        assert_eq!(get_tags_from_query("in linköping"), (vec!(), vec!()));
-        assert_eq!(get_tags_from_query("from this year"), (vec!(), vec!()));
+    fn no_tags_should_return_empty_vector() {
+        assert_eq!(get_tags_from_query("of"), (vec![], vec![]));
+        assert_eq!(get_tags_from_query(""), (vec![], vec![]));
+        assert_eq!(get_tags_from_query("in linköping"), (vec![], vec![]));
+        assert_eq!(get_tags_from_query("from this year"), (vec![], vec![]));
     }
 
     #[test]
-    fn more_things_specified_should_give_correct_tags()
-    {
-        assert_eq!(get_tags_from_query("of things and stuff; from last year"), 
-                   (mapvec!(String::from: "things", "stuff"), vec!()));
-        assert_eq!(get_tags_from_query("of things and stuff ;from last year in linköping"),
-                   (mapvec!(String::from: "things", "stuff"), vec!()));
+    fn more_things_specified_should_give_correct_tags() {
+        assert_eq!(
+            get_tags_from_query("of things and stuff; from last year"),
+            (mapvec!(String::from: "things", "stuff"), vec![])
+        );
+        assert_eq!(
+            get_tags_from_query("of things and stuff ;from last year in linköping"),
+            (mapvec!(String::from: "things", "stuff"), vec![])
+        );
     }
 
     #[test]
-    fn searching_for_not_tags_should_work()
-    {
-        assert_eq!(get_tags_from_query("of things and not stuff"),
-                (mapvec!(String::from: "things"), mapvec!(String::from: "stuff")));
+    fn searching_for_not_tags_should_work() {
+        assert_eq!(
+            get_tags_from_query("of things and not stuff"),
+            (
+                mapvec!(String::from: "things"),
+                mapvec!(String::from: "stuff")
+            )
+        );
     }
 
     #[test]
-    fn searching_for_directories_should_work()
-    {
+    fn searching_for_directories_should_work() {
         assert_matches!(parse_search_query("/something/other"), SearchType::Path(_));
         assert_matches!(parse_search_query("/something/folder with space"), SearchType::Path(_));
         assert_matches!(parse_search_query("/other"), SearchType::Path(_));
@@ -217,13 +220,11 @@ mod public_query_tests
 }
 
 #[cfg(test)]
-mod private_query_tests
-{
+mod private_query_tests {
     use super::*;
 
     #[test]
-    fn tag_list_from_query_tests()
-    {
+    fn tag_list_from_query_tests() {
         // Simple, tags only string
         assert_eq!(get_tag_list_from_query("of things, stuff, yolo and swag"),
                    Some(Cow::from("things, stuff, yolo, swag")));
@@ -246,8 +247,7 @@ mod private_query_tests
         assert_eq!(get_tag_list_from_query("of ;"), None);
     }
 
-    fn tag_from_list_string_tests()
-    {
+    fn tag_from_list_string_tests() {
         //Simple tags, no whitespaces
         assert_eq!(get_tags_from_list_string("some,thing,yolo"),
                   mapvec!(Cow::from: "some", "thing", "yolo"));
@@ -257,8 +257,7 @@ mod private_query_tests
                   mapvec!(Cow::from: "not some", "thing", "not yo lo"));
     }
 
-    fn tag_negation_tests()
-    {
+    fn tag_negation_tests() {
         assert_eq!(separate_negated_tags(&mapvec!(Cow::from: "yolo", "not swag")),
                 (mapvec!(String::from: "yolo"), mapvec!(String::from: "swag")));
     }
@@ -267,8 +266,7 @@ mod private_query_tests
       Tries to replicate a bug where searching for negated tags would not propperly negate them
     */
     #[test]
-    fn negation_bug_test()
-    {
+    fn negation_bug_test() {
         let search_string = "of not snödroppe";
 
         let tag_list = get_tag_list_from_query(search_string).unwrap();
@@ -279,19 +277,7 @@ mod private_query_tests
 
         let (tags, negated) = separate_negated_tags(&tags);
 
-        assert_eq!(tags, vec!());
+        assert_eq!(tags, ::std::vec::Vec::<String>::new());
         assert_eq!(negated, mapvec!(String::from: "snödroppe"));
-    }
-
-
-    #[test]
-    fn absolute_dates()
-    {
-        let date = NaiveDateTime::new(NaiveDate::from_ymd(2017, 6, 25), NaiveTime::from_hms(12, 33, 15));
-
-        {
-            let query = "from today";
-            let result = get_date_from_query(NaiveDateTime::new(NaiveDate::from_ymd(2017)))
-        }
     }
 }

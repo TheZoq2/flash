@@ -9,7 +9,9 @@ macro_rules! mapvec {
 
 
 #[test]
-fn stringvec_test()
-{
-    assert_eq!(mapvec!(String::from: "yolo", "swag"), vec!(String::from("yolo"), String::from("swag")));
+fn stringvec_test() {
+    assert_eq!(
+        mapvec!(String::from: "yolo", "swag"),
+        vec![String::from("yolo"), String::from("swag")]
+    );
 }

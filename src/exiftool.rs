@@ -12,45 +12,36 @@ use std::process::Command;
 
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum GpsStringParseError
-{
+pub enum GpsStringParseError {
     NumberParseError,
     InvalidDirection(String),
-    BadFormat
+    BadFormat,
 }
-impl std::convert::From<std::num::ParseFloatError> for GpsStringParseError
-{
-    fn from(_: std::num::ParseFloatError) -> GpsStringParseError
-    {
+impl std::convert::From<std::num::ParseFloatError> for GpsStringParseError {
+    fn from(_: std::num::ParseFloatError) -> GpsStringParseError {
         GpsStringParseError::NumberParseError
     }
 }
-impl std::convert::From<std::num::ParseIntError> for GpsStringParseError
-{
-    fn from(_: std::num::ParseIntError) -> GpsStringParseError
-    {
+impl std::convert::From<std::num::ParseIntError> for GpsStringParseError {
+    fn from(_: std::num::ParseIntError) -> GpsStringParseError {
         GpsStringParseError::NumberParseError
     }
 }
 
 
 #[derive(PartialEq, Debug)]
-pub enum CardinalDirection
-{
+pub enum CardinalDirection {
     East,
     West,
     North,
-    South
+    South,
 }
 
-impl std::str::FromStr for CardinalDirection
-{
+impl std::str::FromStr for CardinalDirection {
     type Err = GpsStringParseError;
 
-    fn from_str(name: &str) -> Result<CardinalDirection, GpsStringParseError>
-    {
-        match name
-        {
+    fn from_str(name: &str) -> Result<CardinalDirection, GpsStringParseError> {
+        match name {
             "N" => Ok(CardinalDirection::North),
             "S" => Ok(CardinalDirection::South),
             "W" => Ok(CardinalDirection::West),
@@ -61,47 +52,45 @@ impl std::str::FromStr for CardinalDirection
 }
 
 #[derive(PartialEq, Debug)]
-pub struct GpsCoordinate
-{
+pub struct GpsCoordinate {
     degrees: i16,
     minutes: i16,
     seconds: f32,
-    direction: CardinalDirection
+    direction: CardinalDirection,
 }
 
-impl GpsCoordinate
-{
-
-    pub fn new(degrees: i16, minutes: i16, seconds: f32, direction: CardinalDirection) -> GpsCoordinate
-    {
-        GpsCoordinate{
+impl GpsCoordinate {
+    pub fn new(
+        degrees: i16,
+        minutes: i16,
+        seconds: f32,
+        direction: CardinalDirection,
+    ) -> GpsCoordinate {
+        GpsCoordinate {
             degrees: degrees,
             minutes: minutes,
             seconds: seconds,
-            direction: direction
+            direction: direction,
         }
     }
 }
 
-impl std::str::FromStr for GpsCoordinate
-{
+impl std::str::FromStr for GpsCoordinate {
     type Err = GpsStringParseError;
 
-    fn from_str(string: &str) -> Result<GpsCoordinate, Self::Err>
-    {
+    fn from_str(string: &str) -> Result<GpsCoordinate, Self::Err> {
         lazy_static! {
             static ref RE: Regex = Regex::new("(\\d*) deg (\\d*)' (\\d*.?\\d*)\" ([NEWS])").unwrap();
         }
 
-        match RE.captures_iter(string).next()
-        {
-            Some(val) => Ok(GpsCoordinate{
+        match RE.captures_iter(string).next() {
+            Some(val) => Ok(GpsCoordinate {
                 degrees: val[1].parse()?,
                 minutes: val[2].parse()?,
                 seconds: val[3].parse()?,
-                direction: CardinalDirection::from_str(&val[4])?
+                direction: CardinalDirection::from_str(&val[4])?,
             }),
-            None => Err(GpsStringParseError::BadFormat)
+            None => Err(GpsStringParseError::BadFormat),
         }
     }
 }
@@ -109,76 +98,65 @@ impl std::str::FromStr for GpsCoordinate
 /**
   A GPS location
  */
-pub struct Location
-{
+pub struct Location {
     longitude: GpsCoordinate,
-    latitude: GpsCoordinate
+    latitude: GpsCoordinate,
 }
-impl Location
-{
-    pub fn new(longitude: GpsCoordinate, latitude: GpsCoordinate) -> Location
-    {
+impl Location {
+    pub fn new(longitude: GpsCoordinate, latitude: GpsCoordinate) -> Location {
         Location {
             longitude: longitude,
-            latitude: latitude
+            latitude: latitude,
         }
     }
 }
 
-pub struct ExifData
-{
-    tags: HashMap<String, String>
+pub struct ExifData {
+    tags: HashMap<String, String>,
 }
 
 #[derive(Debug)]
-pub enum ExifError
-{
+pub enum ExifError {
     InvalidGpsCoordinate(GpsStringParseError),
     NoSuchTag(String),
     MalformedDatetime(String),
     IoError(std::io::Error),
-    MalformedUtf8(std::string::FromUtf8Error)
+    MalformedUtf8(std::string::FromUtf8Error),
 }
-impl std::convert::From<std::io::Error> for ExifError
-{
-    fn from(e: std::io::Error) -> ExifError
-    {
+impl std::convert::From<std::io::Error> for ExifError {
+    fn from(e: std::io::Error) -> ExifError {
         ExifError::IoError(e)
     }
 }
-impl std::convert::From<std::string::FromUtf8Error> for ExifError
-{
-    fn from(e: std::string::FromUtf8Error) -> ExifError
-    {
+impl std::convert::From<std::string::FromUtf8Error> for ExifError {
+    fn from(e: std::string::FromUtf8Error) -> ExifError {
         ExifError::MalformedUtf8(e)
     }
 }
 
 
 
-impl ExifData
-{
-    pub fn from_exiftool_string(data: &str) -> Result<ExifData, ExifError>
-    {
-        let mut result = ExifData{
-            tags: HashMap::new()
+impl ExifData {
+    pub fn from_exiftool_string(data: &str) -> Result<ExifData, ExifError> {
+        let mut result = ExifData {
+            tags: HashMap::new(),
         };
 
         lazy_static! {
             static ref DATA_REGEX: Regex = Regex::new(r"(.*\b)\s*: (.*)").unwrap();
         }
 
-        for matches in DATA_REGEX.captures_iter(data)
-        {
+        for matches in DATA_REGEX.captures_iter(data) {
             //TODO: Handle erros here
-            result.tags.insert(String::from(&matches[1]), String::from(&matches[2]));
+            result
+                .tags
+                .insert(String::from(&matches[1]), String::from(&matches[2]));
         }
 
         Ok(result)
     }
 
-    pub fn from_file(file: &str) -> Result<ExifData, ExifError>
-    {
+    pub fn from_file(file: &str) -> Result<ExifData, ExifError> {
         let mut cmd = Command::new("exiftool");
         cmd.arg(file);
 
@@ -191,45 +169,37 @@ impl ExifData
         Self::from_exiftool_string(&command_output)
     }
 
-    pub fn get_tag(&self, name: &str) -> Option<&str>
-    {
-        match self.tags.get(name)
-        {
+    pub fn get_tag(&self, name: &str) -> Option<&str> {
+        match self.tags.get(name) {
             Some(tag) => Some(tag),
-            None => None
+            None => None,
         }
     }
 
-    pub fn get_creation_date(&self) -> Result<chrono::DateTime<chrono::UTC>, ExifError>
-    {
+    pub fn get_creation_date(&self) -> Result<chrono::DateTime<chrono::UTC>, ExifError> {
         let target_tag = "Create Date";
-        match self.get_tag(target_tag)
-        {
-            Some(date_string) => 
-            {
+        match self.get_tag(target_tag) {
+            Some(date_string) => {
                 let parsed = chrono::UTC.datetime_from_str(date_string, "%Y:%m:%d %H:%M:%S");
 
-                match parsed
-                {
+                match parsed {
                     Ok(result) => Ok(result),
-                    _ => Err(ExifError::MalformedDatetime(String::from(date_string)))
+                    _ => Err(ExifError::MalformedDatetime(String::from(date_string))),
                 }
             }
-            None => Err(ExifError::NoSuchTag(String::from(target_tag)))
+            None => Err(ExifError::NoSuchTag(String::from(target_tag))),
         }
     }
 }
 
 
 #[cfg(test)]
-mod exif_data_tests
-{
+mod exif_data_tests {
     use std::str::FromStr;
     use super::*;
 
     #[test]
-    fn well_formed_file()
-    {
+    fn well_formed_file() {
         let file_content = include_str!("../test/files/exif1.txt");
 
         let data = ExifData::from_exiftool_string(file_content).unwrap();
@@ -244,14 +214,13 @@ mod exif_data_tests
     }
 
     #[test]
-    fn gps_coordinate_test()
-    {
+    fn gps_coordinate_test() {
         assert_eq!(
-            GpsCoordinate::from_str("58 deg 28' 5.45\" N").unwrap(), 
+            GpsCoordinate::from_str("58 deg 28' 5.45\" N").unwrap(),
             GpsCoordinate::new(58, 28, 5.45, CardinalDirection::North)
         );
         assert_eq!(
-            GpsCoordinate::from_str("58 deg 28' 5.45\" S").unwrap(), 
+            GpsCoordinate::from_str("58 deg 28' 5.45\" S").unwrap(),
             GpsCoordinate::new(58, 28, 5.45, CardinalDirection::South)
         );
     }
