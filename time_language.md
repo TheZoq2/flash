@@ -23,4 +23,21 @@ like all files from August independent of year
 - on august 27 2016
 - in august 2016
 - in 2016
+
+# Intervals
+Searches for files from specific intervals. Actually contains two pattern matches
+
+- between august and september
+- between 2012 and 2018
+
+
+# Uncategorised
 - at night
+
+# Combinations
+Intervals can be combined with the rest of the search types.
+
+- this year between august and september
+- the past year between august and september
+- this week at night
+
