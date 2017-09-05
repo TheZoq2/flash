@@ -45,6 +45,7 @@ mod file_request_handlers;
 mod file_request_error;
 mod exiftool;
 mod search;
+mod date_search;
 mod schema;
 mod request_helpers;
 mod file_list_response;

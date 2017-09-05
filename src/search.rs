@@ -141,21 +141,6 @@ pub enum Time {
     Interval(u32, u32),
 }
 
-/*
-pub fn get_time_from_query(query: &str) -> Time
-{
-    lazy_static!{
-        static ref TIME_INTERVAL_REGEX: Regex = Regex::new(r"from (this|last|the past) (\w*)").unwrap();
-    }
-
-    if let Some(cap) = TIME_INTERVAL_REGEX.captures(query)
-    {
-        let descriptor = cap.get(1).unwrap().as_str();
-        let time = cap.get(2).unwrap().as_str();
-    }
-    unimplemented!()
-}
-*/
 
 #[cfg(test)]
 mod public_query_tests {
