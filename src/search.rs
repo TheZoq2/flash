@@ -134,13 +134,6 @@ fn separate_negated_tags(tags: &[Cow<str>]) -> (Vec<String>, Vec<String>) {
 }
 
 
-/**
-  A set of times to include in a search
-*/
-pub enum Time {
-    Interval(u32, u32),
-}
-
 
 #[cfg(test)]
 mod public_query_tests {
