@@ -3,7 +3,7 @@ use chrono::NaiveDateTime;
 use std::vec::Vec;
 use std::str::{FromStr, SplitWhitespace};
 
-enum TimeParseError {
+pub enum TimeParseError {
     UnexpectedWord(String),
     UnexpectedEndOfQuery
 }
@@ -18,6 +18,20 @@ enum TimeDescriptor {
     Week,
     Month,
     Year
+}
+
+impl FromStr for TimeDescriptor {
+    type Err = TimeParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "day" => Ok(TimeDescriptor::Day),
+            "week" => Ok(TimeDescriptor::Week),
+            "month" => Ok(TimeDescriptor::Month),
+            "year" => Ok(TimeDescriptor::Year),
+            other => Err(TimeParseError::UnexpectedWord(other.to_owned()))
+        }
+    }
 }
 
 enum Month {
@@ -79,24 +93,17 @@ impl FromStr for Month {
 pub type DateConstraintFunction = Fn(NaiveDateTime) -> bool;
 
 pub fn parse_date_query(query: &str, current_time: &NaiveDateTime)
-    -> (Vec<Interval>, Vec<Box<DateConstraintFunction>>)
+    -> Result<(Vec<Interval>, Vec<Box<DateConstraintFunction>>), TimeParseError>
 {
-    unimplemented!()
-}
+    let mut words = query.split_whitespace();
 
-fn tokenise_time_descriptor(query: &mut SplitWhitespace, current_time: &NaiveDateTime)
-    -> Result<TimeDescriptor, TimeParseError>
-{
-    match query.next() {
-        Some(word) => {
-            match word {
-                "day" => Ok(TimeDescriptor::Day),
-                "week" => Ok(TimeDescriptor::Week),
-                "month" => Ok(TimeDescriptor::Month),
-                "year" => Ok(TimeDescriptor::Year),
-                other => Err(TimeParseError::UnexpectedWord(other.to_owned()))
-            }
-        },
+    match words.next() {
+        Some("this") => {println!("{:?}", words.next()); unimplemented!()},
+        Some("past") => unimplemented!(),
+        Some("in") | Some("on") => unimplemented!(),
+        Some("between") => unimplemented!(),
+        // Special keywords, or unexpected tokens
+        Some(other) => unimplemented!(),
         None => Err(TimeParseError::UnexpectedEndOfQuery)
     }
 }
