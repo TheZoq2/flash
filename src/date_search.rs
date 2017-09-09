@@ -1,8 +1,9 @@
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, NaiveDate, NaiveTime, Datelike};
 
 use std::vec::Vec;
 use std::str::{FromStr, SplitWhitespace};
 
+#[derive(Debug)]
 pub enum TimeParseError {
     UnexpectedWord(String),
     UnexpectedEndOfQuery
@@ -11,6 +12,24 @@ pub enum TimeParseError {
 pub struct Interval {
     start: NaiveDateTime,
     end: NaiveDateTime
+}
+
+impl Interval {
+    pub fn new(start: NaiveDateTime, end: NaiveDateTime) -> Interval {
+        Interval {
+            start,
+            end
+        }
+    }
+
+    pub fn contains(&self, time: &NaiveDateTime) -> bool {
+        if time >= &self.start && time < &self.end{
+            true
+        }
+        else {
+            false
+        }
+    }
 }
 
 enum TimeDescriptor {
@@ -90,7 +109,7 @@ impl FromStr for Month {
     }
 }
 
-pub type DateConstraintFunction = Fn(NaiveDateTime) -> bool;
+pub type DateConstraintFunction = Fn(&NaiveDateTime) -> bool;
 
 pub fn parse_date_query(query: &str, current_time: &NaiveDateTime)
     -> Result<(Vec<Interval>, Vec<Box<DateConstraintFunction>>), TimeParseError>
@@ -98,12 +117,156 @@ pub fn parse_date_query(query: &str, current_time: &NaiveDateTime)
     let mut words = query.split_whitespace();
 
     match words.next() {
-        Some("this") => {println!("{:?}", words.next()); unimplemented!()},
+        Some("this") => Ok((parse_modulu_search(&mut words, current_time)?, vec!())),
         Some("past") => unimplemented!(),
         Some("in") | Some("on") => unimplemented!(),
         Some("between") => unimplemented!(),
         // Special keywords, or unexpected tokens
         Some(other) => unimplemented!(),
         None => Err(TimeParseError::UnexpectedEndOfQuery)
+    }
+}
+
+
+fn parse_modulu_search(query: &mut SplitWhitespace, current_time: &NaiveDateTime)
+    -> Result<Vec<Interval>, TimeParseError>
+{
+    let time_descriptor = match query.next() {
+        Some(word) => TimeDescriptor::from_str(&word)?,
+        None => return Err(TimeParseError::UnexpectedEndOfQuery)
+    };
+
+    let start_date = match time_descriptor {
+        TimeDescriptor::Day => current_time.date(),
+        TimeDescriptor::Week => unimplemented!("NaiveDateTime does not have a week concept"),
+        TimeDescriptor::Month => current_time.date().with_day0(0).unwrap(),
+        TimeDescriptor::Year => current_time.date().with_day0(0)
+                .unwrap()
+                .with_month0(0).
+                unwrap()
+    };
+
+    let start = NaiveDateTime::new(start_date, NaiveTime::from_hms_milli(0,0,0,0));
+
+    Ok(vec!(Interval::new(start, current_time.clone())))
+}
+
+
+
+#[cfg(test)]
+mod parse_tests {
+    use super::*;
+
+    impl ::std::convert::From<TimeParseError> for String {
+        fn from(error: TimeParseError) -> Self {
+            format!("{:?}", error)
+        }
+    }
+
+    fn timestamp_in_query_result(
+            timestamp: &NaiveDateTime,
+            query_result: &(Vec<Interval>, Vec<Box<DateConstraintFunction>>)
+        ) -> bool
+    {
+        let (ref intervals, ref constraints) = *query_result;
+
+        for interval in intervals {
+            if !interval.contains(timestamp) {
+                return false
+            }
+        }
+
+        for constraint in constraints {
+            if !constraint(timestamp) {
+                return false
+            }
+        }
+
+        true
+    }
+
+    /**
+      Tests a date query by running it using the current time
+      and ensuring that all values in expected_in are included in the returned
+      interval and all in expected_out are not included
+    */
+    fn test_query(
+            query: &str,
+            current_time: &str,
+            expected_in: Vec<&str>,
+            expected_out: Vec<&str>
+        ) -> Result<(), String>
+    {
+        let current_time = NaiveDateTime::parse_from_str(current_time, "%Y-%m-%d %H:%M:%S")
+                .unwrap();
+
+        let query_result = parse_date_query(query, &current_time)?;
+
+        let expected_in: Vec<NaiveDateTime> = expected_in.iter()
+                .map(|val| NaiveDateTime::parse_from_str(val, "%Y-%m-%d %H:%M:%S").unwrap())
+                .collect();
+        let expected_out: Vec<NaiveDateTime> = expected_out.iter()
+                .map(|val| NaiveDateTime::parse_from_str(val, "%Y-%m-%d %H:%M:%S").unwrap())
+                .collect();
+
+        for time in expected_in {
+            if !timestamp_in_query_result(&time, &query_result) {
+                return Err(format!("Timestamp {} was not included in the result of query {}",
+                           time,
+                           query
+                        ))
+            }
+        }
+        for time in expected_out {
+            if timestamp_in_query_result(&time, &query_result) {
+                return Err(
+                    format!("Timestamp {} was included in the result of query {}", time, query)
+                )
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn modulu_search_test() {
+        test_query(
+                "this day",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-09-09 09:30:36",
+                ),
+                vec!(
+                    "2017-09-10 12:00:00",
+                    "2017-10-10 12:00:00",
+                    "2016-09-09 12:00:00",
+                )
+            ).unwrap();
+
+        test_query(
+                "this month",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-09-09 09:30:36",
+                    "2017-09-01 09:30:36",
+                ),
+                vec!(
+                    "2017-10-10 12:00:00",
+                    "2016-09-09 12:00:00",
+                )
+            ).unwrap();
+
+        test_query(
+                "this year",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-09-09 09:30:36",
+                    "2017-09-01 09:30:36",
+                    "2017-07-10 19:03:35"
+                ),
+                vec!(
+                    "2016-09-09 12:00:00",
+                )
+            ).unwrap();
     }
 }
