@@ -1,4 +1,4 @@
-use chrono::{NaiveDateTime, NaiveDate, NaiveTime, Datelike};
+use chrono::{NaiveDateTime, NaiveDate, NaiveTime, Datelike, Duration};
 
 use std::vec::Vec;
 use std::str::{FromStr, SplitWhitespace};
@@ -118,7 +118,7 @@ pub fn parse_date_query(query: &str, current_time: &NaiveDateTime)
 
     match words.next() {
         Some("this") => Ok((parse_modulu_search(&mut words, current_time)?, vec!())),
-        Some("past") => unimplemented!(),
+        Some("past") => Ok((parse_absolute_search(&mut words, current_time)?, vec!())),
         Some("in") | Some("on") => unimplemented!(),
         Some("between") => unimplemented!(),
         // Special keywords, or unexpected tokens
@@ -149,6 +149,24 @@ fn parse_modulu_search(query: &mut SplitWhitespace, current_time: &NaiveDateTime
     let start = NaiveDateTime::new(start_date, NaiveTime::from_hms_milli(0,0,0,0));
 
     Ok(vec!(Interval::new(start, current_time.clone())))
+}
+
+fn parse_absolute_search(query: &mut SplitWhitespace, current_time: &NaiveDateTime) 
+    -> Result<Vec<Interval>, TimeParseError>
+{
+    let time_descriptor = match query.next() {
+        Some(word) => TimeDescriptor::from_str(&word)?,
+        None => return Err(TimeParseError::UnexpectedEndOfQuery)
+    };
+
+    let subtracted_duration = match time_descriptor {
+        TimeDescriptor::Day => Duration::days(1),
+        TimeDescriptor::Week => Duration::weeks(1),
+        TimeDescriptor::Month => Duration::days(30),
+        TimeDescriptor::Year => Duration::days(365)
+    };
+
+    Ok(vec!(Interval::new(*current_time - subtracted_duration, current_time.clone())))
 }
 
 
@@ -230,7 +248,7 @@ mod parse_tests {
 
     #[test]
     fn modulu_search_test() {
-        test_query(
+        assert_matches!(test_query(
                 "this day",
                 "2017-09-09 12:00:00",
                 vec!(
@@ -241,9 +259,9 @@ mod parse_tests {
                     "2017-10-10 12:00:00",
                     "2016-09-09 12:00:00",
                 )
-            ).unwrap();
+            ), Ok(()));
 
-        test_query(
+        assert_matches!(test_query(
                 "this month",
                 "2017-09-09 12:00:00",
                 vec!(
@@ -254,9 +272,9 @@ mod parse_tests {
                     "2017-10-10 12:00:00",
                     "2016-09-09 12:00:00",
                 )
-            ).unwrap();
+            ), Ok(()));
 
-        test_query(
+        assert_matches!(test_query(
                 "this year",
                 "2017-09-09 12:00:00",
                 vec!(
@@ -267,6 +285,66 @@ mod parse_tests {
                 vec!(
                     "2016-09-09 12:00:00",
                 )
-            ).unwrap();
+            ), Ok(()));
+    }
+
+    #[test]
+    fn absolute_search_test() {
+        assert_matches!(test_query(
+                "past day",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-09-08 23:30:36",
+                    "2017-09-09 10:30:36",
+                ),
+                vec!(
+                    "2017-07-10 19:03:35",
+                    "2017-09-07 19:03:35"
+                )
+            ), Ok(()));
+
+        assert_matches!(test_query(
+                "past week",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-09-08 23:30:36",
+                    "2017-09-09 10:30:36",
+                    "2017-09-02 23:30:36",
+                ),
+                vec!(
+                    "2016-09-01 12:00:00",
+                    "2017-07-10 19:03:35"
+                )
+            ), Ok(()));
+
+        assert_matches!(test_query(
+                "past month",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-09-08 23:30:36",
+                    "2017-09-09 10:30:36",
+                    "2017-09-02 23:30:36",
+                    "2017-08-10 23:30:36",
+                ),
+                vec!(
+                    "2016-08-08 12:00:00",
+                    "2017-07-10 19:03:35"
+                )
+            ), Ok(()));
+
+        assert_matches!(test_query(
+                "past year",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-09-08 23:30:36",
+                    "2017-09-09 10:30:36",
+                    "2017-09-02 23:30:36",
+                    "2017-08-10 23:30:36",
+                    "2016-09-30 19:03:35"
+                ),
+                vec!(
+                    "2016-09-08 12:00:00",
+                )
+            ), Ok(()));
     }
 }
