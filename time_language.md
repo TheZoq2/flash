@@ -21,6 +21,7 @@ like all files from August independent of year
 
 - on august 27
 - on august 27 2016
+- on the 27th
 - in august 2016
 - in 2016
 

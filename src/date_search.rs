@@ -87,6 +87,25 @@ impl Month {
     }
 }
 
+impl Month {
+    fn as_number0(&self) -> u32 {
+        match *self {
+            Month::January => 0,
+            Month::February => 1,
+            Month::March => 2,
+            Month::April => 3,
+            Month::May => 4,
+            Month::June => 5,
+            Month::July => 6,
+            Month::August => 7,
+            Month::September => 8,
+            Month::October => 9,
+            Month::November => 10,
+            Month::December => 11
+        }
+    }
+}
+
 impl FromStr for Month {
     type Err = TimeParseError;
 
@@ -119,7 +138,7 @@ pub fn parse_date_query(query: &str, current_time: &NaiveDateTime)
     match words.next() {
         Some("this") => Ok((parse_modulu_search(&mut words, current_time)?, vec!())),
         Some("past") => Ok((parse_absolute_search(&mut words, current_time)?, vec!())),
-        Some("in") | Some("on") => unimplemented!(),
+        Some("in") | Some("on") => Ok((vec!(), parse_date_pattern_search(&mut words)?)),
         Some("between") => unimplemented!(),
         // Special keywords, or unexpected tokens
         Some(other) => unimplemented!(),
@@ -167,6 +186,23 @@ fn parse_absolute_search(query: &mut SplitWhitespace, current_time: &NaiveDateTi
     };
 
     Ok(vec!(Interval::new(*current_time - subtracted_duration, current_time.clone())))
+}
+
+
+fn parse_date_pattern_search(query: &mut SplitWhitespace)
+    -> Result<Vec<Box<DateConstraintFunction>>, TimeParseError>
+{
+    let mut result_functions: Vec<Box<DateConstraintFunction>>= vec!();
+
+    for word in query {
+        if let Ok(month) = Month::from_str(word) {
+            result_functions.push(
+                    Box::new(move |date| date.month0() == month.as_number0())
+                )
+        }
+    }
+
+    Ok(result_functions)
 }
 
 
@@ -346,5 +382,27 @@ mod parse_tests {
                     "2016-09-08 12:00:00",
                 )
             ), Ok(()));
+    }
+
+    #[test]
+    fn date_pattern_query_test() {
+        // From a single month
+        assert_matches!(test_query(
+                "in august",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-08-08 12:00:00",
+                    "2017-08-20 12:00:00",
+                    "2016-08-20 12:00:00",
+                    "2015-08-20 12:00:00"
+                ),
+                vec!(
+                    "2017-09-08 12:00:00",
+                    "2017-06-20 12:00:00",
+                    "2016-09-20 12:00:00",
+                    "2015-07-20 12:00:00"
+                )
+            ), Ok(()))
+
     }
 }
