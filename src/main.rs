@@ -120,7 +120,7 @@ fn main() {
     chain.link(Write::<FileDatabase>::both(db));
     chain.link(Read::<settings::Settings>::both(settings));
 
-    let url = format!("localhost:{}", port);
+    let url = format!("0.0.0.0:{}", port);
     match Iron::new(chain).http(url) {
         Ok(_) => {
             println!("Server running on port {}", port);
