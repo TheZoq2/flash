@@ -200,6 +200,18 @@ fn parse_date_pattern_search(query: &mut SplitWhitespace)
                     Box::new(move |date| date.month0() == month.as_number0())
                 )
         }
+        else if let Ok(number) = word.parse::<u32>() {
+            if number < 31 {
+                result_functions.push(
+                        Box::new(move |date| date.day() == number)
+                    )
+            }
+            else {
+                result_functions.push(
+                        Box::new(move |date| date.year() == number as i32)
+                    )
+            }
+        }
     }
 
     Ok(result_functions)
@@ -402,7 +414,79 @@ mod parse_tests {
                     "2016-09-20 12:00:00",
                     "2015-07-20 12:00:00"
                 )
-            ), Ok(()))
+            ), Ok(()));
 
+        // From a sepcific day number
+        assert_matches!(test_query(
+                "on 25",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-09-25 12:00:00",
+                    "2017-06-25 12:00:00",
+                    "2016-09-25 12:00:00",
+                    "2015-08-25 12:00:00"
+                ),
+                vec!(
+                    "2017-09-08 12:00:00",
+                    "2017-06-20 12:00:00",
+                    "2016-09-20 12:00:00",
+                    "2015-07-20 12:00:00"
+                )
+            ), Ok(()));
+        //
+        // From a sepcific year
+        assert_matches!(test_query(
+                "in 2017",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-09-25 12:00:00",
+                    "2017-06-25 12:00:00",
+                    "2017-09-08 12:00:00",
+                    "2017-06-20 12:00:00",
+                ),
+                vec!(
+                    "2016-09-20 12:00:00",
+                    "2015-07-20 12:00:00",
+                    "2016-09-25 12:00:00",
+                    "2015-08-25 12:00:00"
+                )
+            ), Ok(()));
+    }
+
+    #[test]
+    fn multi_pattern_query_test() {
+        // From a month in a year
+        assert_matches!(test_query(
+                "in august 2017",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-08-25 12:00:00",
+                    "2017-08-25 12:00:00",
+                    "2017-08-08 12:00:00",
+                ),
+                vec!(
+                    "2017-09-20 12:00:00",
+                    "2017-07-20 12:00:00",
+                    "2016-08-25 12:00:00",
+                    "2015-08-25 12:00:00"
+                )
+            ), Ok(()));
+
+        // From a specific date any year
+        assert_matches!(test_query(
+                "on august 26",
+                "2017-09-09 12:00:00",
+                vec!(
+                    "2017-08-26 12:00:00",
+                    "2016-08-26 12:00:00",
+                    "2015-08-26 12:00:00",
+                ),
+                vec!(
+                    "2017-09-20 12:00:00",
+                    "2017-07-20 12:00:00",
+                    "2016-08-25 12:00:00",
+                    "2015-08-25 12:00:00"
+                )
+            ), Ok(()));
     }
 }
