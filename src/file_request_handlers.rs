@@ -33,6 +33,7 @@ use file_list_response;
 enum FileAction {
     GetData,
     GetFile,
+    GetFilename,
     GetThumbnail,
     Save
 }
@@ -43,6 +44,7 @@ impl FileAction {
         match action {
             "get_data" => Some(FileAction::GetData),
             "get_file" => Some(FileAction::GetFile),
+            "get_filename" => Some(FileAction::GetFilename),
             "get_thumbnail" => Some(FileAction::GetThumbnail),
             "save" => Some(FileAction::Save),
             other => None
@@ -146,6 +148,13 @@ fn file_request_handler(request: &mut Request, action: FileAction) -> IronResult
         }
         FileAction::GetFile => {
             let path = get_file_location_path(&file_storage_folder, &file_location);
+            Ok(Response::with((status::Ok, path)))
+        }
+        FileAction::GetFilename => {
+            let path = match file_location {
+                FileLocation::Database(entry) => entry.filename,
+                FileLocation::Unsaved(path) => String::from(path.to_string_lossy())
+            };
             Ok(Response::with((status::Ok, path)))
         }
         FileAction::GetThumbnail => {
