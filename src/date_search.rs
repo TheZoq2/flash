@@ -130,6 +130,11 @@ impl FromStr for Month {
 
 pub type DateConstraintFunction = Fn(&NaiveDateTime) -> bool;
 
+pub struct TimeSearchResult {
+    intervals: Vec<(NaiveDateTime, NaiveDateTime)>,
+    constraints: Vec<Box<DateConstraintFunction>>
+}
+
 pub fn parse_date_query(query: &str, current_time: &NaiveDateTime)
     -> Result<(Vec<Interval>, Vec<Box<DateConstraintFunction>>), TimeParseError>
 {

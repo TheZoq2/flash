@@ -8,6 +8,11 @@ use regex::Regex;
 
 use std::borrow::Cow;
 
+pub struct SavedSearchQuery {
+    tags: Vec<String>,
+    negated_tags: Vec<String>
+}
+
 /**
   The type of a search, it could either be a search for previously
   saved files in the database, or for new files at a specified path
