@@ -91,7 +91,7 @@ pub fn list_action_handler(request: &mut Request, action: ListAction) -> IronRes
 }
 
 /**
-  Handles file_list requests that are not concerned with specific file lists
+  Handles `file_list` requests that are not concerned with specific file lists
 */
 pub fn global_list_action_handler(request: &mut Request, action: GlobalAction) -> IronResult<Response> {
     let file_list_list = request.get::<Write<FileListList>>().unwrap();

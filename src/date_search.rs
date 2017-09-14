@@ -130,20 +130,39 @@ impl FromStr for Month {
 
 pub type DateConstraintFunction = Fn(&NaiveDateTime) -> bool;
 
-pub struct TimeSearchResult {
-    intervals: Vec<(NaiveDateTime, NaiveDateTime)>,
+pub struct DateConstraints {
+    intervals: Vec<Interval>,
     constraints: Vec<Box<DateConstraintFunction>>
 }
 
+impl DateConstraints {
+    pub fn with_intervals(intervals: Vec<Interval>) -> Self {
+        Self {
+            intervals,
+            constraints: vec!()
+        }
+    }
+
+    pub fn with_constraints(constraints: Vec<Box<DateConstraintFunction>>) -> Self {
+        Self {
+            intervals: vec!(),
+            constraints
+        }
+    }
+}
+
 pub fn parse_date_query(query: &str, current_time: &NaiveDateTime)
-    -> Result<(Vec<Interval>, Vec<Box<DateConstraintFunction>>), TimeParseError>
+    -> Result<DateConstraints, TimeParseError>
 {
     let mut words = query.split_whitespace();
 
     match words.next() {
-        Some("this") => Ok((parse_modulu_search(&mut words, current_time)?, vec!())),
-        Some("past") => Ok((parse_absolute_search(&mut words, current_time)?, vec!())),
-        Some("in") | Some("on") => Ok((vec!(), parse_date_pattern_search(&mut words)?)),
+        Some("this") =>
+            Ok(DateConstraints::with_intervals(parse_modulu_search(&mut words, current_time)?)),
+        Some("past") =>
+            Ok(DateConstraints::with_intervals(parse_absolute_search(&mut words, current_time)?)),
+        Some("in") | Some("on") =>
+            Ok(DateConstraints::with_constraints(parse_date_pattern_search(&mut words)?)),
         Some("between") => unimplemented!(),
         // Special keywords, or unexpected tokens
         Some(other) => unimplemented!(),

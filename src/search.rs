@@ -2,15 +2,16 @@
 extern crate lazy_static;
 extern crate regex;
 
-use chrono::{NaiveDate, NaiveTime, NaiveDateTime};
-
 use regex::Regex;
 
 use std::borrow::Cow;
 
+use date_search::DateConstraints;
+
 pub struct SavedSearchQuery {
     tags: Vec<String>,
-    negated_tags: Vec<String>
+    negated_tags: Vec<String>,
+    date_constraint: DateConstraints,
 }
 
 /**
