@@ -255,10 +255,10 @@ mod parse_tests {
 
     fn timestamp_in_query_result(
             timestamp: &NaiveDateTime,
-            query_result: &(Vec<Interval>, Vec<Box<DateConstraintFunction>>)
+            query_result: &DateConstraints
         ) -> bool
     {
-        let (ref intervals, ref constraints) = *query_result;
+        let DateConstraints{ref intervals, ref constraints, ..} = *query_result;
 
         for interval in intervals {
             if !interval.contains(timestamp) {
