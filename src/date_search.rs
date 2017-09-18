@@ -255,11 +255,9 @@ mod parse_tests {
 
     fn timestamp_in_query_result(
             timestamp: &NaiveDateTime,
-            query_result: &DateConstraints
+            &DateConstraints{ref intervals, ref constraints, ..}: &DateConstraints
         ) -> bool
     {
-        let DateConstraints{ref intervals, ref constraints, ..} = *query_result;
-
         for interval in intervals {
             if !interval.contains(timestamp) {
                 return false
