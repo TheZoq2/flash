@@ -8,10 +8,35 @@ use std::borrow::Cow;
 
 use date_search::DateConstraints;
 
+#[derive(Debug)]
 pub struct SavedSearchQuery {
-    tags: Vec<String>,
-    negated_tags: Vec<String>,
-    date_constraint: DateConstraints,
+    pub tags: Vec<String>,
+    pub negated_tags: Vec<String>,
+    pub date_constraints: DateConstraints,
+}
+
+impl SavedSearchQuery {
+    pub fn empty() -> Self {
+        Self {
+            tags: vec!(),
+            negated_tags: vec!(),
+            date_constraints: DateConstraints::empty()
+        }
+    }
+
+    pub fn merge(&self, other: &Self) -> Self {
+        Self {
+            date_constraints: self.date_constraints.merge(&other.date_constraints),
+            tags: self.tags.iter()
+                    .chain(other.tags.iter())
+                    .map(|ref v| v.to_owned())
+                    .collect(),
+            negated_tags: self.negated_tags.iter()
+                    .chain(other.negated_tags.iter())
+                    .map(|ref v| v.to_owned())
+                    .collect(),
+        }
+    }
 }
 
 /**
@@ -21,7 +46,7 @@ pub struct SavedSearchQuery {
 #[derive(Debug)]
 pub enum SearchType {
     Path(String),
-    Saved((Vec<String>, Vec<String>)),
+    Saved(SavedSearchQuery),
 }
 
 
@@ -38,7 +63,9 @@ pub fn parse_search_query(query: &str) -> SearchType {
         SearchType::Path(query[1..].to_owned())
     }
     else {
-        SearchType::Saved(get_tags_from_query(query))
+        let sections = query.split(";");
+
+        unimplemented!()
     }
 }
 
@@ -51,10 +78,6 @@ const TAG_LIST_REGEX: &str = r"of (?P<list>[\w[:blank:],]+);{0,1}";
   Returns all the tags specified in a search query
 */
 fn get_tags_from_query(query: &str) -> (Vec<String>, Vec<String>) {
-    lazy_static!{
-        static ref TAG_RE: Regex = Regex::new(r"\w+").unwrap();
-    }
-
     let list_string = match get_tag_list_from_query(query) {
         Some(val) => val,
         None => return (vec![], vec![]),

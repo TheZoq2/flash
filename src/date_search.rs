@@ -9,6 +9,7 @@ pub enum TimeParseError {
     UnexpectedEndOfQuery
 }
 
+#[derive(Debug)]
 pub struct Interval {
     start: NaiveDateTime,
     end: NaiveDateTime
@@ -136,6 +137,12 @@ pub struct DateConstraints {
 }
 
 impl DateConstraints {
+    pub fn empty() -> Self {
+        Self {
+            intervals: vec!(),
+            constraints: vec!()
+        }
+    }
     pub fn with_intervals(intervals: Vec<Interval>) -> Self {
         Self {
             intervals,
@@ -148,6 +155,33 @@ impl DateConstraints {
             intervals: vec!(),
             constraints
         }
+    }
+
+    /**
+      Combines the current constraints with other constraint to create a new constraint that
+      satisfies both originals
+    */
+    pub fn merge(&self, other: &Self) -> Self {
+        Self {
+            intervals: self.intervals.iter()
+                    .chain(other.intervals.iter())
+                    .map(|val| *val.clone())
+                    .collect(),
+            constraints: self.constraints.iter()
+                    .chain(other.constraints.iter())
+                    .map(|val| *val.clone())
+                    .collect(),
+        }
+    }
+}
+
+impl ::std::fmt::Debug for DateConstraints {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(f,
+               "DateConstraints {{ intervals: {:?}, {} constraint_functions }}",
+               self.intervals,
+               self.constraints.len()
+            )
     }
 }
 
