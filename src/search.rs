@@ -8,6 +8,8 @@ use std::borrow::Cow;
 
 use date_search::DateConstraints;
 
+use util;
+
 #[derive(Debug)]
 pub struct SavedSearchQuery {
     pub tags: Vec<String>,
@@ -27,14 +29,8 @@ impl SavedSearchQuery {
     pub fn merge(&self, other: &Self) -> Self {
         Self {
             date_constraints: self.date_constraints.merge(&other.date_constraints),
-            tags: self.tags.iter()
-                    .chain(other.tags.iter())
-                    .map(|ref v| v.to_owned())
-                    .collect(),
-            negated_tags: self.negated_tags.iter()
-                    .chain(other.negated_tags.iter())
-                    .map(|ref v| v.to_owned())
-                    .collect(),
+            tags: util::merge_vectors(&self.tags, &other.tags),
+            negated_tags: util::merge_vectors(&self.negated_tags, &other.negated_tags),
         }
     }
 }

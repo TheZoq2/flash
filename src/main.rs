@@ -1,4 +1,7 @@
 #![allow(dead_code)]
+#![allow(unused_doc_comment)]
+
+#![feature(fn_must_use)]
 
 extern crate iron;
 extern crate staticfile;
@@ -50,6 +53,7 @@ mod schema;
 mod request_helpers;
 mod file_list_response;
 mod error;
+mod util;
 
 #[macro_use]
 extern crate serde_derive;

@@ -1,7 +1,9 @@
-use chrono::{NaiveDateTime, NaiveDate, NaiveTime, Datelike, Duration};
+use chrono::{NaiveDateTime, NaiveTime, Datelike, Duration};
 
 use std::vec::Vec;
 use std::str::{FromStr, SplitWhitespace};
+
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum TimeParseError {
@@ -10,6 +12,7 @@ pub enum TimeParseError {
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
 pub struct Interval {
     start: NaiveDateTime,
     end: NaiveDateTime
@@ -131,9 +134,12 @@ impl FromStr for Month {
 
 pub type DateConstraintFunction = Fn(&NaiveDateTime) -> bool;
 
+#[derive(Clone)]
 pub struct DateConstraints {
     intervals: Vec<Interval>,
-    constraints: Vec<Box<DateConstraintFunction>>
+    // The function pointer is in an Arc because clone isn't implemented for
+    // DateConstraintFunction
+    constraints: Vec<Arc<DateConstraintFunction>>
 }
 
 impl DateConstraints {
@@ -150,7 +156,7 @@ impl DateConstraints {
         }
     }
 
-    pub fn with_constraints(constraints: Vec<Box<DateConstraintFunction>>) -> Self {
+    pub fn with_constraints(constraints: Vec<Arc<DateConstraintFunction>>) -> Self {
         Self {
             intervals: vec!(),
             constraints
@@ -165,11 +171,11 @@ impl DateConstraints {
         Self {
             intervals: self.intervals.iter()
                     .chain(other.intervals.iter())
-                    .map(|val| *val.clone())
+                    .map(|val| val.clone())
                     .collect(),
             constraints: self.constraints.iter()
                     .chain(other.constraints.iter())
-                    .map(|val| *val.clone())
+                    .map(|val| val.clone())
                     .collect(),
         }
     }
@@ -248,25 +254,25 @@ fn parse_absolute_search(query: &mut SplitWhitespace, current_time: &NaiveDateTi
 
 
 fn parse_date_pattern_search(query: &mut SplitWhitespace)
-    -> Result<Vec<Box<DateConstraintFunction>>, TimeParseError>
+    -> Result<Vec<Arc<DateConstraintFunction>>, TimeParseError>
 {
-    let mut result_functions: Vec<Box<DateConstraintFunction>>= vec!();
+    let mut result_functions: Vec<Arc<DateConstraintFunction>>= vec!();
 
     for word in query {
         if let Ok(month) = Month::from_str(word) {
             result_functions.push(
-                    Box::new(move |date| date.month0() == month.as_number0())
+                    Arc::new(move |date| date.month0() == month.as_number0())
                 )
         }
         else if let Ok(number) = word.parse::<u32>() {
             if number < 31 {
                 result_functions.push(
-                        Box::new(move |date| date.day() == number)
+                        Arc::new(move |date| date.day() == number)
                     )
             }
             else {
                 result_functions.push(
-                        Box::new(move |date| date.year() == number as i32)
+                        Arc::new(move |date| date.year() == number as i32)
                     )
             }
         }
