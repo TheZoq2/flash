@@ -136,10 +136,10 @@ pub type DateConstraintFunction = Fn(&NaiveDateTime) -> bool;
 
 #[derive(Clone)]
 pub struct DateConstraints {
-    intervals: Vec<Interval>,
+    pub intervals: Vec<Interval>,
     // The function pointer is in an Arc because clone isn't implemented for
     // DateConstraintFunction
-    constraints: Vec<Arc<DateConstraintFunction>>
+    pub constraints: Vec<Arc<DateConstraintFunction>>
 }
 
 impl DateConstraints {

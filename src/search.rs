@@ -3,10 +3,11 @@ extern crate lazy_static;
 extern crate regex;
 
 use regex::Regex;
+use chrono;
 
 use std::borrow::Cow;
 
-use date_search::DateConstraints;
+use date_search::{DateConstraints, parse_date_query};
 
 use util;
 
@@ -37,7 +38,7 @@ impl SavedSearchQuery {
 
 /**
   The type of a search, it could either be a search for previously
-  saved files in the database, or for new files at a specified path
+  saved files in the database, orater for new files at a specified path
 */
 #[derive(Debug)]
 pub enum SearchType {
@@ -61,7 +62,26 @@ pub fn parse_search_query(query: &str) -> SearchType {
     else {
         let sections = query.split(";");
 
-        unimplemented!()
+        let search_query = sections.fold(SavedSearchQuery::empty(), |old_search, query_section| {
+            let new_params = if let Some(query) = get_tag_list_from_query(query_section) {
+                let (tags, negated) = get_tags_from_query(&query);
+
+                SavedSearchQuery {tags: tags, negated_tags: negated, .. SavedSearchQuery::empty()}
+            }
+            else {
+                let time = chrono::NaiveDateTime::from_timestamp(chrono::UTC::now().timestamp(), 0);
+                if let Ok(date_constraints) = parse_date_query(&query, &time) {
+                    SavedSearchQuery {date_constraints, .. SavedSearchQuery::empty()}
+                }
+                else {
+                    SavedSearchQuery::empty()
+                }
+            };
+
+            old_search.merge(&new_params)
+        });
+
+        SearchType::Saved(search_query)
     }
 }
 
@@ -219,6 +239,20 @@ mod public_query_tests {
         assert_matches!(parse_search_query("/"), SearchType::Path(_));
         assert_matches!(parse_search_query(" /"), SearchType::Saved(_));
         assert_matches!(parse_search_query("of things/stuff"), SearchType::Saved(_));
+    }
+
+    #[test]
+    fn searching_for_times_should_work() {
+        let query_result = parse_search_query("from past month");
+
+        if let SearchType::Saved(query) = query_result {
+            assert_eq!(query.tags.len(), 0);
+            assert_eq!(query.negated_tags.len(), 0);
+            assert_eq!(query.date_constraints.intervals.len(), 1);
+        }
+        else {
+            panic!("Expected a Saved query, got something else");
+        }
     }
 }
 
