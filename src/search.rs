@@ -53,6 +53,7 @@ pub enum SearchType {
 pub fn parse_search_query(query: &str) -> SearchType {
     lazy_static! {
         static ref PATH_RE: Regex = Regex::new(r"^/.*").unwrap();
+        static ref 
     }
 
     if PATH_RE.is_match(query) {
@@ -87,7 +88,6 @@ pub fn parse_search_query(query: &str) -> SearchType {
 
 
 
-const TAG_LIST_REGEX: &str = r"of (?P<list>[\w[:blank:],]+);{0,1}";
 
 
 /**
@@ -110,6 +110,7 @@ fn get_tags_from_query(query: &str) -> (Vec<String>, Vec<String>) {
   and returns a string containing all the tags separated by ,
 */
 fn get_tag_list_from_query(query: &str) -> Option<Cow<str>> {
+    const TAG_LIST_REGEX: &str = r"of (?P<list>[\w[:blank:],]+);{0,1}";
     lazy_static!{
         static ref AND_RE: Regex = Regex::new(r"\Wand\W").unwrap();
         static ref TAG_LIST_RE: Regex = Regex::new(TAG_LIST_REGEX).unwrap();
