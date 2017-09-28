@@ -46,14 +46,14 @@ pub enum SearchType {
     Saved(SavedSearchQuery),
 }
 
-
 /**
   Parses a search query to determine what the user searched for
 */
 pub fn parse_search_query(query: &str) -> SearchType {
     lazy_static! {
         static ref PATH_RE: Regex = Regex::new(r"^/.*").unwrap();
-        static ref 
+        static ref QUERY_SECTION_REGEX: Regex = 
+                Regex::new(r"(?'type'of|from) (?'main'.+?)(;|$)").unwrap();
     }
 
     if PATH_RE.is_match(query) {
@@ -61,30 +61,42 @@ pub fn parse_search_query(query: &str) -> SearchType {
         SearchType::Path(query[1..].to_owned())
     }
     else {
-        let sections = query.split(";");
+        let query_captures = QUERY_SECTION_REGEX.captures_iter(query);
 
-        let search_query = sections.fold(SavedSearchQuery::empty(), |old_search, query_section| {
-            let new_params = if let Some(query) = get_tag_list_from_query(query_section) {
-                let (tags, negated) = get_tags_from_query(&query);
+        query_captures.map(|cap| {
+                let type_str = cap.name("type").map(|x| x.as_str());
+                let content_str = cap.name("main").map(|x| x.as_str());
 
-                SavedSearchQuery {tags: tags, negated_tags: negated, .. SavedSearchQuery::empty()}
-            }
-            else {
-                let time = chrono::NaiveDateTime::from_timestamp(chrono::UTC::now().timestamp(), 0);
-                if let Ok(date_constraints) = parse_date_query(&query, &time) {
-                    SavedSearchQuery {date_constraints, .. SavedSearchQuery::empty()}
-                }
-                else {
-                    SavedSearchQuery::empty()
-                }
-            };
+                query_section_type(type_str, content_str)
+            })
+            .foldl(SavedSearchQuery::empty(), |prev, query| {
 
-            old_search.merge(&new_params)
-        });
-
-        SearchType::Saved(search_query)
+            })
     }
 }
+
+enum QuerySectionType {
+    Tags(String),
+    Time(String)
+}
+
+fn query_section_type(type_str: Option<&str>, content_str: Option<&str>)
+        -> QuerySectionType
+{
+    if let (Some(type_str), Some(content_str)) = (type_str, content_str) {
+        match type_str {
+            "from" => QuerySectionType::Time(content_str.to_owned()),
+            "of" => QuerySectionType::Tags(content_str.to_owned()),
+            _ => {
+                panic!("The string matched the regex but the type was not correct");
+            }
+        }
+    }
+    else {
+        panic!("The string matched the regex, but the expected groups were not part of the match");
+    }
+}
+
 
 
 
