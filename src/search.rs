@@ -7,6 +7,8 @@ use chrono;
 
 use std::borrow::Cow;
 
+use chrono::{NaiveDateTime, UTC};
+
 use date_search::{DateConstraints, parse_date_query};
 
 use util;
@@ -24,6 +26,21 @@ impl SavedSearchQuery {
             tags: vec!(),
             negated_tags: vec!(),
             date_constraints: DateConstraints::empty()
+        }
+    }
+
+    pub fn with_tags((tags, negated_tags): (Vec<String>, Vec<String>)) -> Self {
+        Self {
+            tags,
+            negated_tags,
+            .. Self::empty()
+        }
+    }
+
+    pub fn with_date_constraints(date_constraints: DateConstraints) -> Self {
+        Self {
+            date_constraints,
+            .. Self::empty()
         }
     }
 
@@ -53,7 +70,7 @@ pub fn parse_search_query(query: &str) -> SearchType {
     lazy_static! {
         static ref PATH_RE: Regex = Regex::new(r"^/.*").unwrap();
         static ref QUERY_SECTION_REGEX: Regex = 
-                Regex::new(r"(?'type'of|from) (?'main'.+?)(;|$)").unwrap();
+                Regex::new(r"(?P<type>of|from) (?P<main>.+?)(;|$)").unwrap();
     }
 
     if PATH_RE.is_match(query) {
@@ -63,15 +80,26 @@ pub fn parse_search_query(query: &str) -> SearchType {
     else {
         let query_captures = QUERY_SECTION_REGEX.captures_iter(query);
 
-        query_captures.map(|cap| {
+        let query = query_captures.map(|cap| {
                 let type_str = cap.name("type").map(|x| x.as_str());
                 let content_str = cap.name("main").map(|x| x.as_str());
 
                 query_section_type(type_str, content_str)
             })
-            .foldl(SavedSearchQuery::empty(), |prev, query| {
+            .fold(SavedSearchQuery::empty(), |prev, query| {
+                let new = match query {
+                    QuerySectionType::Tags(tag_list) =>
+                            SavedSearchQuery::with_tags(get_tags_from_query(&tag_list)),
+                    QuerySectionType::Time(time_str) =>
+                            SavedSearchQuery::with_date_constraints(
+                                get_date_constraints_from_query(&time_str)
+                            )
+                };
 
-            })
+                prev.merge(&new)
+            });
+
+        SearchType::Saved(query)
     }
 }
 
@@ -99,7 +127,11 @@ fn query_section_type(type_str: Option<&str>, content_str: Option<&str>)
 
 
 
-
+fn get_date_constraints_from_query(query: &str) -> DateConstraints {
+    let current_time = NaiveDateTime::from_timestamp(UTC::now().timestamp(), 0);
+    parse_date_query(&query, &current_time)
+            .unwrap_or_else(|_| DateConstraints::empty())
+}
 
 
 /**
