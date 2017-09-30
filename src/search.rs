@@ -3,7 +3,6 @@ extern crate lazy_static;
 extern crate regex;
 
 use regex::Regex;
-use chrono;
 
 use std::borrow::Cow;
 
@@ -129,7 +128,7 @@ fn query_section_type(type_str: Option<&str>, content_str: Option<&str>)
 
 fn get_date_constraints_from_query(query: &str) -> DateConstraints {
     let current_time = NaiveDateTime::from_timestamp(UTC::now().timestamp(), 0);
-    parse_date_query(&query, &current_time)
+    parse_date_query(query, &current_time)
             .unwrap_or_else(|_| DateConstraints::empty())
 }
 

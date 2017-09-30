@@ -49,7 +49,7 @@ impl FileList {
 
         let files = file_paths
             .into_iter()
-            .map(|path| FileLocation::Unsaved(path))
+            .map(FileLocation::Unsaved)
             .collect();
 
         FileList {
@@ -170,7 +170,7 @@ impl FileListList {
         &self.lists
     }
 
-    pub fn lists_with_ids<'a>(&'a self) -> Vec<(usize, &'a FileList)>
+    pub fn lists_with_ids(&self) -> Vec<(usize, &FileList)>
     {
         self.lists.iter()
             .enumerate()

@@ -27,12 +27,7 @@ impl Interval {
     }
 
     pub fn contains(&self, time: &NaiveDateTime) -> bool {
-        if time >= &self.start && time < &self.end{
-            true
-        }
-        else {
-            false
-        }
+        time >= &self.start && time < &self.end
     }
 }
 
@@ -171,11 +166,11 @@ impl DateConstraints {
         Self {
             intervals: self.intervals.iter()
                     .chain(other.intervals.iter())
-                    .map(|val| val.clone())
+                    .cloned()
                     .collect(),
             constraints: self.constraints.iter()
                     .chain(other.constraints.iter())
-                    .map(|val| val.clone())
+                    .cloned()
                     .collect(),
         }
     }
@@ -205,7 +200,7 @@ pub fn parse_date_query(query: &str, current_time: &NaiveDateTime)
             Ok(DateConstraints::with_constraints(parse_date_pattern_search(&mut words)?)),
         Some("between") => unimplemented!(),
         // Special keywords, or unexpected tokens
-        Some(other) => unimplemented!(),
+        Some(_other) => unimplemented!(),
         None => Err(TimeParseError::UnexpectedEndOfQuery)
     }
 }
@@ -215,7 +210,7 @@ fn parse_modulu_search(query: &mut SplitWhitespace, current_time: &NaiveDateTime
     -> Result<Vec<Interval>, TimeParseError>
 {
     let time_descriptor = match query.next() {
-        Some(word) => TimeDescriptor::from_str(&word)?,
+        Some(word) => TimeDescriptor::from_str(word)?,
         None => return Err(TimeParseError::UnexpectedEndOfQuery)
     };
 
@@ -231,14 +226,14 @@ fn parse_modulu_search(query: &mut SplitWhitespace, current_time: &NaiveDateTime
 
     let start = NaiveDateTime::new(start_date, NaiveTime::from_hms_milli(0,0,0,0));
 
-    Ok(vec!(Interval::new(start, current_time.clone())))
+    Ok(vec!(Interval::new(start, *current_time)))
 }
 
 fn parse_absolute_search(query: &mut SplitWhitespace, current_time: &NaiveDateTime) 
     -> Result<Vec<Interval>, TimeParseError>
 {
     let time_descriptor = match query.next() {
-        Some(word) => TimeDescriptor::from_str(&word)?,
+        Some(word) => TimeDescriptor::from_str(word)?,
         None => return Err(TimeParseError::UnexpectedEndOfQuery)
     };
 
@@ -249,7 +244,7 @@ fn parse_absolute_search(query: &mut SplitWhitespace, current_time: &NaiveDateTi
         TimeDescriptor::Year => Duration::days(365)
     };
 
-    Ok(vec!(Interval::new(*current_time - subtracted_duration, current_time.clone())))
+    Ok(vec!(Interval::new(*current_time - subtracted_duration, *current_time)))
 }
 
 

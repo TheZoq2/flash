@@ -47,7 +47,7 @@ impl FileAction {
             "get_filename" => Some(FileAction::GetFilename),
             "get_thumbnail" => Some(FileAction::GetThumbnail),
             "save" => Some(FileAction::Save),
-            other => None
+            _ => None
         }
     }
 }
@@ -106,13 +106,13 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response> 
     let action_str = get_get_variable(request, "action")?;
 
     if let Some(action) = file_list_response::GlobalAction::try_parse(&action_str) {
-        file_list_response::global_list_action_handler(request, action)
+        file_list_response::global_list_action_handler(request, &action)
     }
     else if let Some(action) = file_list_response::ListAction::try_parse(&action_str) {
-        file_list_response::list_action_handler(request, action)
+        file_list_response::list_action_handler(request, &action)
     }
     else if let Some(action) = FileAction::try_parse(&action_str) {
-        file_request_handler(request, action)
+        file_request_handler(request, &action)
     }
     else {
         Err(FileRequestError::UnknownAction(action_str))?
@@ -122,7 +122,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response> 
 /**
   Handles requests for actions dealing with specific entries in file lists
 */
-fn file_request_handler(request: &mut Request, action: FileAction) -> IronResult<Response> {
+fn file_request_handler(request: &mut Request, action: &FileAction) -> IronResult<Response> {
     let (list_id, file_index) = read_request_list_id_index(request)?;
 
     let file_location = {
@@ -139,7 +139,7 @@ fn file_request_handler(request: &mut Request, action: FileAction) -> IronResult
         db.get_file_save_path()
     };
 
-    match action {
+    match *action {
         FileAction::GetData => {
             let file_data = file_data_from_file_location(&file_location);
             Ok(Response::with(
@@ -441,13 +441,13 @@ fn get_file_list_object(
 /**
   Returns the index of the last file that was saved to the database in a specific file
 */
-fn get_last_saved(file_list: Vec<FileLocation>) -> Option<usize>
+fn get_last_saved(file_list: &[FileLocation]) -> Option<usize>
 {
     file_list.iter()
         .enumerate()
         .fold(None, |last, (id, file)| {
-            match file {
-                &FileLocation::Database(_) => Some(id),
+            match *file {
+                FileLocation::Database(_) => Some(id),
                 _ => last
             }
         })

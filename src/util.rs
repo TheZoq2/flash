@@ -1,9 +1,9 @@
 
-pub fn merge_vectors<T>(v1: &Vec<T>, v2: &Vec<T>) -> Vec<T>
+pub fn merge_vectors<T>(v1: &[T], v2: &[T]) -> Vec<T>
     where T: Clone
 {
     v1.iter()
         .chain(v2.iter())
-        .map(|v| v.clone())
+        .cloned()
         .collect()
 }

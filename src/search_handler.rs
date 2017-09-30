@@ -31,7 +31,7 @@ fn handle_search_for_saved_files(
 ) -> IronResult<Response> {
     let file_list_list = request.get::<Write<FileListList>>().unwrap();
 
-    let SavedSearchQuery{tags, negated_tags, date_constraints} = searched_tags;
+    let SavedSearchQuery{tags, negated_tags, ..} = searched_tags;
 
     // Fetch the files in the database
     let files = {
