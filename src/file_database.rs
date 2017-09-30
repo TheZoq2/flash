@@ -7,6 +7,7 @@ use std::vec::Vec;
 use diesel;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
+use diesel::expression::not;
 
 use schema::files;
 

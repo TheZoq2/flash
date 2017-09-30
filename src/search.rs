@@ -6,7 +6,7 @@ use regex::Regex;
 
 use std::borrow::Cow;
 
-use chrono::{NaiveDateTime, UTC};
+use chrono::{NaiveDateTime, Utc};
 
 use date_search::{DateConstraints, parse_date_query};
 
@@ -127,7 +127,7 @@ fn query_section_type(type_str: Option<&str>, content_str: Option<&str>)
 
 
 fn get_date_constraints_from_query(query: &str) -> DateConstraints {
-    let current_time = NaiveDateTime::from_timestamp(UTC::now().timestamp(), 0);
+    let current_time = NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0);
     parse_date_query(query, &current_time)
             .unwrap_or_else(|_| DateConstraints::empty())
 }

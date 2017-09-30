@@ -176,11 +176,11 @@ impl ExifData {
         }
     }
 
-    pub fn get_creation_date(&self) -> Result<chrono::DateTime<chrono::UTC>, ExifError> {
+    pub fn get_creation_date(&self) -> Result<chrono::DateTime<chrono::Utc>, ExifError> {
         let target_tag = "Create Date";
         match self.get_tag(target_tag) {
             Some(date_string) => {
-                let parsed = chrono::UTC.datetime_from_str(date_string, "%Y:%m:%d %H:%M:%S");
+                let parsed = chrono::Utc.datetime_from_str(date_string, "%Y:%m:%d %H:%M:%S");
 
                 match parsed {
                     Ok(result) => Ok(result),

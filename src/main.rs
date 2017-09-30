@@ -3,6 +3,8 @@
 
 #![feature(fn_must_use)]
 
+#![recursion_limit="1024"]
+
 extern crate iron;
 extern crate staticfile;
 extern crate persistent;
