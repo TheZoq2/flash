@@ -16,6 +16,8 @@ use iron::typemap::Key;
 
 use std::path::PathBuf;
 
+use search;
+
 /**
   A reference to a file stored in the file database
  */
@@ -134,17 +136,18 @@ impl FileDatabase {
       Returns all files that have all the tags in the list and that dont have any
       tags in the negated tag list
      */
-    pub fn get_files_with_tags(&self, tags: &[String], negated_tags: &[String]) -> Vec<File> {
+    pub fn search_files(&self, query: search::SavedSearchQuery) -> Vec<File> {
+        let search::SavedSearchQuery{tags, negated_tags, date_constraints} = query;
+
+        let interval = &date_constraints.intervals[0];
+
         files::table
             .filter(files::tags.contains(tags))
+            .filter(not(files::tags.contains(negated_tags)))
+            .filter(files::creation_date.between(interval.start..interval.end))
             .get_results(&self.connection)
             .expect("Error retrieving photos with tags")
             .into_iter()
-            .filter(|file: &File| {
-                negated_tags
-                    .iter()
-                    .fold(true, |acc, tag| acc && !file.tags.contains(tag))
-            })
             .collect()
     }
 
@@ -153,10 +156,11 @@ impl FileDatabase {
         tags: &[String],
         negated_tags: &[String],
     ) -> Vec<String> {
-        self.get_files_with_tags(tags, negated_tags)
-            .iter()
-            .map(|x| x.filename.clone())
-            .collect()
+        unimplemented!("Must be adapted to the new signature of search_files")
+        //self.get_files_with_tags(tags, negated_tags)
+        //    .iter()
+        //    .map(|x| x.filename.clone())
+        //    .collect()
     }
 
     pub fn get_file_with_id(&self, id: i32) -> Option<File> {

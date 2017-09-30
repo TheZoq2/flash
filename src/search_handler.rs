@@ -27,18 +27,16 @@ pub fn handle_file_search(request: &mut Request) -> IronResult<Response> {
 
 fn handle_search_for_saved_files(
     request: &mut Request,
-    searched_tags: SavedSearchQuery,
+    query: SavedSearchQuery,
 ) -> IronResult<Response> {
     let file_list_list = request.get::<Write<FileListList>>().unwrap();
-
-    let SavedSearchQuery{tags, negated_tags, ..} = searched_tags;
 
     // Fetch the files in the database
     let files = {
         let mutex = request.get::<Write<FileDatabase>>().unwrap();
         let db = mutex.lock().unwrap();
 
-        db.get_files_with_tags(&tags, &negated_tags)
+        db.search_files(query)
     };
 
     // Build a file_list from the tags

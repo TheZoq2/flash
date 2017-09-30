@@ -14,8 +14,8 @@ pub enum TimeParseError {
 #[derive(Debug)]
 #[derive(Clone)]
 pub struct Interval {
-    start: NaiveDateTime,
-    end: NaiveDateTime
+    pub start: NaiveDateTime,
+    pub end: NaiveDateTime
 }
 
 impl Interval {
