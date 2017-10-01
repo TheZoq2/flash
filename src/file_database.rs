@@ -7,7 +7,7 @@ use std::vec::Vec;
 use diesel;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
-use diesel::expression::not;
+use diesel::expression::{not, any};
 
 use schema::files;
 
@@ -18,6 +18,7 @@ use iron::typemap::Key;
 use std::path::PathBuf;
 
 use search;
+use date_search;
 
 /**
   A reference to a file stored in the file database
@@ -140,15 +141,32 @@ impl FileDatabase {
     pub fn search_files(&self, query: search::SavedSearchQuery) -> Vec<File> {
         let search::SavedSearchQuery{tags, negated_tags, date_constraints} = query;
 
-        let interval = &date_constraints.intervals[0];
-
-        files::table
+        // Construct the database query
+        // construct static query parameters
+        let mut db_query = files::table.into_boxed()
             .filter(files::tags.contains(tags))
-            .filter(not(files::tags.contains(negated_tags)))
-            .filter(files::creation_date.between(interval.start..interval.end))
-            .get_results(&self.connection)
-            .expect("Error retrieving photos with tags")
+            .filter(not(files::tags.contains(negated_tags)));
+
+        // Add dynamic parts of the query
+        for interval in date_constraints.intervals {
+            db_query = db_query.filter(
+                    files::creation_date.between(interval.start..interval.end)
+                );
+        }
+
+        // Execute the database query and filter things that can't be filtered using sql
+        db_query.load(&self.connection).expect("Error executing database query")
             .into_iter()
+            .filter(|file: &File| {
+                date_constraints.constraints
+                    .iter()
+                    .fold(true, |acc, constraint_function|{
+                        if let Some(creation_date) = file.creation_date {
+                            acc && constraint_function(&creation_date)
+                        }
+                        else {false}
+                    })
+            })
             .collect()
     }
 
