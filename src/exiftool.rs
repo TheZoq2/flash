@@ -209,7 +209,7 @@ mod exif_data_tests {
         assert_eq!(data.get_tag("Create Date"), Some("2002:12:08 12:00:00"));
         assert_eq!(data.get_tag("Non-existing tag"), None);
 
-        let expected_date = chrono::UTC.ymd(2002, 12, 8).and_hms(12, 0, 0);
+        let expected_date = chrono::Utc.ymd(2002, 12, 8).and_hms(12, 0, 0);
         assert_eq!(data.get_creation_date().unwrap(), expected_date);
     }
 

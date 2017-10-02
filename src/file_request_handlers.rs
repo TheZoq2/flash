@@ -462,6 +462,8 @@ fn get_last_saved(file_list: &[FileLocation]) -> Option<usize>
 mod file_request_tests {
     use super::*;
 
+    use search;
+
     use file_list::{FileList, FileListSource};
 
 
@@ -599,7 +601,7 @@ mod file_request_tests {
         match fdb.lock() {
             Ok(fdb) => {
                 assert!(
-                    fdb.get_files_with_tags(&tags, &vec!())
+                    fdb.search_files(search::SavedSearchQuery::with_tags((tags, vec!())))
                         .iter()
                         .fold(false, |acc, file| { acc || file.id == result.id })
                     )
@@ -639,7 +641,8 @@ mod file_request_tests {
 
         //Make sure that the file was actually added to the database
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&tags, &vec!())
+                fdb.lock().unwrap()
+                    .search_files(search::SavedSearchQuery::with_tags((tags, vec!())))
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
             );
@@ -679,14 +682,16 @@ mod file_request_tests {
 
         // Make sure that the file was actually added to the database
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&tags, &vec!())
+                fdb.lock().unwrap()
+                    .search_files(search::SavedSearchQuery::with_tags((tags, vec!())))
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
             );
 
         // Make sure the old entry was removed
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&old_tags, &vec!())
+                fdb.lock().unwrap()
+                    .search_files(search::SavedSearchQuery::with_tags((old_tags, vec!())))
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
                 ==
