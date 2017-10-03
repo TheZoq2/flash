@@ -87,8 +87,11 @@ pub fn parse_search_query(query: &str) -> SearchType {
             })
             .fold(SavedSearchQuery::empty(), |prev, query| {
                 let new = match query {
-                    QuerySectionType::Tags(tag_list) =>
-                            SavedSearchQuery::with_tags(get_tags_from_query(&tag_list)),
+                    QuerySectionType::Tags(tag_list) => {
+                        let tags = get_tags_from_query(&tag_list);
+                        println!("{:?}, {:?}", tag_list, tags);
+                        SavedSearchQuery::with_tags(tags)
+                    },
                     QuerySectionType::Time(time_str) =>
                             SavedSearchQuery::with_date_constraints(
                                 get_date_constraints_from_query(&time_str)
@@ -132,19 +135,12 @@ fn get_date_constraints_from_query(query: &str) -> DateConstraints {
             .unwrap_or_else(|_| DateConstraints::empty())
 }
 
+fn tags_from_tag_List_string(clean_str: &str) -> (Vec<String>, Vec<String>) {
+    let clean_string = clean_tag_list_string(clean_str);
 
-/**
-  Returns all the tags specified in a search query
-*/
-fn get_tags_from_query(query: &str) -> (Vec<String>, Vec<String>) {
-    let list_string = match get_tag_list_from_query(query) {
-        Some(val) => val,
-        None => return (vec![], vec![]),
-    };
+    let tags = get_tags_from_list_string(clean_str);
 
-    let tag_vec = get_tags_from_list_string(&list_string);
-
-    separate_negated_tags(&tag_vec)
+    separate_negated_tags(tags)
 }
 
 /**
@@ -152,28 +148,13 @@ fn get_tags_from_query(query: &str) -> (Vec<String>, Vec<String>) {
   "... of <tag1>, <tag2>, ... [,|and] <tagn>; ..."
   and returns a string containing all the tags separated by ,
 */
-fn get_tag_list_from_query(query: &str) -> Option<Cow<str>> {
-    const TAG_LIST_REGEX: &str = r"of (?P<list>[\w[:blank:],]+);{0,1}";
+fn clean_tag_list_string(list_str: &str) -> Cow<str> {
     lazy_static!{
         static ref AND_RE: Regex = Regex::new(r"\Wand\W").unwrap();
-        static ref TAG_LIST_RE: Regex = Regex::new(TAG_LIST_REGEX).unwrap();
     }
 
-    // Try to match the search string with the tag list regex template
-    // and find the list group
-    let captures = match TAG_LIST_RE.captures(query) {
-        None => return None,
-        Some(v) => v,
-    };
-
-    // Separate the actual list of tags
-    let list_str = match captures.name("list") {
-        Some(v) => v.as_str(),
-        None => return None,
-    };
-
     // Replace 'and' with ','
-    Some(AND_RE.replace_all(list_str, ", "))
+    AND_RE.replace_all(list_str, ", ")
 }
 
 /**
@@ -296,6 +277,24 @@ mod public_query_tests {
         }
         else {
             panic!("Expected a Saved query, got something else");
+        }
+    }
+
+    #[test]
+    fn full_search_querys_should_work() {
+        let query_result = parse_search_query("of things and not stuff; from past day");
+
+        if let SearchType::Saved(search_query) = query_result {
+            assert_eq!(search_query.tags, mapvec!(String::from: "things"));
+            assert_eq!(search_query.negated_tags, mapvec!(String::from: "stuff"));
+
+            assert!(search_query.date_constraints.intervals[0].contains(
+                    &NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)
+                )
+            );
+        }
+        else {
+            panic!("Search was not a SavedSearch");
         }
     }
 }
