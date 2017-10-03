@@ -207,20 +207,6 @@ impl FileDatabase {
     }
 }
 
-/**
- * Returns a vector of paths from a vector of file entrys
- */
-#[cfg(test)]
-pub fn get_file_paths_from_files(files: &[File]) -> Vec<String> {
-    let mut result = vec![];
-
-    for file in files {
-        result.push(file.filename.clone());
-    }
-
-    result
-}
-
 
 #[cfg(test)]
 pub mod db_test_helpers {
@@ -302,26 +288,9 @@ pub mod db_test_helpers {
 mod db_tests {
     use file_database::*;
 
-    //////////////////////////////////////////////////
-    // Helper functions
-    //////////////////////////////////////////////////
-    fn get_files_with_tags(fdb: &FileDatabase, tags: Vec<String>, negated: Vec<String>)
-        -> Vec<File>
-    {
-        let file_query = search::SavedSearchQuery::with_tags((tags, negated));
+    use std::sync::Arc;
 
-        fdb.search_files(file_query)
-    }
-
-    fn get_file_paths_with_tags(fdb: &FileDatabase, tags: Vec<String>, negated: Vec<String>) 
-        -> Vec<String>
-    {
-        get_files_with_tags(fdb, tags, negated)
-            .iter()
-            .map(|file| file.filename.clone())
-            .collect()
-    }
-
+    use chrono::Datelike;
     //////////////////////////////////////////////////
     // Tests
     //////////////////////////////////////////////////
@@ -336,6 +305,7 @@ mod db_tests {
         db_test_helpers::run_test(multi_tag_test);
         db_test_helpers::run_test(modify_tags_test);
         db_test_helpers::run_test(negated_tags_test);
+        db_test_helpers::run_test(timestamp_search);
     }
 
     fn add_test(fdb: &mut FileDatabase) {
@@ -480,26 +450,90 @@ mod db_tests {
         assert!(get_file_paths_from_files(&result).contains(&"test3".to_owned()));
     }
 
-    /*
-    fn timestamp_test()
-    {
-        let mut fdb = FileDatabase::new();
+    fn timestamp_search(fdb: &mut FileDatabase) {
+        fdb.add_new_file(
+                "file1",
+                "thumb1",
+                &vec!["tag1".to_owned(), "tag2".to_owned()],
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                "file2",
+                "thumb2",
+                &vec!["tag1".to_owned(), "tag3".to_owned()],
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                "file3",
+                "thumb2",
+                &vec!["tag1".to_owned(), "tag3".to_owned()],
+                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
+            );
 
-        fdb.add_new_file(&String::from("1"), &String::from("1"), &vec!(), 0);
-        fdb.add_new_file(&String::from("2"), &String::from("2"), &vec!(), 100);
-        fdb.add_new_file(&String::from("3"), &String::from("3"), &vec!(), 150);
-        fdb.add_new_file(&String::from("4"), &String::from("4"), &vec!(), 150);
-        fdb.add_new_file(&String::from("5"), &String::from("5"), &vec!(), 50);
-        fdb.add_new_file(&String::from("6"), &String::from("6"), &vec!(), 200);
+        let intervals = vec!(
+                date_search::Interval::new(
+                    naive_datetime_from_date("2016-05-01").unwrap(),
+                    naive_datetime_from_date("2017-05-01").unwrap()
+                )
+            );
 
-        let less_than_120 = |x: &File|{x.timestamp < 120};
-        let more_than_50 = |x: &File|{x.timestamp < 120};
-        let eq_0 = |x: &File|{x.timestamp == 0};
+        let interval_result = fdb.search_files(
+            search::SavedSearchQuery::with_date_constraints(
+                date_search::DateConstraints::with_intervals(intervals)
+            )
+        );
 
-        assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&less_than_120)).len() == 3);
-        assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&eq_0)).len() == 1);
+        assert!(get_file_paths_from_files(&interval_result).contains(&"file1".to_owned()));
+        assert!(get_file_paths_from_files(&interval_result).contains(&"file2".to_owned()) == false);
+        assert!(get_file_paths_from_files(&interval_result).contains(&"file3".to_owned()) == false);
 
-        assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&less_than_120, &more_than_50)).len() == 1);
+        let functions: Vec<Arc<date_search::DateConstraintFunction>> = vec!(
+                Arc::new(|date: &NaiveDateTime| date.year() == 2017),
+                Arc::new(|date: &NaiveDateTime| date.month0() == 0),
+            );
+
+        let function_result = fdb.search_files(
+                search::SavedSearchQuery::with_date_constraints(
+                    date_search::DateConstraints::with_constraints(functions)
+                )
+            );
+
+        assert!(get_file_paths_from_files(&function_result).contains(&"file1".to_owned()));
+        assert!(get_file_paths_from_files(&function_result).contains(&"file2".to_owned()) == false);
+        assert!(get_file_paths_from_files(&function_result).contains(&"file3".to_owned()) == false);
     }
-    */
+
+    //////////////////////////////////////////////////
+    // Helper functions
+    //////////////////////////////////////////////////
+    fn get_files_with_tags(fdb: &FileDatabase, tags: Vec<String>, negated: Vec<String>)
+        -> Vec<File>
+    {
+        let file_query = search::SavedSearchQuery::with_tags((tags, negated));
+
+        fdb.search_files(file_query)
+    }
+
+    fn get_file_paths_with_tags(fdb: &FileDatabase, tags: Vec<String>, negated: Vec<String>) 
+        -> Vec<String>
+    {
+        get_files_with_tags(fdb, tags, negated)
+            .iter()
+            .map(|file| file.filename.clone())
+            .collect()
+    }
+
+    fn get_file_paths_from_files(files: &[File]) -> Vec<String> {
+        let mut result = vec![];
+
+        for file in files {
+            result.push(file.filename.clone());
+        }
+
+        result
+    }
+
+    fn naive_datetime_from_date(date_string: &str) -> ::chrono::ParseResult<NaiveDateTime> {
+        NaiveDateTime::parse_from_str(&format!("{} 12:00:00", date_string), "%Y-%m-%d %H:%M:%S")
+    }
 }
