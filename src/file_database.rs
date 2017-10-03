@@ -7,7 +7,7 @@ use std::vec::Vec;
 use diesel;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
-use diesel::expression::{not, any};
+use diesel::expression::{not};
 
 use schema::files;
 
@@ -18,7 +18,6 @@ use iron::typemap::Key;
 use std::path::PathBuf;
 
 use search;
-use date_search;
 
 /**
   A reference to a file stored in the file database
@@ -146,7 +145,7 @@ impl FileDatabase {
         let mut db_query = files::table.into_boxed()
             .filter(files::tags.contains(tags));
 
-        if negated_tags.len() != 0 {
+        if !negated_tags.is_empty() {
             db_query = db_query.filter(not(files::tags.contains(negated_tags)));
         }
 
@@ -291,6 +290,8 @@ mod db_tests {
     use std::sync::Arc;
 
     use chrono::Datelike;
+
+    use date_search;
     //////////////////////////////////////////////////
     // Tests
     //////////////////////////////////////////////////
@@ -301,6 +302,7 @@ mod db_tests {
     */
     #[test]
     fn database_test() {
+        db_test_helpers::run_test(empty_search_should_return_all_files);
         db_test_helpers::run_test(add_test);
         db_test_helpers::run_test(multi_tag_test);
         db_test_helpers::run_test(modify_tags_test);
@@ -501,6 +503,31 @@ mod db_tests {
         assert!(get_file_paths_from_files(&function_result).contains(&"file1".to_owned()));
         assert!(get_file_paths_from_files(&function_result).contains(&"file2".to_owned()) == false);
         assert!(get_file_paths_from_files(&function_result).contains(&"file3".to_owned()) == false);
+    }
+
+    fn empty_search_should_return_all_files(fdb: &mut FileDatabase) {
+        fdb.add_new_file(
+                "file1",
+                "thumb1",
+                &vec!["tag1".to_owned(), "tag2".to_owned()],
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                "file2",
+                "thumb2",
+                &vec!["tag1".to_owned(), "tag3".to_owned()],
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                "file3",
+                "thumb2",
+                &vec!["tag1".to_owned(), "tag3".to_owned()],
+                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
+            );
+
+        let result = fdb.search_files(search::SavedSearchQuery::empty());
+
+        assert_eq!(result.len(), 3);
     }
 
     //////////////////////////////////////////////////
