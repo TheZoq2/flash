@@ -87,14 +87,11 @@ pub fn parse_search_query(query: &str) -> SearchType {
             })
             .fold(SavedSearchQuery::empty(), |prev, query| {
                 let new = match query {
-                    QuerySectionType::Tags(tag_list) => {
-                        let tags = get_tags_from_query(&tag_list);
-                        println!("{:?}, {:?}", tag_list, tags);
-                        SavedSearchQuery::with_tags(tags)
-                    },
+                    QuerySectionType::Tags(tag_list) =>
+                        SavedSearchQuery::with_tags(tags_from_tag_list_string(&tag_list)),
                     QuerySectionType::Time(time_str) =>
                             SavedSearchQuery::with_date_constraints(
-                                get_date_constraints_from_query(&time_str)
+                                get_date_constraints_from_string(&time_str)
                             )
                 };
 
@@ -129,18 +126,18 @@ fn query_section_type(type_str: Option<&str>, content_str: Option<&str>)
 
 
 
-fn get_date_constraints_from_query(query: &str) -> DateConstraints {
+fn get_date_constraints_from_string(query: &str) -> DateConstraints {
     let current_time = NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0);
     parse_date_query(query, &current_time)
             .unwrap_or_else(|_| DateConstraints::empty())
 }
 
-fn tags_from_tag_List_string(clean_str: &str) -> (Vec<String>, Vec<String>) {
-    let clean_string = clean_tag_list_string(clean_str);
+fn tags_from_tag_list_string(list_string: &str) -> (Vec<String>, Vec<String>) {
+    let clean_string = clean_tag_list_string(list_string);
 
-    let tags = get_tags_from_list_string(clean_str);
+    let tags = get_tags_from_list_string(&clean_string);
 
-    separate_negated_tags(tags)
+    separate_negated_tags(&tags)
 }
 
 /**
@@ -206,6 +203,18 @@ fn separate_negated_tags(tags: &[Cow<str>]) -> (Vec<String>, Vec<String>) {
 
 
 #[cfg(test)]
+fn get_tags_from_query(query: &str) -> (Vec<String>, Vec<String>) {
+    let query_result = parse_search_query(query);
+
+    if let SearchType::Saved(query_result) = query_result {
+        (query_result.tags, query_result.negated_tags)
+    }
+    else {
+        panic!("Expected search to contain tags, but it was not a search for Saved files");
+    }
+}
+
+#[cfg(test)]
 mod public_query_tests {
     use super::*;
 
@@ -236,11 +245,11 @@ mod public_query_tests {
     #[test]
     fn more_things_specified_should_give_correct_tags() {
         assert_eq!(
-            get_tags_from_query("of things and stuff; from last year"),
+            get_tags_from_query("of things and stuff; from past year"),
             (mapvec!(String::from: "things", "stuff"), vec![])
         );
         assert_eq!(
-            get_tags_from_query("of things and stuff ;from last year in linköping"),
+            get_tags_from_query("of things and stuff ;from past year; in linköping"),
             (mapvec!(String::from: "things", "stuff"), vec![])
         );
     }
@@ -288,8 +297,12 @@ mod public_query_tests {
             assert_eq!(search_query.tags, mapvec!(String::from: "things"));
             assert_eq!(search_query.negated_tags, mapvec!(String::from: "stuff"));
 
+            println!("{:?}", search_query.date_constraints);
             assert!(search_query.date_constraints.intervals[0].contains(
-                    &NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)
+                    &NaiveDateTime::from_timestamp(
+                        (Utc::now() - ::chrono::Duration::hours(1)).timestamp(),
+                        0
+                    )
                 )
             );
         }
@@ -302,30 +315,6 @@ mod public_query_tests {
 #[cfg(test)]
 mod private_query_tests {
     use super::*;
-
-    #[test]
-    fn tag_list_from_query_tests() {
-        // Simple, tags only string
-        assert_eq!(get_tag_list_from_query("of things, stuff, yolo and swag"),
-                   Some(Cow::from("things, stuff, yolo, swag")));
-        // Tags with spaces
-        assert_eq!(get_tag_list_from_query("of many things,     stuff, yolo swag and swag"),
-                   Some(Cow::from("many things,     stuff, yolo swag, swag")));
-
-        // Other data before 'of'
-        assert_eq!(get_tag_list_from_query("from today of things and stuff"),
-                  Some(Cow::from("things, stuff")));
-
-        // Other data after ';'
-        assert_eq!(get_tag_list_from_query("of things and stuff; from today"),
-                   Some(Cow::from("things, stuff")));
-
-        // No tags specified
-        assert_eq!(get_tag_list_from_query("from today; in linköping"), None);
-
-        //No tags specified but the list is empty
-        assert_eq!(get_tag_list_from_query("of ;"), None);
-    }
 
     fn tag_from_list_string_tests() {
         //Simple tags, no whitespaces
@@ -340,24 +329,5 @@ mod private_query_tests {
     fn tag_negation_tests() {
         assert_eq!(separate_negated_tags(&mapvec!(Cow::from: "yolo", "not swag")),
                 (mapvec!(String::from: "yolo"), mapvec!(String::from: "swag")));
-    }
-
-    /**
-      Tries to replicate a bug where searching for negated tags would not propperly negate them
-    */
-    #[test]
-    fn negation_bug_test() {
-        let search_string = "of not snödroppe";
-
-        let tag_list = get_tag_list_from_query(search_string).unwrap();
-        assert_eq!(tag_list, Cow::from("not snödroppe"));
-
-        let tags = get_tags_from_list_string(&tag_list);
-        assert_eq!(tags, mapvec!(Cow::from: "not snödroppe"));
-
-        let (tags, negated) = separate_negated_tags(&tags);
-
-        assert_eq!(tags, ::std::vec::Vec::<String>::new());
-        assert_eq!(negated, mapvec!(String::from: "snödroppe"));
     }
 }
