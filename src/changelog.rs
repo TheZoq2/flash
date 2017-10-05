@@ -1,5 +1,9 @@
 use chrono::NaiveDateTime;
 
+use std::convert::From;
+use serde_json;
+
+#[derive(Serialize, Deserialize)]
 pub enum ChangeType {
     FileAdded(i32),
     FileRemoved(i32),
@@ -18,6 +22,21 @@ impl Change {
         Change {
             timestamp,
             change_type
+        }
+    }
+}
+
+#[derive(Queryable)]
+pub struct ChangeDbEntry {
+    change_type: String,
+    timestamp: NaiveDateTime
+}
+
+impl From<Change> for ChangeDbEntry {
+    fn from(other: Change) -> Self {
+        Self {
+            change_type: serde_json::to_string(&other.change_type).unwrap(),
+            timestamp: other.timestamp
         }
     }
 }
