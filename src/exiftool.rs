@@ -176,11 +176,11 @@ impl ExifData {
         }
     }
 
-    pub fn get_creation_date(&self) -> Result<chrono::DateTime<chrono::UTC>, ExifError> {
+    pub fn get_creation_date(&self) -> Result<chrono::DateTime<chrono::Utc>, ExifError> {
         let target_tag = "Create Date";
         match self.get_tag(target_tag) {
             Some(date_string) => {
-                let parsed = chrono::UTC.datetime_from_str(date_string, "%Y:%m:%d %H:%M:%S");
+                let parsed = chrono::Utc.datetime_from_str(date_string, "%Y:%m:%d %H:%M:%S");
 
                 match parsed {
                     Ok(result) => Ok(result),
@@ -209,7 +209,7 @@ mod exif_data_tests {
         assert_eq!(data.get_tag("Create Date"), Some("2002:12:08 12:00:00"));
         assert_eq!(data.get_tag("Non-existing tag"), None);
 
-        let expected_date = chrono::UTC.ymd(2002, 12, 8).and_hms(12, 0, 0);
+        let expected_date = chrono::Utc.ymd(2002, 12, 8).and_hms(12, 0, 0);
         assert_eq!(data.get_creation_date().unwrap(), expected_date);
     }
 

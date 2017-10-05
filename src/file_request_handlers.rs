@@ -33,6 +33,7 @@ use file_list_response;
 enum FileAction {
     GetData,
     GetFile,
+    GetFilename,
     GetThumbnail,
     Save
 }
@@ -43,9 +44,10 @@ impl FileAction {
         match action {
             "get_data" => Some(FileAction::GetData),
             "get_file" => Some(FileAction::GetFile),
+            "get_filename" => Some(FileAction::GetFilename),
             "get_thumbnail" => Some(FileAction::GetThumbnail),
             "save" => Some(FileAction::Save),
-            other => None
+            _ => None
         }
     }
 }
@@ -104,13 +106,13 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response> 
     let action_str = get_get_variable(request, "action")?;
 
     if let Some(action) = file_list_response::GlobalAction::try_parse(&action_str) {
-        file_list_response::global_list_action_handler(request, action)
+        file_list_response::global_list_action_handler(request, &action)
     }
     else if let Some(action) = file_list_response::ListAction::try_parse(&action_str) {
-        file_list_response::list_action_handler(request, action)
+        file_list_response::list_action_handler(request, &action)
     }
     else if let Some(action) = FileAction::try_parse(&action_str) {
-        file_request_handler(request, action)
+        file_request_handler(request, &action)
     }
     else {
         Err(FileRequestError::UnknownAction(action_str))?
@@ -120,7 +122,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response> 
 /**
   Handles requests for actions dealing with specific entries in file lists
 */
-fn file_request_handler(request: &mut Request, action: FileAction) -> IronResult<Response> {
+fn file_request_handler(request: &mut Request, action: &FileAction) -> IronResult<Response> {
     let (list_id, file_index) = read_request_list_id_index(request)?;
 
     let file_location = {
@@ -137,7 +139,7 @@ fn file_request_handler(request: &mut Request, action: FileAction) -> IronResult
         db.get_file_save_path()
     };
 
-    match action {
+    match *action {
         FileAction::GetData => {
             let file_data = file_data_from_file_location(&file_location);
             Ok(Response::with(
@@ -146,6 +148,13 @@ fn file_request_handler(request: &mut Request, action: FileAction) -> IronResult
         }
         FileAction::GetFile => {
             let path = get_file_location_path(&file_storage_folder, &file_location);
+            Ok(Response::with((status::Ok, path)))
+        }
+        FileAction::GetFilename => {
+            let path = match file_location {
+                FileLocation::Database(entry) => entry.filename,
+                FileLocation::Unsaved(path) => String::from(path.to_string_lossy())
+            };
             Ok(Response::with((status::Ok, path)))
         }
         FileAction::GetThumbnail => {
@@ -432,13 +441,13 @@ fn get_file_list_object(
 /**
   Returns the index of the last file that was saved to the database in a specific file
 */
-fn get_last_saved(file_list: Vec<FileLocation>) -> Option<usize>
+fn get_last_saved(file_list: &[FileLocation]) -> Option<usize>
 {
     file_list.iter()
         .enumerate()
         .fold(None, |last, (id, file)| {
-            match file {
-                &FileLocation::Database(_) => Some(id),
+            match *file {
+                FileLocation::Database(_) => Some(id),
                 _ => last
             }
         })
@@ -452,6 +461,8 @@ fn get_last_saved(file_list: Vec<FileLocation>) -> Option<usize>
 #[cfg(test)]
 mod file_request_tests {
     use super::*;
+
+    use search;
 
     use file_list::{FileList, FileListSource};
 
@@ -590,7 +601,7 @@ mod file_request_tests {
         match fdb.lock() {
             Ok(fdb) => {
                 assert!(
-                    fdb.get_files_with_tags(&tags, &vec!())
+                    fdb.search_files(search::SavedSearchQuery::with_tags((tags, vec!())))
                         .iter()
                         .fold(false, |acc, file| { acc || file.id == result.id })
                     )
@@ -630,7 +641,8 @@ mod file_request_tests {
 
         //Make sure that the file was actually added to the database
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&tags, &vec!())
+                fdb.lock().unwrap()
+                    .search_files(search::SavedSearchQuery::with_tags((tags, vec!())))
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
             );
@@ -670,14 +682,16 @@ mod file_request_tests {
 
         // Make sure that the file was actually added to the database
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&tags, &vec!())
+                fdb.lock().unwrap()
+                    .search_files(search::SavedSearchQuery::with_tags((tags, vec!())))
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
             );
 
         // Make sure the old entry was removed
         assert!(
-                fdb.lock().unwrap().get_files_with_tags(&old_tags, &vec!())
+                fdb.lock().unwrap()
+                    .search_files(search::SavedSearchQuery::with_tags((old_tags, vec!())))
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
                 ==

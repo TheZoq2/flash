@@ -30,34 +30,27 @@ quadcopter and 3d printer
 
 
 ## Dates
-```
-DATE
-    = YearNumber Month Day
 
-TIME_TYPE
-    = year
-    | month
-    | week
-    | day
-
-SINGLE 
-    = today
-    | this TIME_TYPE
-
-INTERVAL
-    = between DATE and DATE
-    | past TIME_TYPE
-    | last TIME_TYPE
-```
 
 ### Examples
-- From today: `today`
-- From this month: `this month`
-- From the last 30 days `past month`
-- From last year `last year`
-- From the last 365 days `past year`
-- From a specific month `in july`
+- Moudulus times
+- *Prefix*: `this`
+    - today (this day)
+    - week
+    - month
+    - week
+    - year
 
+- Relative times
+- *Prefix*: `the past`
+    - the past day
+    - the past month
+    ...
 
-
+- Pattern like
+- *Prefix* `matching`
+    - July
+    - 2017
+    - July 2017
+    - 20th july
 

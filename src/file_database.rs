@@ -7,6 +7,7 @@ use std::vec::Vec;
 use diesel;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
+use diesel::expression::{not};
 
 use schema::files;
 
@@ -15,6 +16,8 @@ use chrono::NaiveDateTime;
 use iron::typemap::Key;
 
 use std::path::PathBuf;
+
+use search;
 
 /**
   A reference to a file stored in the file database
@@ -134,28 +137,39 @@ impl FileDatabase {
       Returns all files that have all the tags in the list and that dont have any
       tags in the negated tag list
      */
-    pub fn get_files_with_tags(&self, tags: &[String], negated_tags: &[String]) -> Vec<File> {
-        files::table
-            .filter(files::tags.contains(tags))
-            .get_results(&self.connection)
-            .expect("Error retrieving photos with tags")
-            .into_iter()
-            .filter(|file: &File| {
-                negated_tags
-                    .iter()
-                    .fold(true, |acc, tag| acc && !file.tags.contains(tag))
-            })
-            .collect()
-    }
+    pub fn search_files(&self, query: search::SavedSearchQuery) -> Vec<File> {
+        let search::SavedSearchQuery{tags, negated_tags, date_constraints} = query;
 
-    pub fn get_file_paths_with_tags(
-        &self,
-        tags: &[String],
-        negated_tags: &[String],
-    ) -> Vec<String> {
-        self.get_files_with_tags(tags, negated_tags)
-            .iter()
-            .map(|x| x.filename.clone())
+        // Construct the database query
+        // construct static query parameters
+        let mut db_query = files::table.into_boxed()
+            .filter(files::tags.contains(tags));
+
+        if !negated_tags.is_empty() {
+            db_query = db_query.filter(not(files::tags.contains(negated_tags)));
+        }
+
+        // Add dynamic parts of the query
+        for interval in &date_constraints.intervals {
+            db_query = db_query.filter(
+                    files::creation_date.between(interval.start..interval.end)
+                );
+        }
+
+        // Execute the database query and filter things that can't be filtered using sql
+        let db_result = db_query.load(&self.connection).expect("Error executing database query");
+
+        db_result.into_iter()
+            .filter(|file: &File| {
+                date_constraints.constraints
+                    .iter()
+                    .fold(true, |acc, constraint_function|{
+                        if let Some(creation_date) = file.creation_date {
+                            acc && constraint_function(&creation_date)
+                        }
+                        else {false}
+                    })
+            })
             .collect()
     }
 
@@ -190,20 +204,6 @@ impl FileDatabase {
             .execute(&self.connection)
             .unwrap();
     }
-}
-
-/**
- * Returns a vector of paths from a vector of file entrys
- */
-#[cfg(test)]
-pub fn get_file_paths_from_files(files: &[File]) -> Vec<String> {
-    let mut result = vec![];
-
-    for file in files {
-        result.push(file.filename.clone());
-    }
-
-    result
 }
 
 
@@ -287,16 +287,27 @@ pub mod db_test_helpers {
 mod db_tests {
     use file_database::*;
 
+    use std::sync::Arc;
+
+    use chrono::Datelike;
+
+    use date_search;
+    //////////////////////////////////////////////////
+    // Tests
+    //////////////////////////////////////////////////
+
     /**
       Since the results of these tests depend on the database state,
       they can not be run concurrently
     */
     #[test]
     fn database_test() {
+        db_test_helpers::run_test(empty_search_should_return_all_files);
         db_test_helpers::run_test(add_test);
         db_test_helpers::run_test(multi_tag_test);
         db_test_helpers::run_test(modify_tags_test);
         db_test_helpers::run_test(negated_tags_test);
+        db_test_helpers::run_test(timestamp_search);
     }
 
     fn add_test(fdb: &mut FileDatabase) {
@@ -316,37 +327,37 @@ mod db_tests {
         assert_eq!(fdb.get_file_amount(), 2);
 
         //Ensure both files are found when searching for tag1
+        let only_tag_1 = get_file_paths_with_tags(&fdb, vec!["tag1".to_string()], vec![]);
         assert!(
-            fdb.get_file_paths_with_tags(&vec!["tag1".to_string()], &vec![])
-                .contains(&"test1".to_string())
+            only_tag_1.contains(&"test1".to_string())
         );
         assert!(
-            fdb.get_file_paths_with_tags(&vec!["tag1".to_string()], &vec![])
+            get_file_paths_with_tags(&fdb, vec!["tag1".to_string()], vec![])
                 .contains(&"test2".to_string())
         );
 
         //Ensure only the correct tags are found when searching for the other tags
         assert!(
-            fdb.get_file_paths_with_tags(&vec!["tag2".to_string()], &vec![])
+            get_file_paths_with_tags(&fdb, vec!["tag2".to_string()], vec![])
                 .contains(&"test1".to_string())
         );
         assert!(
-            fdb.get_file_paths_with_tags(&vec!["tag2".to_string()], &vec![])
+            get_file_paths_with_tags(&fdb, vec!["tag2".to_string()], vec![])
                 .contains(&"test2".to_string()) == false
         );
 
         assert!(
-            fdb.get_file_paths_with_tags(&vec!["tag3".to_string()], &vec![])
+            get_file_paths_with_tags(&fdb, vec!["tag3".to_string()], vec![])
                 .contains(&"test2".to_string())
         );
         assert!(
-            fdb.get_file_paths_with_tags(&vec!["tag3".to_string()], &vec![])
+            get_file_paths_with_tags(&fdb, vec!["tag3".to_string()], vec![])
                 .contains(&"test1".to_string()) == false
         );
 
         //Ensure that tags that don't exist don't return anything
         assert!(
-            fdb.get_file_paths_with_tags(&vec!["unused_tag".to_string()], &vec![])
+            get_file_paths_with_tags(&fdb, vec!["unused_tag".to_string()], vec![])
                 .is_empty()
         );
     }
@@ -371,25 +382,26 @@ mod db_tests {
             0,
         );
 
-        let common_2_3 = fdb.get_files_with_tags(
-            &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
-            &vec![],
+        let common_2_3 = get_files_with_tags(
+            &fdb,
+            vec!["common_tag".to_string(), "only2_3_tag".to_string()],
+            vec![],
         );
         assert!(get_file_paths_from_files(&common_2_3).contains(&"test1".to_owned()) == false);
         assert!(get_file_paths_from_files(&common_2_3).contains(&"test2".to_owned()));
         assert!(get_file_paths_from_files(&common_2_3).contains(&"test3".to_owned()));
 
-        let common_1 = fdb.get_files_with_tags(&vec!["common_tag".to_string()], &vec![]);
+        let common_1 = get_files_with_tags(&fdb, vec!["common_tag".to_string()], vec![]);
         assert!(get_file_paths_from_files(&common_1).contains(&"test1".to_owned()));
         assert!(get_file_paths_from_files(&common_1).contains(&"test2".to_owned()));
         assert!(get_file_paths_from_files(&common_1).contains(&"test3".to_owned()));
 
-        let only_1 = fdb.get_files_with_tags(&vec!["only1_tag".to_string()], &vec![]);
+        let only_1 = get_files_with_tags(&fdb, vec!["only1_tag".to_string()], vec![]);
         assert!(get_file_paths_from_files(&only_1).contains(&"test1".to_owned()));
         assert!(get_file_paths_from_files(&only_1).contains(&"test2".to_owned()) == false);
         assert!(get_file_paths_from_files(&only_1).contains(&"test3".to_owned()) == false);
 
-        let no_tags = fdb.get_files_with_tags(&vec![], &vec![]);
+        let no_tags = get_files_with_tags(&fdb, vec![], vec![]);
         assert!(no_tags.len() == 3);
     }
 
@@ -400,11 +412,11 @@ mod db_tests {
             .unwrap();
 
         assert!(
-            fdb.get_files_with_tags(&vec!["new_tag".to_string()], &vec![])
+            get_files_with_tags(&fdb, vec!["new_tag".to_string()], vec![])
                 .len() == 1
         );
         assert!(
-            fdb.get_files_with_tags(&vec!["old_tag".to_string()], &vec![])
+            get_files_with_tags(&fdb, vec!["old_tag".to_string()], vec![])
                 .len() == 0
         );
     }
@@ -430,35 +442,125 @@ mod db_tests {
             0,
         );
 
-        let result = fdb.get_files_with_tags(
-            &vec!["common_tag".to_string()],
-            &vec!["only1_tag".to_string()],
+        let result = get_files_with_tags(
+            &fdb,
+            vec!["common_tag".to_string()],
+            vec!["only1_tag".to_string()],
         );
         assert!(get_file_paths_from_files(&result).contains(&"test1".to_owned()) == false);
         assert!(get_file_paths_from_files(&result).contains(&"test2".to_owned()));
         assert!(get_file_paths_from_files(&result).contains(&"test3".to_owned()));
     }
 
-    /*
-    fn timestamp_test()
-    {
-        let mut fdb = FileDatabase::new();
+    fn timestamp_search(fdb: &mut FileDatabase) {
+        fdb.add_new_file(
+                "file1",
+                "thumb1",
+                &vec!["tag1".to_owned(), "tag2".to_owned()],
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                "file2",
+                "thumb2",
+                &vec!["tag1".to_owned(), "tag3".to_owned()],
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                "file3",
+                "thumb2",
+                &vec!["tag1".to_owned(), "tag3".to_owned()],
+                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
+            );
 
-        fdb.add_new_file(&String::from("1"), &String::from("1"), &vec!(), 0);
-        fdb.add_new_file(&String::from("2"), &String::from("2"), &vec!(), 100);
-        fdb.add_new_file(&String::from("3"), &String::from("3"), &vec!(), 150);
-        fdb.add_new_file(&String::from("4"), &String::from("4"), &vec!(), 150);
-        fdb.add_new_file(&String::from("5"), &String::from("5"), &vec!(), 50);
-        fdb.add_new_file(&String::from("6"), &String::from("6"), &vec!(), 200);
+        let intervals = vec!(
+                date_search::Interval::new(
+                    naive_datetime_from_date("2016-05-01").unwrap(),
+                    naive_datetime_from_date("2017-05-01").unwrap()
+                )
+            );
 
-        let less_than_120 = |x: &File|{x.timestamp < 120};
-        let more_than_50 = |x: &File|{x.timestamp < 120};
-        let eq_0 = |x: &File|{x.timestamp == 0};
+        let interval_result = fdb.search_files(
+            search::SavedSearchQuery::with_date_constraints(
+                date_search::DateConstraints::with_intervals(intervals)
+            )
+        );
 
-        assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&less_than_120)).len() == 3);
-        assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&eq_0)).len() == 1);
+        assert!(get_file_paths_from_files(&interval_result).contains(&"file1".to_owned()));
+        assert!(get_file_paths_from_files(&interval_result).contains(&"file2".to_owned()) == false);
+        assert!(get_file_paths_from_files(&interval_result).contains(&"file3".to_owned()) == false);
 
-        assert!(fdb.get_files_with_tags_and_function(vec!(), &vec!(&less_than_120, &more_than_50)).len() == 1);
+        let functions: Vec<Arc<date_search::DateConstraintFunction>> = vec!(
+                Arc::new(|date: &NaiveDateTime| date.year() == 2017),
+                Arc::new(|date: &NaiveDateTime| date.month0() == 0),
+            );
+
+        let function_result = fdb.search_files(
+                search::SavedSearchQuery::with_date_constraints(
+                    date_search::DateConstraints::with_constraints(functions)
+                )
+            );
+
+        assert!(get_file_paths_from_files(&function_result).contains(&"file1".to_owned()));
+        assert!(get_file_paths_from_files(&function_result).contains(&"file2".to_owned()) == false);
+        assert!(get_file_paths_from_files(&function_result).contains(&"file3".to_owned()) == false);
     }
-    */
+
+    fn empty_search_should_return_all_files(fdb: &mut FileDatabase) {
+        fdb.add_new_file(
+                "file1",
+                "thumb1",
+                &vec!["tag1".to_owned(), "tag2".to_owned()],
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                "file2",
+                "thumb2",
+                &vec!["tag1".to_owned(), "tag3".to_owned()],
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                "file3",
+                "thumb2",
+                &vec!["tag1".to_owned(), "tag3".to_owned()],
+                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
+            );
+
+        let result = fdb.search_files(search::SavedSearchQuery::empty());
+
+        assert_eq!(result.len(), 3);
+    }
+
+    //////////////////////////////////////////////////
+    // Helper functions
+    //////////////////////////////////////////////////
+    fn get_files_with_tags(fdb: &FileDatabase, tags: Vec<String>, negated: Vec<String>)
+        -> Vec<File>
+    {
+        let file_query = search::SavedSearchQuery::with_tags((tags, negated));
+
+        fdb.search_files(file_query)
+    }
+
+    fn get_file_paths_with_tags(fdb: &FileDatabase, tags: Vec<String>, negated: Vec<String>) 
+        -> Vec<String>
+    {
+        get_files_with_tags(fdb, tags, negated)
+            .iter()
+            .map(|file| file.filename.clone())
+            .collect()
+    }
+
+    fn get_file_paths_from_files(files: &[File]) -> Vec<String> {
+        let mut result = vec![];
+
+        for file in files {
+            result.push(file.filename.clone());
+        }
+
+        result
+    }
+
+    fn naive_datetime_from_date(date_string: &str) -> ::chrono::ParseResult<NaiveDateTime> {
+        NaiveDateTime::parse_from_str(&format!("{} 12:00:00", date_string), "%Y-%m-%d %H:%M:%S")
+    }
 }

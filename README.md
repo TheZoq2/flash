@@ -15,11 +15,15 @@ The frontend is written in elm and is served by the rust server.
 - Install diesel-cli using `cargo install diesel-cli`
 - Create a database user and temporarily give it superuser priviliges 
 `ALTER USER <username> WITH SUPERUSER`
-- Run `diesel database setup`
 - create a `.env` file containing the following:
     - `DATABASE_URL=postgres://username:password@url/database_name`
     - `FILE_STORAGE_PATH=<path where you want the saved files to be stored>`
     - `FILE_READ_PATH=<A folder where you want to search for new files>`
+- Run `diesel database setup`
+- Compile the frontend
+    - `git submodule --recursive init && git submodule --recirsive update`
+    - `cd frontend`
+    - `make`
 - Run the server `cargo run`
 - Go to localhost:3000/album.html
 

@@ -1,4 +1,9 @@
 #![allow(dead_code)]
+#![allow(unused_doc_comment)]
+
+#![feature(fn_must_use)]
+
+#![recursion_limit="1024"]
 
 extern crate iron;
 extern crate staticfile;
@@ -45,11 +50,13 @@ mod file_request_handlers;
 mod file_request_error;
 mod exiftool;
 mod search;
+mod date_search;
 mod schema;
 mod request_helpers;
 mod file_list_response;
 mod error;
 mod changelog;
+mod util;
 
 #[macro_use]
 extern crate serde_derive;
@@ -121,7 +128,7 @@ fn main() {
     chain.link(Write::<FileDatabase>::both(db));
     chain.link(Read::<settings::Settings>::both(settings));
 
-    let url = format!("localhost:{}", port);
+    let url = format!("0.0.0.0:{}", port);
     match Iron::new(chain).http(url) {
         Ok(_) => {
             println!("Server running on port {}", port);

@@ -73,7 +73,7 @@ impl ListResponse
 /**
   Handles requests for data about specific file lists
 */
-pub fn list_action_handler(request: &mut Request, action: ListAction) -> IronResult<Response> {
+pub fn list_action_handler(request: &mut Request, action: &ListAction) -> IronResult<Response> {
     let file_list_list = request.get::<Write<FileListList>>().unwrap();
     let file_list_list = file_list_list.lock().unwrap();
 
@@ -84,19 +84,19 @@ pub fn list_action_handler(request: &mut Request, action: ListAction) -> IronRes
         None => Err(FileRequestError::NoSuchList(id))
     }?;
 
-    match action {
+    match *action {
         ListAction::Info => create_list_info_response(id, file_list),
         ListAction::LastSavedIndex => last_saved_request_handler(file_list)
     }
 }
 
 /**
-  Handles file_list requests that are not concerned with specific file lists
+  Handles `file_list` requests that are not concerned with specific file lists
 */
-pub fn global_list_action_handler(request: &mut Request, action: GlobalAction) -> IronResult<Response> {
+pub fn global_list_action_handler(request: &mut Request, action: &GlobalAction) -> IronResult<Response> {
     let file_list_list = request.get::<Write<FileListList>>().unwrap();
 
-    match action {
+    match *action {
         GlobalAction::AllLists => reply_to_list_listing_request(file_list_list)
     }
 }
@@ -166,8 +166,8 @@ fn last_saved_request_handler(file_list: &FileList) -> IronResult<Response> {
     let index = file_list.get_files().iter()
         .enumerate()
         .fold(0, |last, (id, file)| {
-            match file {
-                &FileLocation::Database(_) => id,
+            match *file {
+                FileLocation::Database(_) => id,
                 _ => last
             }
         });
