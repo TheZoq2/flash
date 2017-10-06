@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_doc_comment)]
 
-#![feature(fn_must_use)]
-
 #![recursion_limit="1024"]
 
 extern crate iron;
