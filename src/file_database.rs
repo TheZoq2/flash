@@ -156,6 +156,8 @@ impl FileDatabase {
                 );
         }
 
+        db_query = db_query.order(files::creation_date);
+
         // Execute the database query and filter things that can't be filtered using sql
         let db_result = db_query.load(&self.connection).expect("Error executing database query");
 
@@ -308,6 +310,7 @@ mod db_tests {
         db_test_helpers::run_test(modify_tags_test);
         db_test_helpers::run_test(negated_tags_test);
         db_test_helpers::run_test(timestamp_search);
+        db_test_helpers::run_test(files_should_be_ordered_by_date);
     }
 
     fn add_test(fdb: &mut FileDatabase) {
@@ -528,6 +531,37 @@ mod db_tests {
         let result = fdb.search_files(search::SavedSearchQuery::empty());
 
         assert_eq!(result.len(), 3);
+    }
+
+    fn files_should_be_ordered_by_date(fdb: &mut FileDatabase) {
+        fdb.add_new_file(
+                "file1",
+                "thumb1",
+                &vec![],
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                "file2",
+                "thumb2",
+                &vec![],
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                "file3",
+                "thumb2",
+                &vec![],
+                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
+            );
+
+        let result = fdb.search_files(search::SavedSearchQuery::empty());
+
+        let mut last_date = result[0].creation_date;
+        for file in result {
+            if file.creation_date < last_date {
+                panic!("Files are not ordered by date. {:?} > {:?}", last_date, file.creation_date);
+            }
+            last_date = file.creation_date;
+        }
     }
 
     //////////////////////////////////////////////////
