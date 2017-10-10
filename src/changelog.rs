@@ -3,6 +3,8 @@ use chrono::NaiveDateTime;
 use std::convert::From;
 use serde_json;
 
+use schema::changes;
+
 #[derive(Serialize, Deserialize)]
 pub enum ChangeType {
     FileAdded(i32),
@@ -39,4 +41,11 @@ impl From<Change> for ChangeDbEntry {
             timestamp: other.timestamp
         }
     }
+}
+
+#[derive(Insertable)]
+#[table_name="changes"]
+pub struct InsertableChange<'a> {
+    json_data: &'a str,
+    timestamp: NaiveDateTime
 }

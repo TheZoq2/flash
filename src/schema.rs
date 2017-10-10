@@ -9,3 +9,12 @@ table! {
         tags -> Array<Text>,
     }
 }
+
+
+table! {
+    changes (id) {
+        id -> Int4,
+        timestamp -> Timestamp,
+        json_data -> Text,
+    }
+}
