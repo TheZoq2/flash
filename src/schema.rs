@@ -18,3 +18,10 @@ table! {
         json_data -> Text,
     }
 }
+
+table! {
+    syncpoints (id) {
+        id -> Int4,
+        last_change -> Timestamp,
+    }
+}
