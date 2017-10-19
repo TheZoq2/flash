@@ -1,0 +1,4 @@
+-- Your SQL goes here
+ALTER TABLE files ALTER COLUMN id DROP DEFAULT;
+ALTER SEQUENCE files_id_seq OWNED BY NONE;
+DROP SEQUENCE files_id_seq;
