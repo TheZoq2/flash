@@ -21,7 +21,7 @@ The frontend is written in elm and is served by the rust server.
     - `FILE_READ_PATH=<A folder where you want to search for new files>`
 - Run `diesel database setup`
 - Compile the frontend
-    - `git submodule --recursive init && git submodule --recirsive update`
+    - `git submodule --recursive init && git submodule --recursive update`
     - `cd frontend`
     - `make`
 - Run the server `cargo run`
