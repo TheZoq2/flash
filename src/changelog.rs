@@ -105,4 +105,24 @@ mod syncpoint_tests {
         let last_common = last_common_syncpoint(&local, &remote);
         assert_eq!(last_common, Some(syncpoint_from_string("2015-10-05").unwrap()));
     }
+
+    fn disjoint_syncpoints_should_not_have_common() {
+        let local = vec!(
+                syncpoint_from_string("2015-09-03").unwrap(),
+                syncpoint_from_string("2015-10-04").unwrap(),
+                syncpoint_from_string("2016-10-05").unwrap(),
+            );
+        let remote = vec!(
+                syncpoint_from_string("2015-09-05").unwrap(),
+                syncpoint_from_string("2015-10-05").unwrap(),
+                syncpoint_from_string("2016-06-05").unwrap(),
+            );
+
+        let last_common = last_common_syncpoint(&local, &remote);
+        assert_eq!(last_common, None);
+    }
+
+    fn function_name() {
+        
+    }
 }
