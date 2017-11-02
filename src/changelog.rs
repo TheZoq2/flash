@@ -5,24 +5,27 @@ use serde_json;
 
 use schema::{changes, syncpoints};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub enum ChangeType {
-    FileAdded(i32),
-    FileRemoved(i32),
-    TagAdded(i32, String),
-    TagRemoved(i32, String),
-    CreationDateChanged(i32, NaiveDateTime)
+    FileAdded,
+    FileRemoved,
+    TagAdded(String),
+    TagRemoved(String),
+    CreationDateChanged(NaiveDateTime)
 }
 
+#[derive(PartialEq, Debug, Clone)]
 pub struct Change {
-    change_type: ChangeType,
+    pub change_type: ChangeType,
+    pub affected_file: i32,
     timestamp: NaiveDateTime
 }
 
 impl Change {
-    pub fn new(timestamp: NaiveDateTime, change_type: ChangeType) -> Change {
+    pub fn new(timestamp: NaiveDateTime, affected_file: i32, change_type: ChangeType) -> Change {
         Change {
             timestamp,
+            affected_file,
             change_type
         }
     }
@@ -31,6 +34,7 @@ impl Change {
 #[derive(Queryable)]
 pub struct ChangeDbEntry {
     change_type: String,
+    affected_file: i32,
     timestamp: NaiveDateTime
 }
 
@@ -38,6 +42,7 @@ impl From<Change> for ChangeDbEntry {
     fn from(other: Change) -> Self {
         Self {
             change_type: serde_json::to_string(&other.change_type).unwrap(),
+            affected_file: other.affected_file,
             timestamp: other.timestamp
         }
     }
@@ -47,6 +52,7 @@ impl From<Change> for ChangeDbEntry {
 #[table_name="changes"]
 pub struct InsertableChange<'a> {
     json_data: &'a str,
+    affected_file: i32,
     timestamp: NaiveDateTime
 }
 
@@ -76,16 +82,31 @@ pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
         })
 }
 
+pub fn merge_changes(changeset1: &[Change], changeset2: &[Change]) -> Vec<Change> {
+    let mut merged = changeset1.iter()
+        .chain(changeset2.iter())
+        .map(|x| (*x).clone())
+        .collect::<Vec<_>>();
+
+    merged.sort_by_key(|x| x.timestamp);
+
+    return merged
+}
+
 #[cfg(test)]
 mod syncpoint_tests {
     use super::*;
 
+    fn timestamp_from_string(date_string: &str) -> Result<NaiveDateTime, ::chrono::ParseError> {
+        NaiveDateTime::parse_from_str(
+                     &format!("{} 00:00:00", date_string),
+                     "%Y-%m-%d %H:%M:%S"
+                )
+    }
+
     fn syncpoint_from_string(date_string: &str) -> Result<SyncPoint, ::chrono::ParseError> {
         Ok(SyncPoint{
-            last_change: NaiveDateTime::parse_from_str(
-                             &format!("{} 00:00:00", date_string),
-                             "%Y-%m-%d %H:%M:%S"
-                        )?
+            last_change: timestamp_from_string(date_string)?
         })
     }
 
@@ -122,7 +143,28 @@ mod syncpoint_tests {
         assert_eq!(last_common, None);
     }
 
-    fn function_name() {
-        
+    #[test]
+    fn changes_are_merged_properly() {
+        let changeset1 = vec!(
+                Change::new(timestamp_from_string("2016-09-05").unwrap(), 0, ChangeType::FileAdded),
+                Change::new(timestamp_from_string("2016-09-05").unwrap(), 0, ChangeType::TagAdded(String::from("some_tag"))),
+                Change::new(timestamp_from_string("2016-10-05").unwrap(), 1, ChangeType::TagRemoved(String::from("some_other_tag"))),
+                Change::new(timestamp_from_string("2016-10-11").unwrap(), 1, ChangeType::FileRemoved)
+            );
+        let changeset2 = vec!(
+                Change::new(timestamp_from_string("2016-09-06").unwrap(), 2, ChangeType::FileAdded),
+                Change::new(timestamp_from_string("2016-09-06").unwrap(), 2, ChangeType::TagAdded(String::from("yolo"))),
+                Change::new(timestamp_from_string("2016-10-05").unwrap(), 1, ChangeType::TagAdded(String::from("some_other_tag")))
+            );
+
+        let merged_changes = merge_changes(&changeset1, &changeset2);
+
+        let mut last_timestamp = merged_changes[0].timestamp;
+        for change in merged_changes {
+            if change.timestamp < last_timestamp {
+                panic!("changes are not ordered by date");
+            }
+            last_timestamp = change.timestamp
+        }
     }
 }

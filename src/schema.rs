@@ -16,6 +16,7 @@ table! {
         id -> Int4,
         timestamp -> Timestamp,
         json_data -> Text,
+        affected_file -> Int4,
     }
 }
 

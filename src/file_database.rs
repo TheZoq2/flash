@@ -18,6 +18,7 @@ use iron::typemap::Key;
 use std::path::PathBuf;
 
 use search;
+use changelog::{Change, ChangeType};
 
 /**
   A reference to a file stored in the file database
@@ -41,6 +42,8 @@ pub struct File {
 #[derive(Insertable)]
 #[table_name = "files"]
 pub struct NewFile<'a> {
+    id: i32,
+
     filename: &'a str,
     thumbnail_path: &'a str,
 
@@ -53,12 +56,14 @@ pub struct NewFile<'a> {
 
 impl<'a> NewFile<'a> {
     pub fn new(
+        id: i32,
         filename: &'a str,
         thumbnail_path: &'a str,
         creation_time: NaiveDateTime,
         tags: Vec<String>,
     ) -> NewFile<'a> {
         NewFile {
+            id,
             filename,
             thumbnail_path,
             creation_date: creation_time,
@@ -96,6 +101,7 @@ impl FileDatabase {
     //TODO: Handle errors when writing to the database
     pub fn add_new_file(
             &mut self,
+            id: i32,
             filename: &str,
             thumb_name: &str,
             tags: &[String],
@@ -104,6 +110,7 @@ impl FileDatabase {
     {
         let timestamp = timestamp as i64;
         let new_file = NewFile::new(
+            id,
             filename,
             thumb_name,
             NaiveDateTime::from_timestamp(timestamp, 0),
@@ -183,6 +190,29 @@ impl FileDatabase {
             Err(_) => None,
         }
     }
+
+    /*
+    #[must_use]
+    pub fn apply_change(&self, change: Change) -> Result<(), String> {
+        let Change{change_type, affected_file, ..} = change;
+
+        match change_type {
+            ChangeType::FileAdded => {
+                unimplemented!()
+            }
+            ChangeType::FileRemoved => {
+
+            },
+            ChangeType::TagAdded => {
+                let old_file = self.get_file_with_id().expect("Changed file does not exist");
+                diesel::update(files.filter(id.eq(affected_file)))
+                    .set
+            }
+        }
+
+        Ok(())
+    }
+    */
 
 
     /**
@@ -315,12 +345,14 @@ mod db_tests {
 
     fn add_test(fdb: &mut FileDatabase) {
         fdb.add_new_file(
+            1,
             &"test1".to_string(),
             &"thumb1".to_string(),
             &vec!["tag1".to_string(), "tag2".to_string()],
             0,
         );
         fdb.add_new_file(
+            2,
             &"test2".to_string(),
             &"thumb2".to_string(),
             &vec!["tag1".to_string(), "tag3".to_string()],
@@ -367,18 +399,21 @@ mod db_tests {
 
     fn multi_tag_test(fdb: &mut FileDatabase) {
         fdb.add_new_file(
+            1,
             "test1",
             "thumb1",
             &vec!["common_tag".to_string(), "only1_tag".to_string()],
             0,
         );
         fdb.add_new_file(
+            2,
             "test2",
             "thumb2",
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
             0,
         );
         fdb.add_new_file(
+            3,
             "test3",
             "thumb3",
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
@@ -409,7 +444,7 @@ mod db_tests {
     }
 
     fn modify_tags_test(fdb: &mut FileDatabase) {
-        let file = fdb.add_new_file("test1", "thumb1", &vec!["old_tag".to_string()], 0);
+        let file = fdb.add_new_file(1, "test1", "thumb1", &vec!["old_tag".to_string()], 0);
 
         fdb.change_file_tags(&file, &vec!["new_tag".to_string()])
             .unwrap();
@@ -427,18 +462,21 @@ mod db_tests {
 
     fn negated_tags_test(fdb: &mut FileDatabase) {
         fdb.add_new_file(
+            1,
             &"test1".to_string(),
             &"thumb1".to_string(),
             &vec!["common_tag".to_string(), "only1_tag".to_string()],
             0,
         );
         fdb.add_new_file(
+            2,
             &"test2".to_string(),
             &"thumb2".to_string(),
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
             0,
         );
         fdb.add_new_file(
+            3,
             &"test3".to_string(),
             &"thumb3".to_string(),
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
@@ -457,18 +495,21 @@ mod db_tests {
 
     fn timestamp_search(fdb: &mut FileDatabase) {
         fdb.add_new_file(
+                1,
                 "file1",
                 "thumb1",
                 &vec!["tag1".to_owned(), "tag2".to_owned()],
                 naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
+                2,
                 "file2",
                 "thumb2",
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
                 naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
+                3,
                 "file3",
                 "thumb2",
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
@@ -510,18 +551,21 @@ mod db_tests {
 
     fn empty_search_should_return_all_files(fdb: &mut FileDatabase) {
         fdb.add_new_file(
+                1,
                 "file1",
                 "thumb1",
                 &vec!["tag1".to_owned(), "tag2".to_owned()],
                 naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
+                2,
                 "file2",
                 "thumb2",
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
                 naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
+                3,
                 "file3",
                 "thumb2",
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
@@ -535,18 +579,21 @@ mod db_tests {
 
     fn files_should_be_ordered_by_date(fdb: &mut FileDatabase) {
         fdb.add_new_file(
+                1,
                 "file1",
                 "thumb1",
                 &vec![],
                 naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
+                2,
                 "file2",
                 "thumb2",
                 &vec![],
                 naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
+                3,
                 "file3",
                 "thumb2",
                 &vec![],
@@ -584,6 +631,7 @@ mod db_tests {
             .collect()
     }
 
+
     fn get_file_paths_from_files(files: &[File]) -> Vec<String> {
         let mut result = vec![];
 
@@ -597,4 +645,5 @@ mod db_tests {
     fn naive_datetime_from_date(date_string: &str) -> ::chrono::ParseResult<NaiveDateTime> {
         NaiveDateTime::parse_from_str(&format!("{} 12:00:00", date_string), "%Y-%m-%d %H:%M:%S")
     }
+
 }

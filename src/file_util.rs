@@ -98,8 +98,8 @@ fn generate_thumbnail_from_generic_image(
 /**
   Returns a really big random number as a string
  */
-pub fn get_semi_unique_identifier() -> String {
-    format!("{}", rand::random::<u64>())
+pub fn get_semi_unique_identifier() -> i32 {
+    rand::random::<i32>()
 }
 
 

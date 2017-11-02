@@ -332,6 +332,7 @@ fn save_new_file(
         let mut db = db.lock().unwrap();
 
         db.add_new_file(
+            file_identifier,
             &filename.to_owned(),
             &thumbnail_filename.to_string(),
             tags,
@@ -652,7 +653,7 @@ mod file_request_tests {
         let old_tags = vec!(String::from("old"));
         let old_location = {
             let mut fdb = fdb.lock().unwrap();
-            fdb.add_new_file("test", "thumb", &old_tags, 0)
+            fdb.add_new_file(1, "test", "thumb", &old_tags, 0)
         };
 
         let tags = vec!("new1".to_owned());
