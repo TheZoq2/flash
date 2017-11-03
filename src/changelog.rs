@@ -93,6 +93,17 @@ pub fn merge_changes(changeset1: &[Change], changeset2: &[Change]) -> Vec<Change
     return merged
 }
 
+pub fn get_deleted_file_ids(changeset: &[Change]) -> Vec<i32> {
+    changeset.iter()
+        .filter_map(|change| {
+            match change.change_type {
+                ChangeType::FileRemoved => Some(change.affected_file),
+                _ => None
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod syncpoint_tests {
     use super::*;
