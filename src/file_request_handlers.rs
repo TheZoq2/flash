@@ -26,9 +26,9 @@ use file_util::sanitize_tag_names;
 use file_util::{generate_thumbnail, get_semi_unique_identifier, get_file_timestamp};
 use request_helpers::get_get_variable;
 
-use file_request_error::{FileRequestError, err_invalid_variable_type};
-
 use file_list_response;
+
+use error::{Result, ErrorKind, Error};
 
 enum FileAction {
     GetData,
@@ -115,7 +115,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response> 
         file_request_handler(request, &action)
     }
     else {
-        Err(FileRequestError::UnknownAction(action_str))?
+        Err(Error::from(ErrorKind::UnknownAction(action_str)))?
     }
 }
 
@@ -187,7 +187,7 @@ fn file_request_handler(request: &mut Request, action: &FileAction) -> IronResul
 ///                     out of iron requests
 ////////////////////////////////////////////////////////////////////////////////
 
-fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), FileRequestError> {
+fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize)> {
     let list_id = file_list_response::read_request_list_id(request)?;
 
     let file_index = get_get_variable(request, "index")?;
@@ -195,7 +195,7 @@ fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), F
     let file_index = match file_index.parse::<usize>() {
         Ok(val) => val,
         Err(_) => {
-            return Err(err_invalid_variable_type("index", "usize"));
+            return Err(ErrorKind::InvalidVariableType("index".into(), "usize".into()).into());
         }
     };
 
@@ -204,13 +204,13 @@ fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), F
 
 
 
-fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, FileRequestError> {
+fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>> {
     //Get the important information from the request.
     let tag_string = get_get_variable(request, "tags")?;
 
     match serde_json::from_str::<Vec<String>>(&tag_string) {
         Ok(result) => Ok(sanitize_tag_names(&result).unwrap()),
-        Err(e) => Err(err_invalid_variable_type("tags", &format!("{:?}", e))),
+        Err(e) => Err(ErrorKind::InvalidVariableType("tags".into(), format!("{:?}", e)).into()),
     }
 }
 
@@ -260,7 +260,7 @@ fn handle_save_request(
     db: Arc<Mutex<FileDatabase>>,
     file_location: &FileLocation,
     tags: &[String],
-) -> Result<FileSaveRequestResult, FileRequestError> {
+) -> Result<FileSaveRequestResult> {
     match *file_location {
         FileLocation::Unsaved(ref path) => {
             match save_new_file(db, path, tags) {
@@ -293,10 +293,10 @@ fn save_new_file(
     db: Arc<Mutex<FileDatabase>>,
     original_path: &PathBuf,
     tags: &[String],
-) -> Result<(file_database::File, Receiver<FileSavingResult>), FileRequestError> {
+) -> Result<(file_database::File, Receiver<FileSavingResult>)> {
     let file_extension = match (*original_path).extension() {
         Some(val) => val,
-        None => return Err(FileRequestError::NoFileExtension(original_path.clone())),
+        None => return Err(ErrorKind::NoFileExtension(original_path.clone()).into()),
     };
 
     //Get the folder where we want to place the stored file
@@ -374,12 +374,9 @@ fn update_stored_file(
     db: Arc<Mutex<FileDatabase>>,
     old_entry: &file_database::File,
     tags: &[String],
-) -> Result<file_database::File, FileRequestError> {
+) -> Result<file_database::File> {
     let db = db.lock().unwrap();
-    match db.change_file_tags(old_entry, tags) {
-        Ok(result) => Ok(result),
-        Err(e) => Err(FileRequestError::DatabaseSaveError(e)),
-    }
+    db.change_file_tags(old_entry, tags)
 }
 
 
@@ -425,17 +422,17 @@ fn get_file_list_object(
     file_list_list: &FileListList,
     list_id: usize,
     file_index: usize,
-) -> Result<FileLocation, FileRequestError> {
+) -> Result<FileLocation> {
     let file_list = match file_list_list.get(list_id) {
         Some(list) => list,
         None => {
-            return Err(FileRequestError::NoSuchList(list_id));
+            return Err(ErrorKind::NoSuchList(list_id).into());
         }
     };
 
     match file_list.get(file_index) {
         Some(file) => Ok(file.clone()),
-        None => Err(FileRequestError::NoSuchFile(list_id, file_index)),
+        None => Err(ErrorKind::NoSuchFile(list_id, file_index).into()),
     }
 }
 
@@ -576,7 +573,7 @@ mod file_request_tests {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
         assert_matches!(
                 save_new_file(fdb.clone(), &PathBuf::from("test"), &tags),
-                Err(FileRequestError::NoFileExtension(_))
+                Err(Error(ErrorKind::NoFileExtension(_), _))
             );
     }
 

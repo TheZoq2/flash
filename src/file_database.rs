@@ -18,7 +18,9 @@ use iron::typemap::Key;
 use std::path::PathBuf;
 
 use search;
+use error::{Result, Error};
 use changelog::{Change, ChangeType};
+
 
 /**
   A reference to a file stored in the file database
@@ -129,14 +131,14 @@ impl FileDatabase {
       Changes the tags of a specified file. Returns the new file object
     */
     #[must_use]
-    pub fn change_file_tags(&self, file: &File, tags: &[String]) -> Result<File, String> {
+    pub fn change_file_tags(&self, file: &File, tags: &[String]) -> Result<File> {
         let result = diesel::update(files::table.find(file.id))
             .set(files::tags.eq(tags))
             .get_result(&self.connection);
 
         match result {
             Ok(val) => Ok(val),
-            Err(e) => Err(format!("Failed to update file tags. {:?}", e)),
+            Err(e) => Err(e.into())
         }
     }
 
