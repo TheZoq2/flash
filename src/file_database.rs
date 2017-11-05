@@ -9,7 +9,7 @@ use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::expression::{not};
 
-use schema::files;
+use schema::{files, syncpoints};
 
 use chrono::NaiveDateTime;
 
@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 use search;
 use error::{Result, Error};
-use changelog::{Change, ChangeType};
+use changelog::{Change, ChangeType, SyncPoint};
 
 
 /**
@@ -190,6 +190,20 @@ impl FileDatabase {
         match result {
             Ok(val) => Some(val),
             Err(_) => None,
+        }
+    }
+
+    pub fn get_syncpoints(&self) -> Result<Vec<SyncPoint>> {
+        let result = syncpoints::table
+                .select(syncpoints::last_change)
+                .load::<NaiveDateTime>(&self.connection);
+
+        match result {
+            Ok(val) => Ok(val.into_iter()
+                          .map(|last_change| SyncPoint{last_change})
+                          .collect()
+                    ),
+            Err(e) => Err(e.into())
         }
     }
 
