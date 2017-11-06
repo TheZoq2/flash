@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 use search;
 use error::{Result, Error};
-use changelog::{ChangeDbEntry, ChangeType, SyncPoint};
+use changelog::{ChangeDbEntry, Change, ChangeType, SyncPoint};
 
 
 /**
@@ -203,7 +203,9 @@ impl FileDatabase {
         )
     }
 
-    pub fn get_changes_after_timestamp(&self, timestamp: &NaiveDateTime) -> Result<Vec<ChangeDbEntry>> {
+    pub fn get_changes_after_timestamp(&self, timestamp: &NaiveDateTime) 
+        -> Result<Vec<ChangeDbEntry>>
+    {
         Ok(changes::table
             .filter(changes::timestamp.gt(timestamp))
             .get_results(&self.connection)?
