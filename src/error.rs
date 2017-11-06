@@ -46,9 +46,15 @@ error_chain! {
             description("Unknown file list")
             display("no file list with id {}", id)
         }
-        NoSuchFile(list_id: usize, file_id: usize) {
+        NoSuchFileInList(list_id: usize, file_id: usize) {
             description("Unknown file in list")
             display("No file with id {} in list {}", file_id, list_id)
+        }
+
+        // Database errors
+        NoSuchFileInDatabase(file_id: i32) {
+            description("The database did not contain a file with the specified id")
+            display("The database did not contain a file with id {}", file_id)
         }
     }
 }

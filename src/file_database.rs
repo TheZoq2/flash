@@ -9,7 +9,7 @@ use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::expression::{not};
 
-use schema::{files, syncpoints};
+use schema::{files, syncpoints, changes};
 
 use chrono::NaiveDateTime;
 
@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 use search;
 use error::{Result, Error};
-use changelog::{Change, ChangeType, SyncPoint};
+use changelog::{ChangeDbEntry, ChangeType, SyncPoint};
 
 
 /**
@@ -200,6 +200,13 @@ impl FileDatabase {
             .into_iter()
             .map(|last_change| SyncPoint{last_change})
             .collect()
+        )
+    }
+
+    pub fn get_changes_after_timestamp(&self, timestamp: &NaiveDateTime) -> Result<Vec<ChangeDbEntry>> {
+        Ok(changes::table
+            .filter(changes::timestamp.gt(timestamp))
+            .get_results(&self.connection)?
         )
     }
 

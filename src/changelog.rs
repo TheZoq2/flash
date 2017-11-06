@@ -5,6 +5,29 @@ use serde_json;
 
 use schema::{changes, syncpoints};
 
+use file_util::get_file_extension;
+use file_database;
+
+use error::{Error, ErrorKind, Result};
+use std::path::PathBuf;
+
+/*
+  Change synchronisation:
+
+  User (userver) requests a sync with a remote server (rserver).
+
+  userver asks for a list of syncpoints from rserver
+  userver receives syncpoints and compares with its own.
+  userver finds common syncpoint and requests all changes after
+    that syncpoint
+  userver sends this common syncpoint to rserver
+    rserver starts own sync process
+  userver requests all changes after common syncpoint
+  userver requests additional data from rserver (filenames, file types)
+  userver applies changes
+  userver creates a new syncpoint and stores all changes in db
+*/
+
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub enum ChangeType {
     FileAdded,
@@ -33,15 +56,17 @@ impl Change {
 
 #[derive(Queryable)]
 pub struct ChangeDbEntry {
-    change_type: String,
+    id: i32,
+    timestamp: NaiveDateTime,
+    json_data: String,
     affected_file: i32,
-    timestamp: NaiveDateTime
 }
 
 impl From<Change> for ChangeDbEntry {
     fn from(other: Change) -> Self {
         Self {
-            change_type: serde_json::to_string(&other.change_type).unwrap(),
+            id: 0,
+            json_data: serde_json::to_string(&other.change_type).unwrap(),
             affected_file: other.affected_file,
             timestamp: other.timestamp
         }
@@ -80,28 +105,6 @@ pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
                 acc
             }
         })
-}
-
-pub fn merge_changes(changeset1: &[Change], changeset2: &[Change]) -> Vec<Change> {
-    let mut merged = changeset1.iter()
-        .chain(changeset2.iter())
-        .map(|x| (*x).clone())
-        .collect::<Vec<_>>();
-
-    merged.sort_by_key(|x| x.timestamp);
-
-    return merged
-}
-
-pub fn get_deleted_file_ids(changeset: &[Change]) -> Vec<i32> {
-    changeset.iter()
-        .filter_map(|change| {
-            match change.change_type {
-                ChangeType::FileRemoved => Some(change.affected_file),
-                _ => None
-            }
-        })
-        .collect()
 }
 
 #[cfg(test)]

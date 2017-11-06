@@ -102,7 +102,6 @@ pub fn get_semi_unique_identifier() -> i32 {
     rand::random::<i32>()
 }
 
-
 pub fn system_time_as_unix_timestamp(time: SystemTime) -> u64 {
     let duration = time.duration_since(UNIX_EPOCH).unwrap();
 

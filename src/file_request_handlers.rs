@@ -308,9 +308,9 @@ fn save_new_file(
 
     let file_identifier = get_semi_unique_identifier();
 
-    let filename = format!("thumb_{}.jpg", file_identifier);
+    let thumbnail_filename = format!("thumb_{}.jpg", file_identifier);
 
-    let thumbnail_path = destination_dir.join(&PathBuf::from(filename));
+    let thumbnail_path = destination_dir.join(&PathBuf::from(thumbnail_filename));
 
 
     //Generate the thumbnail
@@ -432,7 +432,7 @@ fn get_file_list_object(
 
     match file_list.get(file_index) {
         Some(file) => Ok(file.clone()),
-        None => Err(ErrorKind::NoSuchFile(list_id, file_index).into()),
+        None => Err(ErrorKind::NoSuchFileInList(list_id, file_index).into()),
     }
 }
 
