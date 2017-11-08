@@ -5,36 +5,21 @@ use serde_json;
 
 use schema::{changes, syncpoints};
 
-use file_util::get_file_extension;
-use file_database;
+use error::Result;
 
-use error::{Error, ErrorKind, Result};
-use std::path::PathBuf;
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub enum UpdateType {
+    TagAdded(String),
+    TagRemoved(String),
+    CreationDateChanged(NaiveDateTime)
+}
 
-/*
-  Change synchronisation:
-
-  User (userver) requests a sync with a remote server (rserver).
-
-  userver asks for a list of syncpoints from rserver
-  userver receives syncpoints and compares with its own.
-  userver finds common syncpoint and requests all changes after
-    that syncpoint
-  userver sends this common syncpoint to rserver
-    rserver starts own sync process
-  userver requests all changes after common syncpoint
-  userver requests additional data from rserver (filenames, file types)
-  userver applies changes
-  userver creates a new syncpoint and stores all changes in db
-*/
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub enum ChangeType {
     FileAdded,
     FileRemoved,
-    TagAdded(String),
-    TagRemoved(String),
-    CreationDateChanged(NaiveDateTime)
+    Update(UpdateType)
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -51,6 +36,14 @@ impl Change {
             affected_file,
             change_type
         }
+    }
+
+    pub fn from_db_entry(db_entry: &ChangeDbEntry) -> Result<Self> {
+        Ok(Self {
+            affected_file: db_entry.affected_file,
+            timestamp: db_entry.timestamp,
+            change_type: serde_json::from_str(&db_entry.json_data)?
+        })
     }
 }
 
@@ -92,18 +85,3 @@ pub struct SyncPoint {
 pub struct InsertableSyncPoint {
     last_change: NaiveDateTime
 }
-
-pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
-    -> Option<SyncPoint>
-{
-    local.iter().zip(remote.iter())
-        .fold(None, |acc, (l, r)| {
-            if l == r {
-                Some(l.clone())
-            }
-            else {
-                acc
-            }
-        })
-}
-

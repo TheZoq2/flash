@@ -18,14 +18,14 @@ use iron::typemap::Key;
 use std::path::PathBuf;
 
 use search;
-use error::{Result, Error};
-use changelog::{ChangeDbEntry, Change, ChangeType, SyncPoint};
+use error::{Result};
+use changelog::{Change, ChangeDbEntry, SyncPoint};
 
 
 /**
   A reference to a file stored in the file database
  */
-#[derive(Queryable, Identifiable, Associations, Clone, PartialEq, Debug)]
+#[derive(Queryable, Identifiable, Associations, AsChangeset, Clone, PartialEq, Debug)]
 pub struct File {
     // The unique ID of this file in the db
     pub id: i32,
@@ -142,6 +142,13 @@ impl FileDatabase {
         }
     }
 
+    pub fn update_file_without_creating_change(&self, file: &File) -> Result<File> {
+        Ok(diesel::update(files::table)
+            .set(file)
+            .get_result(&self.connection)?
+        )
+    }
+
     /**
       Returns all files that have all the tags in the list and that dont have any
       tags in the negated tag list
@@ -204,37 +211,28 @@ impl FileDatabase {
     }
 
     pub fn get_changes_after_timestamp(&self, timestamp: &NaiveDateTime) 
-        -> Result<Vec<ChangeDbEntry>>
+        -> Result<Vec<Change>>
     {
-        Ok(changes::table
-            .filter(changes::timestamp.gt(timestamp))
-            .get_results(&self.connection)?
-        )
+        Ok(Self::changes_from_db_entries(
+            &changes::table
+                .filter(changes::timestamp.gt(timestamp))
+                .get_results(&self.connection)?
+        )?)
+    }
+    pub fn get_all_changes(&self) -> Result<Vec<Change>>{
+        Ok(Self::changes_from_db_entries(
+            &changes::table
+                .get_results(&self.connection)?
+        )?)
     }
 
-    /*
-    #[must_use]
-    pub fn apply_change(&self, change: Change) -> Result<(), String> {
-        let Change{change_type, affected_file, ..} = change;
-
-        match change_type {
-            ChangeType::FileAdded => {
-                unimplemented!()
-            }
-            ChangeType::FileRemoved => {
-
-            },
-            ChangeType::TagAdded => {
-                let old_file = self.get_file_with_id().expect("Changed file does not exist");
-                diesel::update(files.filter(id.eq(affected_file)))
-                    .set
-            }
+    fn changes_from_db_entries(db_entries: &[ChangeDbEntry]) -> Result<Vec<Change>> {
+        let mut changes = vec!();
+        for db_entry in db_entries {
+            changes.push(Change::from_db_entry(&db_entry)?);
         }
-
-        Ok(())
+        Ok(changes)
     }
-    */
-
 
     /**
       Returns the path to the folder where files should be stored

@@ -53,6 +53,7 @@ mod request_helpers;
 mod file_list_response;
 mod error;
 mod changelog;
+mod sync;
 mod util;
 
 #[macro_use]
