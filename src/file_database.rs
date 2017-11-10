@@ -234,6 +234,14 @@ impl FileDatabase {
         Ok(changes)
     }
 
+    pub fn add_syncpoint(&self, syncpoint: &SyncPoint) -> Result<()> {
+        diesel::insert(syncpoint)
+            .into(syncpoints::table)
+            .execute(&self.connection)?;
+
+        Ok(())
+    }
+
     /**
       Returns the path to the folder where files should be stored
 

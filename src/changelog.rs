@@ -75,13 +75,8 @@ pub struct InsertableChange<'a> {
 }
 
 
-#[derive(Queryable, PartialEq, Clone, Debug)]
+#[derive(Queryable, Insertable, PartialEq, Clone, Debug)]
+#[table_name="syncpoints"]
 pub struct SyncPoint {
     pub last_change: NaiveDateTime
-}
-
-#[derive(Insertable)]
-#[table_name="syncpoints"]
-pub struct InsertableSyncPoint {
-    last_change: NaiveDateTime
 }
