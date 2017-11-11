@@ -337,6 +337,37 @@ pub mod db_test_helpers {
 
         test(&mut fdb);
     }
+
+    //////////////////////////////////////////////////
+    // Helper functions
+    //////////////////////////////////////////////////
+    pub fn get_files_with_tags(fdb: &FileDatabase, tags: Vec<String>, negated: Vec<String>)
+        -> Vec<File>
+    {
+        let file_query = search::SavedSearchQuery::with_tags((tags, negated));
+
+        fdb.search_files(file_query)
+    }
+
+    pub fn get_file_paths_with_tags(fdb: &FileDatabase, tags: Vec<String>, negated: Vec<String>) 
+        -> Vec<String>
+    {
+        get_files_with_tags(fdb, tags, negated)
+            .iter()
+            .map(|file| file.filename.clone())
+            .collect()
+    }
+
+
+    pub fn get_file_paths_from_files(files: &[File]) -> Vec<String> {
+        let mut result = vec![];
+
+        for file in files {
+            result.push(file.filename.clone());
+        }
+
+        result
+    }
 }
 
 /*
@@ -351,6 +382,15 @@ mod db_tests {
     use chrono::Datelike;
 
     use date_search;
+
+    use test_macros::naive_datetime_from_date;
+
+    use super::db_test_helpers::{
+        get_files_with_tags,
+        get_file_paths_with_tags,
+        get_file_paths_from_files
+    };
+
     //////////////////////////////////////////////////
     // Tests
     //////////////////////////////////////////////////
@@ -368,6 +408,7 @@ mod db_tests {
         db_test_helpers::run_test(negated_tags_test);
         db_test_helpers::run_test(timestamp_search);
         db_test_helpers::run_test(files_should_be_ordered_by_date);
+        db_test_helpers::run_test(update_only_updates_the_affected_file);
     }
 
     fn add_test(fdb: &mut FileDatabase) {
@@ -638,39 +679,33 @@ mod db_tests {
         }
     }
 
-    //////////////////////////////////////////////////
-    // Helper functions
-    //////////////////////////////////////////////////
-    fn get_files_with_tags(fdb: &FileDatabase, tags: Vec<String>, negated: Vec<String>)
-        -> Vec<File>
-    {
-        let file_query = search::SavedSearchQuery::with_tags((tags, negated));
+    /**
+      Investigates bug with changelog changes affecting multiple files
+    */
+    fn update_only_updates_the_affected_file(fdb: &mut FileDatabase) {
+        fdb.add_new_file(
+                1,
+                "file1",
+                "thumb1",
+                &mapvec![String::from: "tag"],
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                2,
+                "file2",
+                "thumb2",
+                &mapvec![String::from: "tag"],
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+            );
 
-        fdb.search_files(file_query)
+        let mut file = fdb.get_file_with_id(1).unwrap();
+        assert_eq!(file.id, 1);
+        file.tags = vec!();
+        fdb.update_file_without_creating_change(&file);
+
+        let files_with_tag = get_file_paths_with_tags(&fdb, vec!["tag".to_string()], vec![]);
+
+        assert!( files_with_tag.contains(&"file1".to_string()) == false);
+        assert!( files_with_tag .contains(&"file2".to_string()));
     }
-
-    fn get_file_paths_with_tags(fdb: &FileDatabase, tags: Vec<String>, negated: Vec<String>) 
-        -> Vec<String>
-    {
-        get_files_with_tags(fdb, tags, negated)
-            .iter()
-            .map(|file| file.filename.clone())
-            .collect()
-    }
-
-
-    fn get_file_paths_from_files(files: &[File]) -> Vec<String> {
-        let mut result = vec![];
-
-        for file in files {
-            result.push(file.filename.clone());
-        }
-
-        result
-    }
-
-    fn naive_datetime_from_date(date_string: &str) -> ::chrono::ParseResult<NaiveDateTime> {
-        NaiveDateTime::parse_from_str(&format!("{} 12:00:00", date_string), "%Y-%m-%d %H:%M:%S")
-    }
-
 }
