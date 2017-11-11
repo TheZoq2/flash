@@ -143,7 +143,7 @@ impl FileDatabase {
     }
 
     pub fn update_file_without_creating_change(&self, file: &File) -> Result<File> {
-        Ok(diesel::update(files::table)
+        Ok(diesel::update(files::table.find(file.id))
             .set(file)
             .get_result(&self.connection)?
         )
