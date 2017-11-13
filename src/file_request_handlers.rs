@@ -294,18 +294,6 @@ fn save_new_file(
     original_path: &PathBuf,
     tags: &[String],
 ) -> Result<(file_database::File, Receiver<FileSavingResult>)> {
-    let file_extension = match (*original_path).extension() {
-        Some(val) => val,
-        None => return Err(ErrorKind::NoFileExtension(original_path.clone()).into()),
-    };
-
-    //Get the folder where we want to place the stored file
-    let destination_dir = {
-        let db = db.lock().unwrap();
-
-        PathBuf::from(db.get_file_save_path())
-    };
-
     let file_identifier = get_semi_unique_identifier();
 
     let thumbnail_filename = format!("thumb_{}.jpg", file_identifier);

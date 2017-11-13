@@ -158,6 +158,8 @@ mod sync_tests {
     fn db_tests() {
         db_test_helpers::run_test(only_tag_additions);
         db_test_helpers::run_test(only_tag_removals);
+        db_test_helpers::run_test(tag_removals_and_additions);
+        db_test_helpers::run_test(creation_date_updates);
     }
 
     fn only_tag_additions(fdb: &mut FileDatabase) {
@@ -204,5 +206,60 @@ mod sync_tests {
             .collect();
 
         assert_eq!(matched_ids, vec!(2))
+    }
+
+    fn tag_removals_and_additions(fdb: &mut FileDatabase) {
+        fdb.add_new_file(1, "yolo.jpg", "t_yolo.jpg", &mapvec!(String::from: "things"), 0);
+        fdb.add_new_file(2, "swag.jpg", "t_swag.jpg", &vec!(), 0);
+
+        let changes = vec!(
+                Change::new(
+                    naive_datetime_from_date("2017-01-01").unwrap(),
+                    1,
+                    ChangeType::Update(UpdateType::TagRemoved("things".into()))
+                ),
+                Change::new(
+                    naive_datetime_from_date("2017-01-02").unwrap(),
+                    2,
+                    ChangeType::Update(UpdateType::TagAdded("things".into()))
+                ),
+                Change::new(
+                    naive_datetime_from_date("2017-01-02").unwrap(),
+                    1,
+                    ChangeType::Update(UpdateType::TagRemoved("things".into()))
+                ),
+            );
+
+        apply_changes(fdb, &MockForeignServer::new(vec!()), &changes, &vec!()).unwrap();
+
+        let files_with_tag = get_files_with_tags(fdb, mapvec!(String::from: "things"), vec!());
+
+        let matched_ids: Vec<_> = files_with_tag.iter()
+            .map(|file| file.id)
+            .collect();
+
+        assert_eq!(matched_ids, vec!(2))
+    }
+
+    fn creation_date_updates(fdb: &mut FileDatabase) {
+        let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
+        let new_timestamp = naive_datetime_from_date("2017-01-02").unwrap();
+        fdb.add_new_file(1, "yolo.jpg", "t_yolo.jpg", &mapvec!(String::from: "things")
+                         , original_timestamp.timestamp() as u64);
+
+
+        let changes = vec!(
+                Change::new(
+                    new_timestamp,
+                    1,
+                    ChangeType::Update(UpdateType::CreationDateChanged(new_timestamp))
+                ),
+            );
+
+        apply_changes(fdb, &MockForeignServer::new(vec!()), &changes, &vec!()).unwrap();
+
+        let file = fdb.get_file_with_id(1).unwrap();
+
+        assert_eq!(file.creation_date, Some(new_timestamp));
     }
 }

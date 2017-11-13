@@ -55,6 +55,7 @@ mod error;
 mod changelog;
 mod sync;
 mod util;
+mod file_handler;
 
 #[macro_use]
 extern crate serde_derive;
