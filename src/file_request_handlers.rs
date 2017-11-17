@@ -298,7 +298,7 @@ fn save_new_file(
 
     let thumbnail_filename = format!("thumb_{}.jpg", file_identifier);
 
-    let thumbnail_path = destination_dir.join(&PathBuf::from(thumbnail_filename));
+    let thumbnail_path = PathBuf::from(destination_dir.join(&PathBuf::from(thumbnail_filename)));
 
 
     //Generate the thumbnail

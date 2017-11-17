@@ -2,10 +2,14 @@ use std::path::{PathBuf, Path};
 
 use std::sync::mpsc::channel;
 
-use file_database::FileDatabase;
+use file_database::{FileDatabase, File};
 use file_util::{generate_thumbnail, get_file_timestamp};
 
 use error::{ErrorKind, Error, Result};
+
+use std::thread;
+
+use std::fs;
 
 pub enum ThumbnailStrategy<'a> {
     Generate,
@@ -16,17 +20,17 @@ pub fn save_file(
         source_path: &Path,
         source_thumbnail: ThumbnailStrategy,
         fdb: &FileDatabase,
-        id: f32,
+        id: i32,
         tags: &[String]
     )
-    -> Result<(file_database::File, Receiver<FileSavingResult>)>
+    -> Result<(File, Receiver<FileSavingResult>)>
 {
     //Get the folder where we want to place the stored file
     let destination_dir = PathBuf::from(fdb.get_file_save_path());
 
     let file_extension = match (*source_path).extension() {
         Some(val) => val,
-        None => return Err(ErrorKind::NoFileExtension(source_path.clone()).into()),
+        None => return Err(ErrorKind::NoFileExtension(source_path.clone().into()).into()),
     };
 
     let thumbnail_filename = format!("thumb_{}.jpg", id);
