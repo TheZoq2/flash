@@ -83,18 +83,6 @@ impl FileData {
 }
 
 
-#[derive(Debug)]
-enum FileSavingResult {
-    Success,
-    Failure(io::Error),
-}
-
-#[derive(Debug)]
-enum FileSaveRequestResult {
-    NewDatabaseEntry(FileLocation, Receiver<FileSavingResult>),
-    UpdatedDatabaseEntry(FileLocation),
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 //                      Public request handlers
 ////////////////////////////////////////////////////////////////////////////////
@@ -293,7 +281,7 @@ fn save_new_file(
     db: Arc<Mutex<FileDatabase>>,
     original_path: &PathBuf,
     tags: &[String],
-) -> Result<(file_database::File, Receiver<FileSavingResult>)> {
+) -> Result<(file_database::File, Receiver<file_handler::FileSavingResult>)> {
     let file_identifier = get_semi_unique_identifier();
 
     let thumbnail_filename = format!("thumb_{}.jpg", file_identifier);

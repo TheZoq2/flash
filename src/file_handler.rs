@@ -10,6 +10,19 @@ use error::{ErrorKind, Error, Result};
 use std::thread;
 
 use std::fs;
+use std::io;
+
+#[derive(Debug)]
+enum FileSavingResult {
+    Success,
+    Failure(io::Error),
+}
+
+#[derive(Debug)]
+enum FileSaveRequestResult {
+    NewDatabaseEntry(FileLocation, Receiver<FileSavingResult>),
+    UpdatedDatabaseEntry(FileLocation),
+}
 
 pub enum ThumbnailStrategy<'a> {
     Generate,
@@ -88,4 +101,6 @@ pub fn save_file(
 
         rx
     };
+
+    Ok((saved_file, save_result_rx))
 }
