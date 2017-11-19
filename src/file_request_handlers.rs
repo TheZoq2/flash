@@ -69,7 +69,7 @@ impl FileData {
     fn from_database(source: file_database::File) -> FileData {
         FileData {
             file_path: source.filename,
-            thumbnail_path: source.thumbnail_path,
+            thumbnail_path: source.thumbnail_path.unwrap_or_else(|| String::from("")),
             tags: source.tags,
         }
     }
@@ -339,7 +339,9 @@ fn get_file_list_thumbnail(storage_folder: &Path, file: &FileLocation) -> PathBu
     match *file {
         FileLocation::Unsaved(ref path) => path.clone(),
         FileLocation::Database(ref db_entry) => {
-            PathBuf::from(storage_folder.join(db_entry.thumbnail_path.clone()))
+            PathBuf::from(storage_folder.join(
+                    db_entry.thumbnail_path.clone().unwrap_or_else(|| String::from(""))
+                ))
         }
     }
 }

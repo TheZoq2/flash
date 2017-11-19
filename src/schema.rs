@@ -1,17 +1,5 @@
 //infer_schema!("dotenv:DATABASE_URL");
 table! {
-    files (id) {
-        id -> Int4,
-        filename -> Text,
-        thumbnail_path -> Text,
-        creation_date -> Nullable<Timestamp>,
-        is_uploaded -> Bool,
-        tags -> Array<Text>,
-    }
-}
-
-
-table! {
     changes (id) {
         id -> Int4,
         timestamp -> Timestamp,
@@ -21,8 +9,20 @@ table! {
 }
 
 table! {
+    files (id) {
+        id -> Int4,
+        filename -> Text,
+        thumbnail_path -> Nullable<Text>,
+        creation_date -> Nullable<Timestamp>,
+        is_uploaded -> Bool,
+        tags -> Array<Text>,
+    }
+}
+
+table! {
     syncpoints (id) {
         id -> Int4,
         last_change -> Timestamp,
     }
 }
+

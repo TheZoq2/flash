@@ -99,3 +99,13 @@ pub fn save_file(
 
     Ok((saved_file, save_result_rx))
 }
+
+
+pub fn remove_file(file_id: i32, fdb: &FileDatabase) -> Result<()> {
+    // Fetch the file details from the database
+    fdb.drop_file(file_id)?;
+
+    // Remove the actual file in the file system
+    unimplemented!();
+}
+

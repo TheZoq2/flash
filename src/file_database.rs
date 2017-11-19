@@ -32,7 +32,7 @@ pub struct File {
     // The path to the actual file
     pub filename: String,
 
-    pub thumbnail_path: String,
+    pub thumbnail_path: Option<String>,
 
     pub creation_date: Option<NaiveDateTime>,
 
@@ -125,6 +125,10 @@ impl FileDatabase {
             .expect("Error saving new file");
 
         file
+    }
+
+    pub fn drop_file(&self, file_id: i32) -> Result<()> {
+        unimplemented!()
     }
 
     /**
@@ -409,6 +413,7 @@ mod db_tests {
         db_test_helpers::run_test(timestamp_search);
         db_test_helpers::run_test(files_should_be_ordered_by_date);
         db_test_helpers::run_test(update_only_updates_the_affected_file);
+        db_test_helpers::run_test(file_drop_works);
     }
 
     fn add_test(fdb: &mut FileDatabase) {
@@ -707,5 +712,29 @@ mod db_tests {
 
         assert!( files_with_tag.contains(&"file1".to_string()) == false);
         assert!( files_with_tag .contains(&"file2".to_string()));
+    }
+
+    fn file_drop_works(fdb: &mut FileDatabase) {
+        fdb.add_new_file(
+                1,
+                "file1",
+                "thumb1",
+                &mapvec![String::from: "tag"],
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                2,
+                "file2",
+                "thumb2",
+                &mapvec![String::from: "tag"],
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+            );
+
+        fdb.drop_file(2);
+
+        let file = fdb.get_file_with_id(1);
+        assert_matches!(file, Some(_));
+        let file = fdb.get_file_with_id(2);
+        assert_matches!(file, None);
     }
 }

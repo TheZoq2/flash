@@ -6,7 +6,9 @@ use error::{Result, ErrorKind};
 use chrono::prelude::*;
 
 struct FileDetails {
-    extension: String
+    pub extension: String,
+    pub file: Vec<u8>,
+    pub thumbnail: Option<Vec<u8>>
 }
 
 trait ForeignServer {
@@ -14,6 +16,8 @@ trait ForeignServer {
     fn get_changes(&self, starting_timestamp: &Option<SyncPoint>) -> Result<Vec<Change>>;
     fn get_file_details(&self, id: i32) -> Result<FileDetails>;
     fn send_changes(&self, changes: &[Change], new_syncpoint: &SyncPoint) -> Result<()>;
+    fn get_file(&self, id: i32) -> Result<Vec<u8>>;
+    fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>>;
 }
 
 
@@ -152,6 +156,12 @@ mod sync_tests {
         fn send_changes(&self, changes: &[Change], new_syncpoint: &SyncPoint) -> Result<()> {
             unimplemented!()
         }
+        fn get_file(&self, id: i32) -> Result<Vec<u8>> {
+            unimplemented!()
+        }
+        fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>> {
+            unimplemented!()
+        }
     }
 
     #[test]
@@ -261,5 +271,21 @@ mod sync_tests {
         let file = fdb.get_file_with_id(1).unwrap();
 
         assert_eq!(file.creation_date, Some(new_timestamp));
+    }
+
+    fn file_system_changes_work(fdb: &mut FileDatabase) {
+        let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
+        fdb.add_new_file(1, "yolo.jpg", "t_yolo.jpg", &mapvec!(String::from: "things")
+                         , original_timestamp.timestamp() as u64);
+
+        let foreign_server = MockForeignServer::new(vec!((2, "jpg")));
+
+        let changes = vec!(
+                Change::new(
+                    original_timestamp,
+                    2,
+                    ChangeType::FileAdded
+                ),
+            );
     }
 }
