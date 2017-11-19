@@ -89,10 +89,7 @@ pub fn establish_connection() -> PgConnection {
 
 
 fn main() {
-    //let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
-    //let target_dir = "/mnt/1TB-files/Pictures/dslr/apr13-2017".to_string();
     let target_dir = "/home/frans/Pictures/dslr/26-may".to_string();
-    //let file_list = get_files_in_dir(&target_dir);
 
     let settings = settings::Settings::from_env();
 

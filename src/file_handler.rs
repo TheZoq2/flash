@@ -1,6 +1,6 @@
 use std::path::{PathBuf, Path};
 
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, Receiver};
 
 use file_database::{FileDatabase, File};
 use file_util::{generate_thumbnail, get_file_timestamp};
@@ -13,16 +13,11 @@ use std::fs;
 use std::io;
 
 #[derive(Debug)]
-enum FileSavingResult {
+pub enum FileSavingResult {
     Success,
     Failure(io::Error),
 }
 
-#[derive(Debug)]
-enum FileSaveRequestResult {
-    NewDatabaseEntry(FileLocation, Receiver<FileSavingResult>),
-    UpdatedDatabaseEntry(FileLocation),
-}
 
 pub enum ThumbnailStrategy<'a> {
     Generate,
@@ -32,7 +27,7 @@ pub enum ThumbnailStrategy<'a> {
 pub fn save_file(
         source_path: &Path,
         source_thumbnail: ThumbnailStrategy,
-        fdb: &FileDatabase,
+        fdb: &mut FileDatabase,
         id: i32,
         tags: &[String]
     )
@@ -48,7 +43,7 @@ pub fn save_file(
 
     let thumbnail_filename = format!("thumb_{}.jpg", id);
 
-    let thumbnail_path = destination_dir.join(&PathBuf::from(thumbnail_filename));
+    let thumbnail_path = destination_dir.join(&PathBuf::from(thumbnail_filename.clone()));
     match source_thumbnail {
         ThumbnailStrategy::Generate => {
 
@@ -80,7 +75,7 @@ pub fn save_file(
 
     // Spawn a thread to copy the files to their destinations
     let save_result_rx = {
-        let original_path = source_path.clone();
+        let original_path = PathBuf::from(source_path.clone());
         let new_file_path = new_file_path.clone();
 
         let (tx, rx) = channel();

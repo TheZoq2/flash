@@ -25,6 +25,7 @@ use persistent_file_list;
 use file_util::sanitize_tag_names;
 use file_util::{generate_thumbnail, get_semi_unique_identifier, get_file_timestamp};
 use request_helpers::get_get_variable;
+use file_handler::{save_file, FileSavingResult, ThumbnailStrategy};
 
 use file_list_response;
 
@@ -80,6 +81,12 @@ impl FileData {
             tags: vec![],
         }
     }
+}
+
+#[derive(Debug)]
+enum FileSaveRequestResult {
+    NewDatabaseEntry(FileLocation, Receiver<FileSavingResult>),
+    UpdatedDatabaseEntry(FileLocation),
 }
 
 
@@ -279,67 +286,13 @@ fn handle_save_request(
 */
 fn save_new_file(
     db: Arc<Mutex<FileDatabase>>,
-    original_path: &PathBuf,
+    original_path: &Path,
     tags: &[String],
-) -> Result<(file_database::File, Receiver<file_handler::FileSavingResult>)> {
+) -> Result<(file_database::File, Receiver<FileSavingResult>)> {
     let file_identifier = get_semi_unique_identifier();
 
-    let thumbnail_filename = format!("thumb_{}.jpg", file_identifier);
-
-    let thumbnail_path = PathBuf::from(destination_dir.join(&PathBuf::from(thumbnail_filename)));
-
-
-    //Generate the thumbnail
-    generate_thumbnail(original_path, &thumbnail_path, 300)?;
-
-    //Copy the file to the destination
-    //Get the name and path of the new file
-    let filename = format!("{}.{}", file_identifier, file_extension.to_string_lossy());
-    let new_file_path = destination_dir.join(PathBuf::from(filename.clone()));
-
-
-    let thumbnail_filename = thumbnail_path.file_name().unwrap().to_string_lossy();
-
-
-    let timestamp = get_file_timestamp(&PathBuf::from((*original_path).clone()));
-
-    //Store the file in the database
-    let saved_id = {
-        let mut db = db.lock().unwrap();
-
-        db.add_new_file(
-            file_identifier,
-            &filename.to_owned(),
-            &thumbnail_filename.to_string(),
-            tags,
-            timestamp,
-        )
-    };
-
-    let save_result_rx = {
-        let original_path = original_path.clone();
-        let new_file_path = new_file_path.clone();
-
-        let (tx, rx) = channel();
-
-        thread::spawn(move || {
-            let save_result = match fs::copy(original_path, new_file_path) {
-                Ok(_) => FileSavingResult::Success,
-                Err(e) => FileSavingResult::Failure(e),
-            };
-
-            // We ignore any failures to send the file save result since
-            // it most likely means that the caller of the save function
-            // does not care about the result
-            match tx.send(save_result) {
-                _ => {}
-            }
-        });
-
-        rx
-    };
-
-    Ok((saved_id, save_result_rx))
+    let mut fdb = db.lock().unwrap();
+    save_file(original_path, ThumbnailStrategy::Generate, &mut fdb, file_identifier, tags)
 }
 
 
