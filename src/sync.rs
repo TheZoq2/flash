@@ -178,11 +178,12 @@ mod sync_tests {
         db_test_helpers::run_test(only_tag_removals);
         db_test_helpers::run_test(tag_removals_and_additions);
         db_test_helpers::run_test(creation_date_updates);
+        db_test_helpers::run_test(file_system_changes_work);
     }
 
     fn only_tag_additions(fdb: &mut FileDatabase) {
-        fdb.add_new_file(1, "yolo.jpg", "t_yolo.jpg", &vec!(), 0);
-        fdb.add_new_file(2, "swag.jpg", "t_swag.jpg", &vec!(), 0);
+        fdb.add_new_file(1, "yolo.jpg", None, &vec!(), 0);
+        fdb.add_new_file(2, "swag.jpg", None, &vec!(), 0);
 
         let changes = vec!(
                 Change::new(
@@ -204,8 +205,8 @@ mod sync_tests {
     }
 
     fn only_tag_removals(fdb: &mut FileDatabase) {
-        fdb.add_new_file(1, "yolo.jpg", "t_yolo.jpg", &mapvec!(String::from: "things"), 0);
-        fdb.add_new_file(2, "swag.jpg", "t_swag.jpg", &mapvec!(String::from: "things"), 0);
+        fdb.add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0);
+        fdb.add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0);
 
         let changes = vec!(
                 Change::new(
@@ -227,8 +228,8 @@ mod sync_tests {
     }
 
     fn tag_removals_and_additions(fdb: &mut FileDatabase) {
-        fdb.add_new_file(1, "yolo.jpg", "t_yolo.jpg", &mapvec!(String::from: "things"), 0);
-        fdb.add_new_file(2, "swag.jpg", "t_swag.jpg", &vec!(), 0);
+        fdb.add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0);
+        fdb.add_new_file(2, "swag.jpg", None, &vec!(), 0);
 
         let changes = vec!(
                 Change::new(
@@ -262,7 +263,7 @@ mod sync_tests {
     fn creation_date_updates(fdb: &mut FileDatabase) {
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
         let new_timestamp = naive_datetime_from_date("2017-01-02").unwrap();
-        fdb.add_new_file(1, "yolo.jpg", "t_yolo.jpg", &mapvec!(String::from: "things")
+        fdb.add_new_file(1, "yolo.jpg", Some("t_yolo.jpg"), &mapvec!(String::from: "things")
                          , original_timestamp.timestamp() as u64);
 
 
@@ -283,7 +284,9 @@ mod sync_tests {
 
     fn file_system_changes_work(fdb: &mut FileDatabase) {
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
-        fdb.add_new_file(1, "yolo.jpg", "t_yolo.jpg", &mapvec!(String::from: "things")
+
+        let original_filename = "yolo.jpg";
+        fdb.add_new_file(1, original_filename, None, &mapvec!(String::from: "things")
                          , original_timestamp.timestamp() as u64);
 
         let added_bytes = include_bytes!("../test/media/DSC_0001.JPG").into_iter()
@@ -338,6 +341,10 @@ mod sync_tests {
         let actual_thumbnail_2 = file_2.thumbnail_path.map(|tp| PathBuf::from(tp));
 
         let actual_file_3 = PathBuf::from(file_3.filename);
-        assert_matches!(file_3.thumbnail_path, None)
+        assert_matches!(file_3.thumbnail_path, None);
+
+        unimplemented!("Make sure new files are created");
+        // Ensure that the old file was deleted
+        unimplemented!("Make sure old files are deleted");
     }
 }

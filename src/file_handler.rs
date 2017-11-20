@@ -67,7 +67,7 @@ pub fn save_file(
         fdb.add_new_file(
             id,
             &filename.to_owned(),
-            &thumbnail_filename.to_string(),
+            Some(&thumbnail_filename.to_string()),
             tags,
             timestamp,
         )

@@ -47,7 +47,7 @@ pub struct NewFile<'a> {
     id: i32,
 
     filename: &'a str,
-    thumbnail_path: &'a str,
+    thumbnail_path: Option<&'a str>,
 
     creation_date: NaiveDateTime,
 
@@ -60,15 +60,15 @@ impl<'a> NewFile<'a> {
     pub fn new(
         id: i32,
         filename: &'a str,
-        thumbnail_path: &'a str,
-        creation_time: NaiveDateTime,
+        thumbnail_path: Option<&'a str>,
+        creation_date: NaiveDateTime,
         tags: Vec<String>,
     ) -> NewFile<'a> {
         NewFile {
             id,
             filename,
             thumbnail_path,
-            creation_date: creation_time,
+            creation_date,
             is_uploaded: false,
             tags,
         }
@@ -105,7 +105,7 @@ impl FileDatabase {
             &mut self,
             id: i32,
             filename: &str,
-            thumb_name: &str,
+            thumb_name: Option<&str>,
             tags: &[String],
             timestamp: u64,
         ) -> File
@@ -127,8 +127,11 @@ impl FileDatabase {
         file
     }
 
+    #[must_use]
     pub fn drop_file(&self, file_id: i32) -> Result<()> {
-        unimplemented!()
+        diesel::delete(files::table.find(file_id))
+            .execute(&self.connection)?;
+        Ok(())
     }
 
     /**
@@ -414,20 +417,21 @@ mod db_tests {
         db_test_helpers::run_test(files_should_be_ordered_by_date);
         db_test_helpers::run_test(update_only_updates_the_affected_file);
         db_test_helpers::run_test(file_drop_works);
+        db_test_helpers::run_test(file_drop_works);
     }
 
     fn add_test(fdb: &mut FileDatabase) {
         fdb.add_new_file(
             1,
-            &"test1".to_string(),
-            &"thumb1".to_string(),
+            "test1",
+            Some("thumb1"),
             &vec!["tag1".to_string(), "tag2".to_string()],
             0,
         );
         fdb.add_new_file(
             2,
-            &"test2".to_string(),
-            &"thumb2".to_string(),
+            "test2",
+            Some("thumb2"),
             &vec!["tag1".to_string(), "tag3".to_string()],
             0,
         );
@@ -474,21 +478,21 @@ mod db_tests {
         fdb.add_new_file(
             1,
             "test1",
-            "thumb1",
+            Some("thumb1"),
             &vec!["common_tag".to_string(), "only1_tag".to_string()],
             0,
         );
         fdb.add_new_file(
             2,
             "test2",
-            "thumb2",
+            Some("thumb2"),
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
             0,
         );
         fdb.add_new_file(
             3,
             "test3",
-            "thumb3",
+            Some("thumb3"),
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
             0,
         );
@@ -517,7 +521,7 @@ mod db_tests {
     }
 
     fn modify_tags_test(fdb: &mut FileDatabase) {
-        let file = fdb.add_new_file(1, "test1", "thumb1", &vec!["old_tag".to_string()], 0);
+        let file = fdb.add_new_file(1, "test1", Some("thumb1"), &vec!["old_tag".to_string()], 0);
 
         fdb.change_file_tags(&file, &vec!["new_tag".to_string()])
             .unwrap();
@@ -536,22 +540,22 @@ mod db_tests {
     fn negated_tags_test(fdb: &mut FileDatabase) {
         fdb.add_new_file(
             1,
-            &"test1".to_string(),
-            &"thumb1".to_string(),
+            "test1",
+            Some("thumb1"),
             &vec!["common_tag".to_string(), "only1_tag".to_string()],
             0,
         );
         fdb.add_new_file(
             2,
-            &"test2".to_string(),
-            &"thumb2".to_string(),
+            "test2",
+            Some("thumb2"),
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
             0,
         );
         fdb.add_new_file(
             3,
-            &"test3".to_string(),
-            &"thumb3".to_string(),
+            "test3",
+            Some("thumb3"),
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
             0,
         );
@@ -570,21 +574,21 @@ mod db_tests {
         fdb.add_new_file(
                 1,
                 "file1",
-                "thumb1",
+                Some("thumb1"),
                 &vec!["tag1".to_owned(), "tag2".to_owned()],
                 naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
                 2,
                 "file2",
-                "thumb2",
+                Some("thumb2"),
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
                 naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
                 3,
                 "file3",
-                "thumb2",
+                Some("thumb2"),
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
                 naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
             );
@@ -626,21 +630,21 @@ mod db_tests {
         fdb.add_new_file(
                 1,
                 "file1",
-                "thumb1",
+                Some("thumb1"),
                 &vec!["tag1".to_owned(), "tag2".to_owned()],
                 naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
                 2,
                 "file2",
-                "thumb2",
+                Some("thumb2"),
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
                 naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
                 3,
                 "file3",
-                "thumb2",
+                Some("thumb2"),
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
                 naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
             );
@@ -654,21 +658,21 @@ mod db_tests {
         fdb.add_new_file(
                 1,
                 "file1",
-                "thumb1",
+                Some("thumb1"),
                 &vec![],
                 naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
                 2,
                 "file2",
-                "thumb2",
+                Some("thumb2"),
                 &vec![],
                 naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
                 3,
                 "file3",
-                "thumb2",
+                Some("thumb2"),
                 &vec![],
                 naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
             );
@@ -691,14 +695,14 @@ mod db_tests {
         fdb.add_new_file(
                 1,
                 "file1",
-                "thumb1",
+                Some("thumb1"),
                 &mapvec![String::from: "tag"],
                 naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
                 2,
                 "file2",
-                "thumb2",
+                Some("thumb2"),
                 &mapvec![String::from: "tag"],
                 naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
             );
@@ -718,19 +722,19 @@ mod db_tests {
         fdb.add_new_file(
                 1,
                 "file1",
-                "thumb1",
+                Some("thumb1"),
                 &mapvec![String::from: "tag"],
                 naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
             );
         fdb.add_new_file(
                 2,
                 "file2",
-                "thumb2",
+                Some("thumb2"),
                 &mapvec![String::from: "tag"],
                 naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
             );
 
-        fdb.drop_file(2);
+        fdb.drop_file(2).unwrap();
 
         let file = fdb.get_file_with_id(1);
         assert_matches!(file, Some(_));

@@ -581,7 +581,7 @@ mod file_request_tests {
         let old_tags = vec!(String::from("old"));
         let old_location = {
             let mut fdb = fdb.lock().unwrap();
-            fdb.add_new_file(1, "test", "thumb", &old_tags, 0)
+            fdb.add_new_file(1, "test", Some("thumb"), &old_tags, 0)
         };
 
         let tags = vec!("new1".to_owned());

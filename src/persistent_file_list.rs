@@ -147,8 +147,8 @@ mod file_list_persistence_tests {
     fn dummy_database_list(db: &mut file_database::FileDatabase) -> FileList {
         FileList::from_locations(
             vec![
-                FileLocation::Database(db.add_new_file(1, "filename", "thumbname", &vec![], 0)),
-                FileLocation::Database(db.add_new_file(2, "filename", "thumbname", &vec![], 0)),
+                FileLocation::Database(db.add_new_file(1, "filename", Some("thumbname"), &vec![], 0)),
+                FileLocation::Database(db.add_new_file(2, "filename", Some("thumbname"), &vec![], 0)),
                 FileLocation::Unsaved(PathBuf::from("path")),
             ],
             FileListSource::Folder(PathBuf::from("test/media")),
