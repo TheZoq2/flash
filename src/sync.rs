@@ -5,13 +5,19 @@ use error::{Result, ErrorKind};
 
 use chrono::prelude::*;
 
-struct FileDetails {
+pub struct FileDetails {
     pub extension: String,
     pub file: Vec<u8>,
     pub thumbnail: Option<Vec<u8>>
 }
 
-trait ForeignServer {
+impl FileDetails {
+    pub fn new(extension: String, file: Vec<u8>, thumbnail: Option<Vec<u8>>) -> Self {
+        Self { extension, file, thumbnail }
+    }
+}
+
+pub trait ForeignServer {
     fn get_syncpoints(&self) -> Result<Vec<SyncPoint>>;
     fn get_changes(&self, starting_timestamp: &Option<SyncPoint>) -> Result<Vec<Change>>;
     fn get_file_details(&self, id: i32) -> Result<FileDetails>;
@@ -126,6 +132,8 @@ mod sync_tests {
     use test_macros::naive_datetime_from_date;
 
     use file_database::db_test_helpers::get_files_with_tags;
+
+    use std::path::PathBuf;
 
     struct MockForeignServer {
         file_data: HashMap<i32, FileDetails>
@@ -278,7 +286,24 @@ mod sync_tests {
         fdb.add_new_file(1, "yolo.jpg", "t_yolo.jpg", &mapvec!(String::from: "things")
                          , original_timestamp.timestamp() as u64);
 
-        let foreign_server = MockForeignServer::new(vec!((2, "jpg")));
+        let added_bytes = include_bytes!("../test/media/DSC_0001.JPG").into_iter()
+            .map(|a| *a)
+            .collect::<Vec<_>>();
+        let added_thumbnail_bytes = include_bytes!("../test/media/512x512.png").into_iter()
+            .map(|a| *a)
+            .collect::<Vec<_>>();
+
+        let foreign_server = MockForeignServer::new(
+                vec!(
+                    (2, FileDetails::new(
+                            "jpg".into(),
+                            added_bytes.clone(),
+                            Some(added_thumbnail_bytes)
+                        )
+                    ),
+                    (3, FileDetails::new("jpg".into(), added_bytes.clone(), None))
+                )
+            );
 
         let changes = vec!(
                 Change::new(
@@ -286,6 +311,33 @@ mod sync_tests {
                     2,
                     ChangeType::FileAdded
                 ),
+                Change::new(
+                    original_timestamp,
+                    3,
+                    ChangeType::FileAdded
+                ),
+                Change::new(
+                    original_timestamp,
+                    1,
+                    ChangeType::FileRemoved
+                ),
             );
+
+        // Ensure that the correct files are in the database
+        let file_1 = fdb.get_file_with_id(1);
+        let file_2 = fdb.get_file_with_id(2);
+        let file_3 = fdb.get_file_with_id(3);
+        assert_eq!(file_1, None);
+        assert_matches!(file_2, Some(_));
+        assert_matches!(file_3, Some(_));
+
+        let (file_2, file_3) = (file_2.unwrap(), file_3.unwrap());
+
+        // Open the file and compare the bytes to the expected values
+        let actual_file_2 = PathBuf::from(file_2.filename);
+        let actual_thumbnail_2 = file_2.thumbnail_path.map(|tp| PathBuf::from(tp));
+
+        let actual_file_3 = PathBuf::from(file_3.filename);
+        assert_matches!(file_3.thumbnail_path, None)
     }
 }

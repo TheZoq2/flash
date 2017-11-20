@@ -400,7 +400,7 @@ mod file_request_tests {
         file_database::File {
             id: 0,
             filename: file_path.to_owned(),
-            thumbnail_path: thumbnail_path.to_owned(),
+            thumbnail_path: Some(thumbnail_path.to_owned()),
             creation_date: None,
             is_uploaded: true,
             tags: vec![],
