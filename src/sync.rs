@@ -91,7 +91,9 @@ fn apply_changes(
                 unimplemented!()
             }
             ChangeType::FileRemoved => {
-                unimplemented!()
+                fdb.drop_file_without_creating_change(change.affected_file)?;
+
+                //TODO: Remove the file from the file system
             }
         }
     }
@@ -325,6 +327,8 @@ mod sync_tests {
                     ChangeType::FileRemoved
                 ),
             );
+
+        apply_changes(fdb, &foreign_server, &changes, &vec!()).unwrap();
 
         // Ensure that the correct files are in the database
         let file_1 = fdb.get_file_with_id(1);

@@ -127,13 +127,6 @@ impl FileDatabase {
         file
     }
 
-    #[must_use]
-    pub fn drop_file(&self, file_id: i32) -> Result<()> {
-        diesel::delete(files::table.find(file_id))
-            .execute(&self.connection)?;
-        Ok(())
-    }
-
     /**
       Changes the tags of a specified file. Returns the new file object
     */
@@ -149,12 +142,20 @@ impl FileDatabase {
         }
     }
 
+    #[must_use]
     pub fn update_file_without_creating_change(&self, file: &File) -> Result<File> {
         Ok(diesel::update(files::table.find(file.id))
             .set(file)
             .get_result(&self.connection)?
         )
     }
+    #[must_use]
+    pub fn drop_file_without_creating_change(&self, file_id: i32) -> Result<()> {
+        diesel::delete(files::table.find(file_id))
+            .execute(&self.connection)?;
+        Ok(())
+    }
+
 
     /**
       Returns all files that have all the tags in the list and that dont have any
@@ -734,7 +735,7 @@ mod db_tests {
                 naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
             );
 
-        fdb.drop_file(2).unwrap();
+        fdb.drop_file_without_creating_change(2).unwrap();
 
         let file = fdb.get_file_with_id(1);
         assert_matches!(file, Some(_));
