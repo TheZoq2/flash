@@ -25,11 +25,11 @@ pub enum ThumbnailStrategy<'a> {
 }
 
 pub fn save_file(
-        source_path: &Path,
-        source_thumbnail: ThumbnailStrategy,
-        fdb: &mut FileDatabase,
+        source_content: &[u8],
+        source_thumbnail: Option<&[u8]>,
         id: i32,
         tags: &[String]
+        fdb: &mut FileDatabase,
     )
     -> Result<(File, Receiver<FileSavingResult>)>
 {
@@ -101,9 +101,14 @@ pub fn save_file(
 }
 
 
-pub fn remove_file(file_id: i32, fdb: &FileDatabase) -> Result<()> {
+pub fn remove_file(file_id: i32, fdb: &FileDatabase, create_change: bool) -> Result<()> {
     // Fetch the file details from the database
-    fdb.drop_file(file_id)?;
+    if create_change {
+        fdb.drop_file_without_creating_change(file_id)?;
+    }
+    else {
+        unimplemented!()
+    }
 
     // Remove the actual file in the file system
     unimplemented!();

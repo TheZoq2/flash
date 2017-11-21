@@ -2,6 +2,7 @@ use changelog::{Change, SyncPoint, ChangeType, UpdateType};
 
 use file_database::{FileDatabase};
 use error::{Result, ErrorKind};
+use file_handler;
 
 use chrono::prelude::*;
 
@@ -88,12 +89,10 @@ fn apply_changes(
                 apply_file_update(fdb, change.affected_file, update_type)?
             }
             ChangeType::FileAdded => {
-                unimplemented!()
+                file_handler::save_file(change.affected_file, fdb, )
             }
             ChangeType::FileRemoved => {
-                fdb.drop_file_without_creating_change(change.affected_file)?;
-
-                //TODO: Remove the file from the file system
+                file_handler::remove_file(change.affected_file, fdb, false)?;
             }
         }
     }
@@ -349,6 +348,9 @@ mod sync_tests {
 
         unimplemented!("Make sure new files are created");
         // Ensure that the old file was deleted
-        unimplemented!("Make sure old files are deleted");
+        {
+            let path = fdb.get_file_save_path().join(PathBuf::new(original_filename));
+            assert!(!path.exists())
+        }
     }
 }
