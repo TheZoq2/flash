@@ -89,7 +89,14 @@ fn apply_changes(
                 apply_file_update(fdb, change.affected_file, update_type)?
             }
             ChangeType::FileAdded => {
-                file_handler::save_file(change.affected_file, fdb, )
+                let file_details = foreign_server.get_file_details(change.affected_file)?;
+
+                file_handler::save_file(&file_details.file,
+                            &file_details.thumbnail,
+                            change.affected_file,
+                            vec!(),
+                            fdb,
+                        )
             }
             ChangeType::FileRemoved => {
                 file_handler::remove_file(change.affected_file, fdb, false)?;

@@ -30,6 +30,7 @@ pub fn save_file(
         id: i32,
         tags: &[String]
         fdb: &mut FileDatabase,
+        create_change: bool
     )
     -> Result<(File, Receiver<FileSavingResult>)>
 {

@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 use search;
 use error::{Result};
-use changelog::{Change, ChangeDbEntry, SyncPoint};
+use changelog::{Change, ChangeDbEntry, SyncPoint, InsertableChange};
 
 
 /**
@@ -108,6 +108,7 @@ impl FileDatabase {
             thumb_name: Option<&str>,
             tags: &[String],
             timestamp: u64,
+            create_change: bool
         ) -> File
     {
         let timestamp = timestamp as i64;
@@ -123,6 +124,10 @@ impl FileDatabase {
             .into(files::table)
             .get_result(&self.connection)
             .expect("Error saving new file");
+
+        if create_change {
+            add_change(ChangeDbEntry::new())
+        }
 
         file
     }
@@ -153,6 +158,14 @@ impl FileDatabase {
     pub fn drop_file_without_creating_change(&self, file_id: i32) -> Result<()> {
         diesel::delete(files::table.find(file_id))
             .execute(&self.connection)?;
+        Ok(())
+    }
+
+    pub fn add_change(self, change: &InsertableChange) -> Result<()> {
+        diesel::insert(change)
+            .into(changes::table)
+            .execute(&self.connection)?;
+
         Ok(())
     }
 
