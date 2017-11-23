@@ -71,6 +71,7 @@ pub fn save_file(
             Some(&thumbnail_filename.to_string()),
             tags,
             timestamp,
+            create_change,
         )
     };
 

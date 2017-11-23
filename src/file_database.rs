@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 use search;
 use error::{Result};
-use changelog::{Change, ChangeDbEntry, SyncPoint, InsertableChange};
+use changelog::{Change, ChangeDbEntry, SyncPoint, InsertableChange, ChangeCreationPolicy};
 
 
 /**
@@ -108,7 +108,7 @@ impl FileDatabase {
             thumb_name: Option<&str>,
             tags: &[String],
             timestamp: u64,
-            create_change: bool
+            change_policy: ChangeCreationPolicy
         ) -> File
     {
         let timestamp = timestamp as i64;
@@ -125,8 +125,11 @@ impl FileDatabase {
             .get_result(&self.connection)
             .expect("Error saving new file");
 
-        if create_change {
-            add_change(ChangeDbEntry::new())
+        match change_policy {
+            ChangeCreationPolicy::Yes(date) => {
+                unimplemented!();
+            }
+            ChangeCreationPolicy::No => {}
         }
 
         file
@@ -155,14 +158,14 @@ impl FileDatabase {
         )
     }
     #[must_use]
-    pub fn drop_file_without_creating_change(&self, file_id: i32) -> Result<()> {
+    pub fn drop_file(&self, file_id: i32, change_policy: ChangeCreationPolicy) -> Result<()> {
         diesel::delete(files::table.find(file_id))
             .execute(&self.connection)?;
         Ok(())
     }
 
-    pub fn add_change(self, change: &InsertableChange) -> Result<()> {
-        diesel::insert(change)
+    pub fn add_change(self, change: &Change) -> Result<()> {
+        diesel::insert(InsertableChange::from(ChangeDbEntry::from(change)))
             .into(changes::table)
             .execute(&self.connection)?;
 
@@ -432,6 +435,7 @@ mod db_tests {
         db_test_helpers::run_test(update_only_updates_the_affected_file);
         db_test_helpers::run_test(file_drop_works);
         db_test_helpers::run_test(file_drop_works);
+        db_test_helpers::run_test(database_changes_create_change_entries);
     }
 
     fn add_test(fdb: &mut FileDatabase) {
@@ -754,5 +758,25 @@ mod db_tests {
         assert_matches!(file, Some(_));
         let file = fdb.get_file_with_id(2);
         assert_matches!(file, None);
+    }
+
+    fn database_changes_create_change_entries(fdb: &mut FileDatabase) {
+        let first_change_timestamp = 
+        fdb.add_new_file(
+                1,
+                "file1",
+                Some("thumb1"),
+                &mapvec![String::from: "tag"],
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64,
+                naive_datetime_from_date("2017-01-02").unwrap().timestamp() as u64
+            );
+        fdb.add_new_file(
+                2,
+                "file2",
+                Some("thumb1"),
+                &mapvec![String::from: "tag"],
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64,
+                naive_datetime_from_date("2017-01-05").unwrap().timestamp() as u64
+            );
     }
 }

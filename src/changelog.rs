@@ -80,3 +80,8 @@ pub struct InsertableChange<'a> {
 pub struct SyncPoint {
     pub last_change: NaiveDateTime
 }
+
+pub enum ChangeCreationPolicy {
+    Yes(NaiveDateTime),
+    No
+}

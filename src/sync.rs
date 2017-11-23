@@ -104,6 +104,10 @@ fn apply_changes(
         }
     }
 
+    for change in changes {
+        fdb.add_change(&change);
+    }
+
     Ok(())
 }
 
