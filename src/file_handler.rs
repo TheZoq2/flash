@@ -7,11 +7,17 @@ use file_util::{generate_thumbnail, get_file_timestamp};
 
 use error::{ErrorKind, Error, Result};
 
+use chrono::NaiveDateTime;
+
 use std::thread;
 
 use std::fs;
 use std::io;
+use std::io::prelude::*;
 
+use changelog::ChangeCreationPolicy;
+
+// TODO: Remove if unused
 #[derive(Debug)]
 pub enum FileSavingResult {
     Success,
@@ -28,19 +34,16 @@ pub fn save_file(
         source_content: &[u8],
         source_thumbnail: Option<&[u8]>,
         id: i32,
-        tags: &[String]
+        tags: &[String],
         fdb: &mut FileDatabase,
-        create_change: bool
+        create_change: bool,
+        file_extension: &str,
+        change_timestamp: NaiveDateTime
     )
     -> Result<(File, Receiver<FileSavingResult>)>
 {
     //Get the folder where we want to place the stored file
     let destination_dir = PathBuf::from(fdb.get_file_save_path());
-
-    let file_extension = match (*source_path).extension() {
-        Some(val) => val,
-        None => return Err(ErrorKind::NoFileExtension(source_path.clone().into()).into()),
-    };
 
     let thumbnail_filename = format!("thumb_{}.jpg", id);
 
@@ -71,7 +74,7 @@ pub fn save_file(
             Some(&thumbnail_filename.to_string()),
             tags,
             timestamp,
-            create_change,
+            ChangeCreationPolicy::Yes(change_timestamp),
         )
     };
 
@@ -100,6 +103,11 @@ pub fn save_file(
     };
 
     Ok((saved_file, save_result_rx))
+}
+
+fn save_file_to_disk(destination_path: &Path, content: &[u8]) -> ::std::io::Result<()> {
+    let mut file = fs::File::create(destination_path)?;
+    Ok(file.write_all(content)?)
 }
 
 
