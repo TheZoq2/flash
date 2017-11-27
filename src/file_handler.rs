@@ -5,7 +5,7 @@ use std::sync::mpsc::{channel, Receiver};
 use file_database::{FileDatabase, File};
 use file_util::{generate_thumbnail, get_file_timestamp};
 
-use error::{ErrorKind, Error, Result};
+use error::{Result};
 
 use chrono::NaiveDateTime;
 
@@ -15,7 +15,11 @@ use std::fs;
 use std::io;
 use std::io::prelude::*;
 
+use std::sync::Arc;
+
 use changelog::ChangeCreationPolicy;
+
+use byte_source::ByteSource;
 
 // TODO: Remove if unused
 #[derive(Debug)]
@@ -31,13 +35,14 @@ pub enum ThumbnailStrategy<'a> {
 }
 
 pub fn save_file(
-        source_content: &[u8],
-        source_thumbnail: Option<&[u8]>,
+        source_content: Arc<ByteSource>,
+        source_thumbnail: Arc<ByteSource>,
         id: i32,
         tags: &[String],
         fdb: &mut FileDatabase,
         create_change: bool,
         file_extension: &str,
+        file_timestamp: u64,
         change_timestamp: NaiveDateTime
     )
     -> Result<(File, Receiver<FileSavingResult>)>
@@ -48,23 +53,15 @@ pub fn save_file(
     let thumbnail_filename = format!("thumb_{}.jpg", id);
 
     let thumbnail_path = destination_dir.join(&PathBuf::from(thumbnail_filename.clone()));
-    match source_thumbnail {
-        ThumbnailStrategy::Generate => {
-
-            //Generate the thumbnail
-            generate_thumbnail(source_path, &thumbnail_path, 300)?;
-        }
-        ThumbnailStrategy::FromFile(thumbnail_path) => {
-            unimplemented!()
-        }
-    }
 
     //Copy the file to the destination
     //Get the name and path of the new file
-    let filename = format!("{}.{}", id, file_extension.to_string_lossy());
+    let filename = format!("{}.{}", id, file_extension);
     let new_file_path = destination_dir.join(PathBuf::from(filename.clone()));
 
-    let timestamp = get_file_timestamp(source_path);
+    save_file_to_disk(&thumbnail_path, &source_thumbnail);
+
+    //let timestamp = get_file_timestamp(source_path);
 
     //Store the file in the database
     let saved_file = {
@@ -73,20 +70,17 @@ pub fn save_file(
             &filename.to_owned(),
             Some(&thumbnail_filename.to_string()),
             tags,
-            timestamp,
+            file_timestamp,
             ChangeCreationPolicy::Yes(change_timestamp),
         )
     };
 
     // Spawn a thread to copy the files to their destinations
     let save_result_rx = {
-        let original_path = PathBuf::from(source_path.clone());
-        let new_file_path = new_file_path.clone();
-
         let (tx, rx) = channel();
 
         thread::spawn(move || {
-            let save_result = match fs::copy(original_path, new_file_path) {
+            let save_result = match save_file_to_disk(&new_file_path, &source_content) {
                 Ok(_) => FileSavingResult::Success,
                 Err(e) => FileSavingResult::Failure(e),
             };
@@ -105,9 +99,9 @@ pub fn save_file(
     Ok((saved_file, save_result_rx))
 }
 
-fn save_file_to_disk(destination_path: &Path, content: &[u8]) -> ::std::io::Result<()> {
+fn save_file_to_disk(destination_path: &Path, content: &ByteSource) -> io::Result<()> {
     let mut file = fs::File::create(destination_path)?;
-    Ok(file.write_all(content)?)
+    Ok(file.write_all(content.collect::<Vec<_>>()?)?)
 }
 
 

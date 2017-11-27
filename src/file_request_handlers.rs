@@ -12,8 +12,6 @@ use std::sync::Arc;
 
 use std::path::Path;
 
-use std::thread;
-
 use std::io;
 use std::sync::mpsc::{channel, Receiver};
 
@@ -23,7 +21,7 @@ use file_list::{FileListList, FileLocation};
 use file_list_worker;
 use persistent_file_list;
 use file_util::sanitize_tag_names;
-use file_util::{generate_thumbnail, get_semi_unique_identifier, get_file_timestamp};
+use file_util::{get_semi_unique_identifier, get_file_timestamp};
 use request_helpers::get_get_variable;
 use file_handler::{save_file, FileSavingResult, ThumbnailStrategy};
 
