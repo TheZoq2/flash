@@ -99,9 +99,13 @@ pub fn save_file(
     Ok((saved_file, save_result_rx))
 }
 
-fn save_file_to_disk(destination_path: &Path, content: &ByteSource) -> io::Result<()> {
+fn save_file_to_disk(destination_path: &Path, content: &ByteSource) -> Result<()> {
     let mut file = fs::File::create(destination_path)?;
-    Ok(file.write_all(content.collect::<Vec<_>>()?)?)
+    let mut bytes = vec!();
+    content.map(|b| {
+        bytes.push(b?);
+    });
+    Ok(file.write_all(&bytes)?)
 }
 
 
