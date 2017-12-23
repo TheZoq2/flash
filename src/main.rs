@@ -87,11 +87,6 @@ pub fn establish_connection() -> PgConnection {
 
 
 fn main() {
-    //let target_dir = "/mnt/1TB-files/Pictures/Oneplus".to_string();
-    //let target_dir = "/mnt/1TB-files/Pictures/dslr/apr13-2017".to_string();
-    let target_dir = "/home/frans/Pictures/dslr/26-may".to_string();
-    //let file_list = get_files_in_dir(&target_dir);
-
     let settings = settings::Settings::from_env();
 
     //Loading or creating the database
@@ -114,7 +109,6 @@ fn main() {
 
     mount.mount("/list", file_request_handlers::file_list_request_handler);
     mount.mount("/", Static::new(Path::new("frontend/output")));
-    mount.mount("/file", Static::new(Path::new(&target_dir)));
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())),);
     mount.mount("/search", search_handler::handle_file_search);
     mount.mount("file_list", file_request_handlers::file_list_request_handler);
@@ -129,7 +123,7 @@ fn main() {
     match Iron::new(chain).http(url) {
         Ok(_) => {
             println!("Server running on port {}", port);
-            println!("Open localhost/tag_editor.html or album.html");
+            println!("Open http://localhost:{}/album.html", port);
         }
         Err(e) => println!("Failed to start iron: {}", e),
     }
