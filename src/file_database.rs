@@ -133,6 +133,17 @@ impl FileDatabase {
         }
     }
 
+    pub fn set_file_timestamp(&self, file: &File, timestamp: &NaiveDateTime) -> Result<(), String> {
+        let result = diesel::update(files::table.find(file.id))
+            .set(files::creation_date.eq(timestamp))
+            .execute(&self.connection);
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Failed to update file tags. {:?}", e)),
+        }
+    }
+
     /**
       Returns all files that have all the tags in the list and that dont have any
       tags in the negated tag list

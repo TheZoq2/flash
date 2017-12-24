@@ -12,6 +12,13 @@ use std::thread;
 
 use glob::glob;
 
+use error::Result;
+
+use chrono::NaiveDateTime;
+
+use exiftool;
+use exiftool::{ExifData};
+
 
 /**
   Enum for different types of media
@@ -57,7 +64,7 @@ pub fn generate_thumbnail(
     source_path: &Path,
     destination_path: &Path,
     max_size: u32,
-) -> Result<(), image::ImageError> {
+) -> Result<()> {
     {
         let destination_path = destination_path.to_owned();
         let source_path_clone = source_path.to_owned();
@@ -118,7 +125,7 @@ pub fn system_time_as_unix_timestamp(time: SystemTime) -> u64 {
     If the file doesn't exist, an error is printed and `SystemTime::now()` is returned
 */
 //TODO: Rewrite to return an option
-pub fn get_file_timestamp(filename: &PathBuf) -> u64 {
+pub fn get_file_timestamp(filename: &Path) -> u64 {
     let metadata = match fs::metadata(&filename) {
         Ok(val) => val,
         Err(e) => {
@@ -136,23 +143,27 @@ pub fn get_file_timestamp(filename: &PathBuf) -> u64 {
     system_time_as_unix_timestamp(timestamp)
 }
 
+/**
+  Reads the timestamp of the specified file from the file metadata. Returns Ok(None) if
+  the metadata does not contain a creation time and Err if reading failed for some reason.
+*/
+pub fn get_file_timestamp_from_metadata(filename: &Path) -> Result<Option<NaiveDateTime>> {
+    let exif_data = ExifData::from_file(&filename.to_string_lossy())?;
+
+    match exif_data.get_creation_date() {
+        Ok(data) => Ok(Some(data)),
+        Err(exiftool::Error(exiftool::ErrorKind::NoSuchTag(_), _)) => Ok(None),
+        Err(e) => Err(e)?
+    }
+}
+
 
 /**
   Checks a list of tags for unallowed characters and converts it into a storeable format,
   which at the moment is just removal of capital letters
  */
-pub fn sanitize_tag_names(tag_list: &[String]) -> Result<Vec<String>, String> {
-    let mut new_list = vec![];
-
-    for tag in tag_list {
-        if tag == "" {
-            return Err(String::from("Tags can not be empty"));
-        }
-
-        new_list.push(tag.to_lowercase());
-    }
-
-    Ok(new_list)
+pub fn sanitize_tag_names(tag_list: &[String]) -> Vec<String> {
+    tag_list.iter().filter(|x| !x.is_empty()).map(|x| x.to_lowercase()).collect()
 }
 
 
@@ -239,6 +250,7 @@ mod util_tests {
                 String::from("abCde"),
                 String::from("ABC"),
                 String::from("abc"),
+                String::from(""),
             ];
 
             let expected = vec![
@@ -247,14 +259,7 @@ mod util_tests {
                 String::from("abc"),
             ];
 
-            assert_eq!(sanitize_tag_names(&vec), Ok(expected));
-        }
-
-        {
-            assert_eq!(
-                sanitize_tag_names(&vec![String::from("")]),
-                Err(String::from("Tags can not be empty"))
-            );
+            assert_eq!(sanitize_tag_names(&vec), expected);
         }
     }
 

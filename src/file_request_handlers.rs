@@ -209,7 +209,7 @@ fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, FileReque
     let tag_string = get_get_variable(request, "tags")?;
 
     match serde_json::from_str::<Vec<String>>(&tag_string) {
-        Ok(result) => Ok(sanitize_tag_names(&result).unwrap()),
+        Ok(result) => Ok(sanitize_tag_names(&result)),
         Err(e) => Err(err_invalid_variable_type("tags", &format!("{:?}", e))),
     }
 }
@@ -314,7 +314,8 @@ fn save_new_file(
 
 
     //Generate the thumbnail
-    generate_thumbnail(original_path, &thumbnail_path, 300)?;
+    //TODO: Use this result
+    generate_thumbnail(original_path, &thumbnail_path, 300);
 
     //Copy the file to the destination
     //Get the name and path of the new file
