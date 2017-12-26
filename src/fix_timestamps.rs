@@ -4,7 +4,7 @@ use search::SavedSearchQuery;
 
 use file_util;
 
-fn fix_timestamps(fdb: &FileDatabase) {
+pub fn fix_timestamps(fdb: &FileDatabase) {
     // Fetch all files
     let files = fdb.search_files(SavedSearchQuery::empty());
 
