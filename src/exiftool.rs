@@ -37,7 +37,7 @@ pub struct ExifData {
     tags: HashMap<String, String>,
 }
 
-const date_format: &'static str = "%Y:%m:%d %H:%M:%S.%e";
+const DATE_FORMAT: &'static str = "%Y:%m:%d %H:%M:%S.%e";
 
 impl ExifData {
     pub fn from_exiftool_string(data: &str) -> Result<ExifData> {
@@ -62,7 +62,7 @@ impl ExifData {
     pub fn from_file(file: &str) -> Result<ExifData> {
         let mut cmd = Command::new("exiftool");
         cmd.arg("-d");
-        cmd.arg(date_format);
+        cmd.arg(DATE_FORMAT);
         cmd.arg(file);
 
         let command_output = {
@@ -85,7 +85,7 @@ impl ExifData {
         let target_tag = "Create Date";
         match self.get_tag(target_tag) {
             Some(date_string) => {
-                let parsed = chrono::NaiveDateTime::parse_from_str(date_string, date_format);
+                let parsed = chrono::NaiveDateTime::parse_from_str(date_string, DATE_FORMAT);
 
                 match parsed {
                     Ok(result) => Ok(result),
@@ -111,10 +111,10 @@ mod exif_data_tests {
 
         //assert_eq!(data.get_tag("GPS Img Direction"), Some("330"));
         assert_eq!(data.get_tag("X Resolution"), Some("72"));
-        assert_eq!(data.get_tag("Create Date"), Some("2002:12:08 12:00:00.00"));
+        assert_eq!(data.get_tag("Create Date"), Some("2017:09:11 14:40:00.11"));
         assert_eq!(data.get_tag("Non-existing tag"), None);
 
-        let expected_date = chrono::NaiveDate::from_ymd(2002, 12, 8).and_hms(12, 0, 0);
+        let expected_date = chrono::NaiveDate::from_ymd(2017, 9, 11).and_hms(14, 40, 0);
         assert_eq!(data.get_creation_date().unwrap(), expected_date);
     }
 
