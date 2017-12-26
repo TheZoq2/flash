@@ -82,7 +82,7 @@ impl ExifData {
     }
 
     pub fn get_creation_date(&self) -> Result<chrono::NaiveDateTime> {
-        let target_tag = "Create Date";
+        let target_tag = "Date/Time Original";
         match self.get_tag(target_tag) {
             Some(date_string) => {
                 let parsed = chrono::NaiveDateTime::parse_from_str(date_string, DATE_FORMAT);
@@ -130,6 +130,16 @@ mod exif_data_tests {
         assert_eq!(data.get_tag("Image Width"), Some("6000"));
 
         let expected_date = chrono::NaiveDate::from_ymd(2016, 12, 16).and_hms(21, 34, 26);
+        assert_eq!(data.get_creation_date().unwrap(), expected_date);
+    }
+
+    #[test]
+    fn creation_date_from_oneplus() {
+        let filename = "test/media/IMG_20171024_180300.jpg";
+
+        let data = ExifData::from_file(filename).unwrap();
+
+        let expected_date = chrono::NaiveDate::from_ymd(2017, 10, 24).and_hms(18, 3, 00);
         assert_eq!(data.get_creation_date().unwrap(), expected_date);
     }
 }
