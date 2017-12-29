@@ -121,7 +121,6 @@ impl FileDatabase {
     /**
       Changes the tags of a specified file. Returns the new file object
     */
-    #[must_use]
     pub fn change_file_tags(&self, file: &File, tags: &[String]) -> Result<File, String> {
         let result = diesel::update(files::table.find(file.id))
             .set(files::tags.eq(tags))
