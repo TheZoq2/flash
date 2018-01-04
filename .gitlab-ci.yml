@@ -1,4 +1,4 @@
-image "scorpil/rust:nightly"
+image: "scorpil/rust:nightly"
 
 test:cargo:
     script:
