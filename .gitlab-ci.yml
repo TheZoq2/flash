@@ -6,12 +6,14 @@ services:
 
 test:cargo:
     script:
-        - cargo test
+        - apt-get install -y exiftool
+        - cargo test --color=always
     cache:
         paths:
             - target/
-            - caargo/
+            - cargo/
 
 
 variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
+    RUST_BACKTRACE: 1
