@@ -6,6 +6,11 @@ services:
 
 test:cargo:
     script:
+        - cargo install diesel_cli --force
+        - psql -c 'create database flash_development;' -U postgres
+        - psql -c 'create database flash_test;' -U postgres
+        - diesel database setup
+        - DATABASE_URL=$DATABASE_TEST_URL diesel database setup
         - apt-get install -y exiftool
         - cargo test --color=always
     cache:
@@ -17,3 +22,7 @@ test:cargo:
 variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
     RUST_BACKTRACE: 1
+    TEST_FILE_STORAGE_PATH: /tmp/flash
+    DATABASE_TEST_URL: postgres://postgres@localhost/flash_test
+    DATABASE_URL: postgres://postgres@localhost/flash_development
+
