@@ -138,7 +138,6 @@ impl FileDatabase {
     /**
       Changes the tags of a specified file. Returns the new file object
     */
-    #[must_use]
     pub fn change_file_tags(&self, file: &File, tags: &[String]) -> Result<File> {
         let result = diesel::update(files::table.find(file.id))
             .set(files::tags.eq(tags))
@@ -150,14 +149,12 @@ impl FileDatabase {
         }
     }
 
-    #[must_use]
     pub fn update_file_without_creating_change(&self, file: &File) -> Result<File> {
         Ok(diesel::update(files::table.find(file.id))
             .set(file)
             .get_result(&self.connection)?
         )
     }
-    #[must_use]
     pub fn drop_file(&self, file_id: i32, change_policy: ChangeCreationPolicy) -> Result<()> {
         diesel::delete(files::table.find(file_id))
             .execute(&self.connection)?;
@@ -172,6 +169,16 @@ impl FileDatabase {
         Ok(())
     }
 
+    pub fn set_file_timestamp(&self, file: &File, timestamp: &NaiveDateTime) -> Result<(), String> {
+        let result = diesel::update(files::table.find(file.id))
+            .set(files::creation_date.eq(timestamp))
+            .execute(&self.connection);
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Failed to update file tags. {:?}", e)),
+        }
+    }
 
     /**
       Returns all files that have all the tags in the list and that dont have any

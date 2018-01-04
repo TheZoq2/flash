@@ -58,6 +58,8 @@ mod util;
 mod file_handler;
 mod byte_source;
 
+mod fix_timestamps;
+
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
@@ -90,14 +92,12 @@ pub fn establish_connection() -> PgConnection {
 
 
 fn main() {
-    let target_dir = "/home/frans/Pictures/dslr/26-may".to_string();
-
     let settings = settings::Settings::from_env();
 
     //Loading or creating the database
     let db = FileDatabase::new(establish_connection(), settings.get_file_storage_path());
 
-
+    //fix_timestamps::fix_timestamps(&db);
 
     // Read the persistent file list if it exists
     let file_list_save_path = settings
@@ -114,7 +114,6 @@ fn main() {
 
     mount.mount("/list", file_request_handlers::file_list_request_handler);
     mount.mount("/", Static::new(Path::new("frontend/output")));
-    mount.mount("/file", Static::new(Path::new(&target_dir)));
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())),);
     mount.mount("/search", search_handler::handle_file_search);
     mount.mount("file_list", file_request_handlers::file_list_request_handler);
@@ -129,7 +128,7 @@ fn main() {
     match Iron::new(chain).http(url) {
         Ok(_) => {
             println!("Server running on port {}", port);
-            println!("Open localhost/tag_editor.html or album.html");
+            println!("Open http://localhost:{}/album.html", port);
         }
         Err(e) => println!("Failed to start iron: {}", e),
     }

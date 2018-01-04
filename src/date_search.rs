@@ -1,4 +1,4 @@
-use chrono::{NaiveDateTime, NaiveTime, Datelike, Duration};
+use chrono::{NaiveDateTime, NaiveTime, NaiveDate, Datelike, Duration};
 
 use std::vec::Vec;
 use std::str::{FromStr, SplitWhitespace};
@@ -200,7 +200,8 @@ pub fn parse_date_query(query: &str, current_time: &NaiveDateTime)
             Ok(DateConstraints::with_constraints(parse_date_pattern_search(&mut words)?)),
         Some("between") => unimplemented!(),
         // Special keywords, or unexpected tokens
-        Some(_other) => unimplemented!(),
+        Some("since") => Ok(DateConstraints::with_intervals(parse_full_date_string(&mut words, current_time)?)),
+        Some(other) => Err(TimeParseError::UnexpectedWord(other.to_string())),
         None => Err(TimeParseError::UnexpectedEndOfQuery)
     }
 }
@@ -276,6 +277,22 @@ fn parse_date_pattern_search(query: &mut SplitWhitespace)
     Ok(result_functions)
 }
 
+fn parse_full_date_string(query: &mut SplitWhitespace, current_time: &NaiveDateTime)
+    -> Result<Vec<Interval>, TimeParseError> 
+{
+    let datestring = match query.next() {
+        Some(string) => string,
+        None => return Err(TimeParseError::UnexpectedEndOfQuery)
+    };
+
+    match NaiveDate::parse_from_str(&datestring, "%Y-%m-%d") {
+        Ok(date) => Ok(vec!(Interval::new(date.and_hms(0,0,0), *current_time))),
+        Err(e) => {
+            println!("{}", e);
+            Err(TimeParseError::UnexpectedWord(datestring.to_string()))
+        }
+    }
+}
 
 
 #[cfg(test)]
@@ -506,6 +523,23 @@ mod parse_tests {
                     "2015-07-20 12:00:00",
                     "2016-09-25 12:00:00",
                     "2015-08-25 12:00:00"
+                )
+            ), Ok(()));
+    }
+
+    #[test]
+    fn since_query_test() {
+        // From a single month
+        assert_matches!(test_query(
+                "since 2017-10-01",
+                "2017-12-23 12:00:00",
+                vec!(
+                    "2017-10-20 12:00:00",
+                    "2017-11-20 12:00:00"
+                ),
+                vec!(
+                    "2016-08-08 12:00:00",
+                    "2017-09-20 12:00:00",
                 )
             ), Ok(()));
     }

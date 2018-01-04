@@ -2,142 +2,45 @@ use std::collections::HashMap;
 
 extern crate regex;
 extern crate chrono;
-use chrono::TimeZone;
+
+use std::str::FromStr;
 
 use self::regex::Regex;
 
-use std;
-
 use std::process::Command;
 
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum GpsStringParseError {
-    NumberParseError,
-    InvalidDirection(String),
-    BadFormat,
-}
-impl std::convert::From<std::num::ParseFloatError> for GpsStringParseError {
-    fn from(_: std::num::ParseFloatError) -> GpsStringParseError {
-        GpsStringParseError::NumberParseError
+error_chain! {
+    foreign_links {
+        Io(::std::io::Error);
+        Utf8(::std::string::FromUtf8Error);
     }
-}
-impl std::convert::From<std::num::ParseIntError> for GpsStringParseError {
-    fn from(_: std::num::ParseIntError) -> GpsStringParseError {
-        GpsStringParseError::NumberParseError
-    }
-}
 
-
-#[derive(PartialEq, Debug)]
-pub enum CardinalDirection {
-    East,
-    West,
-    North,
-    South,
-}
-
-impl std::str::FromStr for CardinalDirection {
-    type Err = GpsStringParseError;
-
-    fn from_str(name: &str) -> Result<CardinalDirection, GpsStringParseError> {
-        match name {
-            "N" => Ok(CardinalDirection::North),
-            "S" => Ok(CardinalDirection::South),
-            "W" => Ok(CardinalDirection::West),
-            "E" => Ok(CardinalDirection::East),
-            other => Err(GpsStringParseError::InvalidDirection(String::from(other))),
+    errors {
+        NoSuchTag(name: String) {
+            description("The file did not contain the specified tag")
+            display("File did not contain tag '{}'", name)
+        }
+        MalformedDatetime(data: String) {
+            description("The date string was malformed")
+            display("Unexpected date format in exif data: {}", data)
+        }
+        MalformedUtf8 {
+            description("Exiftool returned invalid UTF-8")
+            display("Invalid UTF-8 returned from exiftool")
         }
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub struct GpsCoordinate {
-    degrees: i16,
-    minutes: i16,
-    seconds: f32,
-    direction: CardinalDirection,
-}
 
-impl GpsCoordinate {
-    pub fn new(
-        degrees: i16,
-        minutes: i16,
-        seconds: f32,
-        direction: CardinalDirection,
-    ) -> GpsCoordinate {
-        GpsCoordinate {
-            degrees: degrees,
-            minutes: minutes,
-            seconds: seconds,
-            direction: direction,
-        }
-    }
-}
-
-impl std::str::FromStr for GpsCoordinate {
-    type Err = GpsStringParseError;
-
-    fn from_str(string: &str) -> Result<GpsCoordinate, Self::Err> {
-        lazy_static! {
-            static ref RE: Regex = Regex::new("(\\d*) deg (\\d*)' (\\d*.?\\d*)\" ([NEWS])").unwrap();
-        }
-
-        match RE.captures_iter(string).next() {
-            Some(val) => Ok(GpsCoordinate {
-                degrees: val[1].parse()?,
-                minutes: val[2].parse()?,
-                seconds: val[3].parse()?,
-                direction: CardinalDirection::from_str(&val[4])?,
-            }),
-            None => Err(GpsStringParseError::BadFormat),
-        }
-    }
-}
-
-/**
-  A GPS location
- */
-pub struct Location {
-    longitude: GpsCoordinate,
-    latitude: GpsCoordinate,
-}
-impl Location {
-    pub fn new(longitude: GpsCoordinate, latitude: GpsCoordinate) -> Location {
-        Location {
-            longitude: longitude,
-            latitude: latitude,
-        }
-    }
-}
-
+#[derive(Debug)]
 pub struct ExifData {
     tags: HashMap<String, String>,
 }
 
-#[derive(Debug)]
-pub enum ExifError {
-    InvalidGpsCoordinate(GpsStringParseError),
-    NoSuchTag(String),
-    MalformedDatetime(String),
-    IoError(std::io::Error),
-    MalformedUtf8(std::string::FromUtf8Error),
-}
-impl std::convert::From<std::io::Error> for ExifError {
-    fn from(e: std::io::Error) -> ExifError {
-        ExifError::IoError(e)
-    }
-}
-impl std::convert::From<std::string::FromUtf8Error> for ExifError {
-    fn from(e: std::string::FromUtf8Error) -> ExifError {
-        ExifError::MalformedUtf8(e)
-    }
-}
-
-
+const DATE_FORMAT: &'static str = "%Y:%m:%d %H:%M:%S.%e";
 
 impl ExifData {
-    pub fn from_exiftool_string(data: &str) -> Result<ExifData, ExifError> {
+    pub fn from_exiftool_string(data: &str) -> Result<ExifData> {
         let mut result = ExifData {
             tags: HashMap::new(),
         };
@@ -156,8 +59,10 @@ impl ExifData {
         Ok(result)
     }
 
-    pub fn from_file(file: &str) -> Result<ExifData, ExifError> {
+    pub fn from_file(file: &str) -> Result<ExifData> {
         let mut cmd = Command::new("exiftool");
+        cmd.arg("-d");
+        cmd.arg(DATE_FORMAT);
         cmd.arg(file);
 
         let command_output = {
@@ -176,18 +81,18 @@ impl ExifData {
         }
     }
 
-    pub fn get_creation_date(&self) -> Result<chrono::DateTime<chrono::Utc>, ExifError> {
-        let target_tag = "Create Date";
+    pub fn get_creation_date(&self) -> Result<chrono::NaiveDateTime> {
+        let target_tag = "Date/Time Original";
         match self.get_tag(target_tag) {
             Some(date_string) => {
-                let parsed = chrono::Utc.datetime_from_str(date_string, "%Y:%m:%d %H:%M:%S");
+                let parsed = chrono::NaiveDateTime::parse_from_str(date_string, DATE_FORMAT);
 
                 match parsed {
                     Ok(result) => Ok(result),
-                    _ => Err(ExifError::MalformedDatetime(String::from(date_string))),
+                    _ => Err(ErrorKind::MalformedDatetime(String::from(date_string)).into()),
                 }
             }
-            None => Err(ExifError::NoSuchTag(String::from(target_tag))),
+            None => Err(ErrorKind::NoSuchTag(String::from(target_tag)).into()),
         }
     }
 }
@@ -204,40 +109,37 @@ mod exif_data_tests {
 
         let data = ExifData::from_exiftool_string(file_content).unwrap();
 
-        assert_eq!(data.get_tag("GPS Img Direction"), Some("330"));
+        //assert_eq!(data.get_tag("GPS Img Direction"), Some("330"));
         assert_eq!(data.get_tag("X Resolution"), Some("72"));
-        assert_eq!(data.get_tag("Create Date"), Some("2002:12:08 12:00:00"));
+        assert_eq!(data.get_tag("Create Date"), Some("2017:09:11 14:40:00.11"));
         assert_eq!(data.get_tag("Non-existing tag"), None);
 
-        let expected_date = chrono::Utc.ymd(2002, 12, 8).and_hms(12, 0, 0);
+        let expected_date = chrono::NaiveDate::from_ymd(2017, 9, 11).and_hms(14, 40, 0);
         assert_eq!(data.get_creation_date().unwrap(), expected_date);
     }
 
-    #[test]
-    fn gps_coordinate_test() {
-        assert_eq!(
-            GpsCoordinate::from_str("58 deg 28' 5.45\" N").unwrap(),
-            GpsCoordinate::new(58, 28, 5.45, CardinalDirection::North)
-        );
-        assert_eq!(
-            GpsCoordinate::from_str("58 deg 28' 5.45\" S").unwrap(),
-            GpsCoordinate::new(58, 28, 5.45, CardinalDirection::South)
-        );
-    }
 
 
-    /*
     #[test]
     fn read_exif_from_file()
     {
-        let filename = "../test/media/DSC_0001.JPG";
+        let filename = "test/media/DSC_0001.JPG";
 
         let data = ExifData::from_file(filename).unwrap();
 
         assert_eq!(data.get_tag("Image Width"), Some("6000"));
 
-        let expected_date = chrono::UTC.ymd(2016, 12, 16).and_hms(21, 34, 26);
+        let expected_date = chrono::NaiveDate::from_ymd(2016, 12, 16).and_hms(21, 34, 26);
         assert_eq!(data.get_creation_date().unwrap(), expected_date);
     }
-    */
+
+    #[test]
+    fn creation_date_from_oneplus() {
+        let filename = "test/media/IMG_20171024_180300.jpg";
+
+        let data = ExifData::from_file(filename).unwrap();
+
+        let expected_date = chrono::NaiveDate::from_ymd(2017, 10, 24).and_hms(18, 3, 00);
+        assert_eq!(data.get_creation_date().unwrap(), expected_date);
+    }
 }
