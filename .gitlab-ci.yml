@@ -1,14 +1,14 @@
 # image: "scorpil/rust:nightly"
 image: rust:latest
 
+services:
+    - postgres:latest
 
 test:cargo:
     script:
-        - apt-get install -y postgresql postgresql-client libpq-dev
         - apt-get install -y libimage-exiftool-perl
         - cargo install diesel_cli --force
-        - psql -c 'create database flash_development;' -U postgres
-        - psql -c 'create database flash_test;' -U postgres
+        # - psql -c 'create database flash_test;' -U postgres
         - diesel database setup
         - DATABASE_URL=$DATABASE_TEST_URL diesel database setup
         - cargo test --color=always
@@ -22,6 +22,9 @@ variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
     RUST_BACKTRACE: 1
     TEST_FILE_STORAGE_PATH: /tmp/flash
-    DATABASE_TEST_URL: postgres://postgres@localhost/flash_test
-    DATABASE_URL: postgres://postgres@localhost/flash_development
+    DATABASE_TEST_URL: postgres://flash@postgres/flash_test
+    POSTGRES_DB: flash_test
+    POSTGRES_USER: flash
+    POSTGRES_PASSWORD: ""
+
 
