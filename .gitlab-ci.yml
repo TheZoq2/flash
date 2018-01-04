@@ -1,8 +1,12 @@
-image: "scorpil/rust:nightly"
+# image: "scorpil/rust:nightly"
+image: rust:latest
+
+services:
+    - postgres:latest
 
 test:cargo:
     script:
-        - cargo test --verbose
+        - cargo test
     cache:
         paths:
             - target/
