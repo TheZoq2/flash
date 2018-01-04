@@ -1,0 +1,13 @@
+image "scorpil/rust:nightly"
+
+test:cargo:
+    script:
+        - cargo test --verbose
+    cache:
+        paths:
+            - target/
+            - caargo/
+
+
+variables:
+    CARGO_HOME: $CI_PROJECT_DIR/cargo
