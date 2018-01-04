@@ -27,5 +27,6 @@ variables:
     POSTGRES_DB: flash_test
     POSTGRES_USER: flash
     POSTGRES_PASSWORD: ""
+    BIN: $BIN:$CI_PROJECT_DIR/cargo/bin
 
 
