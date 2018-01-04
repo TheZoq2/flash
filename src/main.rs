@@ -94,7 +94,7 @@ fn main() {
     //Loading or creating the database
     let db = FileDatabase::new(establish_connection(), settings.get_file_storage_path());
 
-    fix_timestamps::fix_timestamps(&db);
+    //fix_timestamps::fix_timestamps(&db);
 
     // Read the persistent file list if it exists
     let file_list_save_path = settings
