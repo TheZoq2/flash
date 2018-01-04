@@ -10,8 +10,7 @@ test:cargo:
         - apt-get install -y libimage-exiftool-perl
         - cargo install diesel_cli --force
         # - psql -c 'create database flash_test;' -U postgres
-        - DATABASE_URL=$DATABASE_TEST_URL diesel database setup
-        - $CI_PROJECT_DIR/cargo/bin database setup
+        - DATABASE_URL=$DATABASE_TEST_URL $CI_PROJECT_DIR/cargo/bin/diesel database setup
         - cargo test --color=always
     cache:
         paths:
