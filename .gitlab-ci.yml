@@ -6,12 +6,13 @@ services:
 
 test:cargo:
     script:
+        - sudo apt-get install -y postgresql postgresql-client libpq-dev
+        - apt-get install -y libimage-exiftool-perl
         - cargo install diesel_cli --force
         - psql -c 'create database flash_development;' -U postgres
         - psql -c 'create database flash_test;' -U postgres
         - diesel database setup
         - DATABASE_URL=$DATABASE_TEST_URL diesel database setup
-        - apt-get install -y libimage-exiftool-perl
         - cargo test --color=always
     cache:
         paths:
