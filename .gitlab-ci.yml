@@ -1,0 +1,41 @@
+# image: "scorpil/rust:nightly"
+image: rust:latest
+
+services:
+    - postgres:latest
+
+
+test:cargo_check:
+    script:
+        cargo check
+    cache:
+        paths:
+            - target/
+            - cargo/
+
+test:cargo:
+    script:
+        - apt-get update -yqq
+        # Install programs that get called by rust
+        - apt-get install -y libimage-exiftool-perl
+        # Install diesel if a cached version is not present
+        - ls -l | grep $CI_PROJECT_DIR/cargo/bin/diesel || cargo install diesel_cli
+        # Setup database
+        - DATABASE_URL=$DATABASE_TEST_URL $CI_PROJECT_DIR/cargo/bin/diesel database setup
+        - cargo test --color=always
+    cache:
+        paths:
+            - target/
+            - cargo/
+
+
+variables:
+    CARGO_HOME: $CI_PROJECT_DIR/cargo
+    RUST_BACKTRACE: 1
+    TEST_FILE_STORAGE_PATH: /tmp/flash
+    DATABASE_TEST_URL: postgres://flash@postgres/flash_test
+    POSTGRES_DB: flash_test
+    POSTGRES_USER: flash
+    POSTGRES_PASSWORD: ""
+
+
