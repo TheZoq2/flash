@@ -1,4 +1,4 @@
-use chrono::{NaiveDateTime, NaiveTime, NaiveDate, Datelike, Duration};
+use chrono::{NaiveDateTime, NaiveTime, NaiveDate, Datelike, Duration, Weekday};
 
 use std::vec::Vec;
 use std::str::{FromStr, SplitWhitespace};
@@ -198,9 +198,9 @@ pub fn parse_date_query(query: &str, current_time: &NaiveDateTime)
             Ok(DateConstraints::with_intervals(parse_absolute_search(&mut words, current_time)?)),
         Some("in") | Some("on") =>
             Ok(DateConstraints::with_constraints(parse_date_pattern_search(&mut words)?)),
-        Some("between") => unimplemented!(),
         // Special keywords, or unexpected tokens
         Some("since") => Ok(DateConstraints::with_intervals(parse_full_date_string(&mut words, current_time)?)),
+        // Some("between") => unimplemented!(), TODO
         Some(other) => Err(TimeParseError::UnexpectedWord(other.to_string())),
         None => Err(TimeParseError::UnexpectedEndOfQuery)
     }
@@ -217,7 +217,10 @@ fn parse_modulu_search(query: &mut SplitWhitespace, current_time: &NaiveDateTime
 
     let start_date = match time_descriptor {
         TimeDescriptor::Day => current_time.date(),
-        TimeDescriptor::Week => unimplemented!("NaiveDateTime does not have a week concept"),
+        TimeDescriptor::Week => {
+            let week = current_time.iso_week();
+            NaiveDate::from_isoywd(current_time.year(), week.week(), Weekday::Mon)
+        }
         TimeDescriptor::Month => current_time.date().with_day0(0).unwrap(),
         TimeDescriptor::Year => current_time.date().with_day0(0)
                 .unwrap()
@@ -406,6 +409,20 @@ mod parse_tests {
                 ),
                 vec!(
                     "2016-09-09 12:00:00",
+                )
+            ), Ok(()));
+
+        // First of january 2018 was a monday Started on
+        assert_matches!(test_query(
+                "this week",
+                "2018-01-03 12:00:00",
+                vec!(
+                    "2018-01-02 09:30:36",
+                    "2018-01-01 09:30:36",
+                ),
+                vec!(
+                    "2017-12-31 12:00:00",
+                    "2018-01-08 12:00:00",
                 )
             ), Ok(()));
     }
