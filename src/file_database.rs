@@ -301,7 +301,7 @@ mod db_tests {
 
     use std::sync::Arc;
 
-    use chrono::Datelike;
+    use chrono::{Datelike, NaiveDate};
 
     use date_search;
     //////////////////////////////////////////////////
@@ -470,25 +470,25 @@ mod db_tests {
                 "file1",
                 "thumb1",
                 &vec!["tag1".to_owned(), "tag2".to_owned()],
-                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+                NaiveDate::from_ymd(2017,01,01).and_hms(0,0,0).timestamp() as u64
             );
         fdb.add_new_file(
                 "file2",
                 "thumb2",
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
-                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+                NaiveDate::from_ymd(2016,01,01).and_hms(0,0,0).timestamp() as u64
             );
         fdb.add_new_file(
                 "file3",
                 "thumb2",
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
-                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
+                NaiveDate::from_ymd(2017,06,01).and_hms(0,0,0).timestamp() as u64
             );
 
         let intervals = vec!(
                 date_search::Interval::new(
-                    naive_datetime_from_date("2016-05-01").unwrap(),
-                    naive_datetime_from_date("2017-05-01").unwrap()
+                    NaiveDate::from_ymd(2016,05,01).and_hms(0,0,0),
+                    NaiveDate::from_ymd(2017,05,01).and_hms(0,0,0)
                 )
             );
 
@@ -523,19 +523,19 @@ mod db_tests {
                 "file1",
                 "thumb1",
                 &vec!["tag1".to_owned(), "tag2".to_owned()],
-                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+                NaiveDate::from_ymd(2017,01,01).and_hms(0,0,0).timestamp() as u64
             );
         fdb.add_new_file(
                 "file2",
                 "thumb2",
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
-                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+                NaiveDate::from_ymd(2016,01,01).and_hms(0,0,0).timestamp() as u64
             );
         fdb.add_new_file(
                 "file3",
                 "thumb2",
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
-                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
+                NaiveDate::from_ymd(2017,06,01).and_hms(0,0,0).timestamp() as u64
             );
 
         let result = fdb.search_files(search::SavedSearchQuery::empty());
@@ -548,19 +548,19 @@ mod db_tests {
                 "file1",
                 "thumb1",
                 &vec![],
-                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+                NaiveDate::from_ymd(2017,01,01).and_hms(0,0,0).timestamp() as u64
             );
         fdb.add_new_file(
                 "file2",
                 "thumb2",
                 &vec![],
-                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+                NaiveDate::from_ymd(2016,01,01).and_hms(0,0,0).timestamp() as u64
             );
         fdb.add_new_file(
                 "file3",
                 "thumb2",
                 &vec![],
-                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
+                NaiveDate::from_ymd(2017,06,01).and_hms(0,0,0).timestamp() as u64
             );
 
         let result = fdb.search_files(search::SavedSearchQuery::empty());
@@ -604,7 +604,4 @@ mod db_tests {
         result
     }
 
-    fn naive_datetime_from_date(date_string: &str) -> ::chrono::ParseResult<NaiveDateTime> {
-        NaiveDateTime::parse_from_str(&format!("{} 12:00:00", date_string), "%Y-%m-%d %H:%M:%S")
-    }
 }
