@@ -2,12 +2,22 @@
 
 ![Screenshot of main interface](screenshot.png)
 
-This is a photo management program written in rust. It is designed to let you quickly go
+[Demo video showing an example of how to use the program](https://youtu.be/Vxh0yE62RCo)
+
+Flash is a photo management program written in rust. It is designed to let you quickly go
 through new photos to pick out the best ones, and to allow you to easily find old photos
 that you have taken. This is done by letting you assign searchable tags to the photos you save.
 
 The program consists of a backend server that is written in rust which serves photos to frontends.
-The frontend is written in elm and is served by the rust server.
+At the moment, there are two frontends for the project: [Flash-frontend](https://gitlab.com/TheZoq2/Flash-Frontend) and [Flash-cli](https://gitlab.com/TheZoq2/flash-cli)
+
+Flash frontend is the main interface for the program which allows you to import and view pictures
+as well as add tags to them. It is written in Elm and runs in the web browser.
+
+Flash-cli, as the name implies is a commandline interface for flash. It allows you to search
+for pictures in the database just like you would in the web-interface but instead of just
+viewing them, it creates symlinks to the resulting images. This allows you to directly access
+the files if you want to send them to someone, or modify them using external programs.
 
 ## Usage
 
