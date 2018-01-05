@@ -21,34 +21,6 @@ use exiftool::{ExifData};
 
 
 /**
-  Enum for different types of media
-*/
-#[derive(Debug, Eq, PartialEq)]
-pub enum MediaType {
-    Image,
-    Video,
-}
-
-/**
-  Returns the filetype of a specified file based on its extension
-*/
-pub fn get_mediatype(path: &Path) -> MediaType {
-    let extension = path.extension().unwrap();
-
-    match extension.to_string_lossy().to_lowercase().as_str() {
-        "jpg" | "png" | "gif" => MediaType::Image,
-        "mov" | "mp4" | "webm" => MediaType::Video,
-        _ => {
-            println!(
-                "Unrecognised extension: {} assuming image",
-                extension.to_string_lossy()
-            );
-            MediaType::Image
-        }
-    }
-}
-
-/**
   Generates a thumbnail for the given source file and stores that file in a unique location which
   is returned by the function.
 
@@ -261,19 +233,5 @@ mod util_tests {
 
             assert_eq!(sanitize_tag_names(&vec), expected);
         }
-    }
-
-    #[test]
-    fn file_type_test() {
-        assert_eq!(get_mediatype(&PathBuf::from("yolo.jpg")), MediaType::Image);
-        assert_eq!(get_mediatype(&PathBuf::from("yolo.png")), MediaType::Image);
-        assert_eq!(get_mediatype(&PathBuf::from("yolo.mov")), MediaType::Video);
-        assert_eq!(get_mediatype(&PathBuf::from("yolo.mp4")), MediaType::Video);
-
-        assert_eq!(get_mediatype(&PathBuf::from("yolo.MOV")), MediaType::Video);
-        assert_eq!(
-            get_mediatype(&PathBuf::from("some/path.yoloswag/1234/yolo.MOV")),
-            MediaType::Video
-        );
     }
 }

@@ -3,8 +3,6 @@ use std::collections::HashMap;
 extern crate regex;
 extern crate chrono;
 
-use std::str::FromStr;
-
 use self::regex::Regex;
 
 use std::process::Command;
@@ -100,7 +98,6 @@ impl ExifData {
 
 #[cfg(test)]
 mod exif_data_tests {
-    use std::str::FromStr;
     use super::*;
 
     #[test]
