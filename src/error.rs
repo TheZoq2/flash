@@ -4,11 +4,16 @@ use iron::{IronError, status, Response};
 use std::convert;
 
 error_chain! {
+    links {
+        Exif(::exiftool::Error, ::exiftool::ErrorKind);
+    }
+
     foreign_links {
         Io(::std::io::Error);
         SerdeJson(::serde_json::Error);
         Diesel(::diesel::result::Error);
         ImageError(::image::ImageError);
+        Utf8(::std::string::FromUtf8Error);
     }
 
     errors {

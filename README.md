@@ -11,6 +11,18 @@ The frontend is written in elm and is served by the rust server.
 
 ## Usage
 
+The frontend consists of 2 pages: the album page and the viewer page. On the album page,
+you can search for photos by combining the following querys:
+
+- `of things, not stuff and flowers` Searches for pictures containing both things and flowers, but not stuff
+- `this day`, `this month` etc. Searches for images taken in the current time unit. For example: `this month` on
+august 28 will return all pictures taken in august this year.
+- `the past day`, `the past month` etc. searches for images taken in the past 24 hours or 30 days.
+- `/path/to/folder` Shows all photos in `folder`. The path to a folder relative to `FILE_READ_PATH`.
+This is used for adding new photos into the system
+
+## Installing
+
 - Install the rust compiler, cargo and postgresql.
 - Install diesel-cli using `cargo install diesel-cli`
 - Create a database user and temporarily give it superuser priviliges 
@@ -26,10 +38,6 @@ The frontend is written in elm and is served by the rust server.
     - `make`
 - Run the server `cargo run`
 - Go to localhost:3000/album.html
-
-To search for previously saved photos, search for `of <list of tags>`
-
-To add new photos, search for `/path/to/subfolder/of/FILE_READ_PATH`
 
 ## Future plans
 

@@ -21,10 +21,10 @@ GPS Date Stamp                  : 2014:11:21
 Aperture Value                  : 2.0
 Interoperability Index          : R98 - DCF basic file (sRGB)
 Interoperability Version        : 0100
-Create Date                     : 2002:12:08 12:00:00
+Create Date                     : 2017:09:11 14:40:00.11
 Shutter Speed Value             : 1/17
 Color Space                     : sRGB
-Date/Time Original              : 2014:11:21 16:39:51
+Date/Time Original              : 2017:09:11 14:40:00.11
 Flashpix Version                : 0100
 Exif Image Height               : 3120
 Exif Version                    : 0220

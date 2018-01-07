@@ -4,23 +4,23 @@ version = "0.1.0"
 authors = ["TheZoq2 <frans.skarman@gmail.com>"]
 
 [dependencies]
-iron = "*"
-staticfile = "*"
-mount = "*"
-persistent = "*"
-urlencoded = "*"
+iron = "0.5.1"
+staticfile = "0.4.0"
+mount = "0.3.0"
+persistent = "0.3.0"
+urlencoded = "0.5.0"
 
-rand = "*"
-glob = "*"
-regex = "*"
-lazy_static = "*"
+rand = "0.3.15"
+glob = "0.2.11"
+regex = "0.2.1"
+lazy_static = "0.2.8"
 
-image = "*"
-immeta = "*"
+image = "0.12.3"
+immeta = "0.3.5"
 
 diesel = { version = "0.16.0", features = ["postgres", "chrono"] }
 diesel_codegen = { version = "0.16.0", features = ["postgres"] }
-dotenv = "0.8.0"
+dotenv = "0.10.1"
 
 serde = "1.0.8"
 serde_derive = "1.0.8"
