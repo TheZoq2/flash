@@ -74,6 +74,16 @@ pub struct InsertableChange<'a> {
     timestamp: NaiveDateTime
 }
 
+impl<'a> From<ChangeDbEntry> for InsertableChange<'a> {
+    fn from(other: ChangeDbEntry) -> Self {
+        Self {
+            json_data: &other.json_data,
+            affected_file: other.affected_file,
+            timestamp: other.timestamp
+        }
+    }
+}
+
 
 #[derive(Queryable, Insertable, PartialEq, Clone, Debug)]
 #[table_name="syncpoints"]

@@ -169,14 +169,14 @@ impl FileDatabase {
         Ok(())
     }
 
-    pub fn set_file_timestamp(&self, file: &File, timestamp: &NaiveDateTime) -> Result<(), String> {
+    pub fn set_file_timestamp(&self, file: &File, timestamp: &NaiveDateTime) -> Result<()> {
         let result = diesel::update(files::table.find(file.id))
             .set(files::creation_date.eq(timestamp))
             .execute(&self.connection);
 
         match result {
             Ok(_) => Ok(()),
-            Err(e) => Err(format!("Failed to update file tags. {:?}", e)),
+            Err(e) => Err(e.into()),
         }
     }
 

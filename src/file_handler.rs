@@ -99,11 +99,13 @@ pub fn save_file(
     Ok((saved_file, save_result_rx))
 }
 
-fn save_file_to_disk(destination_path: &Path, content: &ByteSource) -> Result<()> {
+fn save_file_to_disk<B>(destination_path: &Path, content: &B) -> Result<()> 
+    where B: ByteSource
+{
     let mut file = fs::File::create(destination_path)?;
     let mut bytes = vec!();
-    content.map(|b| {
-        bytes.push(b?);
+    content.for_each(|b| {
+        bytes.push(b);
     });
     Ok(file.write_all(&bytes)?)
 }
