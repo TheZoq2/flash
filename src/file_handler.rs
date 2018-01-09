@@ -59,7 +59,7 @@ pub fn save_file(
     let filename = format!("{}.{}", id, file_extension);
     let new_file_path = destination_dir.join(PathBuf::from(filename.clone()));
 
-    save_file_to_disk(&thumbnail_path, &source_thumbnail);
+    save_file_to_disk(&thumbnail_path, source_thumbnail);
 
     //let timestamp = get_file_timestamp(source_path);
 
@@ -80,7 +80,7 @@ pub fn save_file(
         let (tx, rx) = channel();
 
         thread::spawn(move || {
-            let save_result = match save_file_to_disk(&new_file_path, &source_content) {
+            let save_result = match save_file_to_disk(&new_file_path, source_content) {
                 Ok(_) => FileSavingResult::Success,
                 Err(e) => FileSavingResult::Failure(e),
             };
@@ -99,14 +99,14 @@ pub fn save_file(
     Ok((saved_file, save_result_rx))
 }
 
-fn save_file_to_disk<B>(destination_path: &Path, content: &B) -> Result<()> 
-    where B: ByteSource
+fn save_file_to_disk<B>(destination_path: &Path, content: Arc<ByteSource>) -> Result<()> 
 {
     let mut file = fs::File::create(destination_path)?;
     let mut bytes = vec!();
-    content.for_each(|b| {
-        bytes.push(b);
-    });
+
+    while let Some(b) = content.next() {
+        bytes.push(b?)
+    }
     Ok(file.write_all(&bytes)?)
 }
 
