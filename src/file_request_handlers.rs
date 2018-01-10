@@ -202,7 +202,7 @@ fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>> {
     let tag_string = get_get_variable(request, "tags")?;
 
     match serde_json::from_str::<Vec<String>>(&tag_string) {
-        Ok(result) => Ok(sanitize_tag_names(&result).unwrap()),
+        Ok(result) => Ok(sanitize_tag_names(&result)),
         Err(e) => Err(ErrorKind::InvalidVariableType("tags".into(), format!("{:?}", e)).into()),
     }
 }

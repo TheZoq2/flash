@@ -96,7 +96,7 @@ fn apply_changes(
                             change.affected_file,
                             vec!(),
                             fdb,
-                        )
+                        );
             }
             ChangeType::FileRemoved => {
                 file_handler::remove_file(change.affected_file, fdb, false)?;

@@ -158,6 +158,8 @@ impl FileDatabase {
     pub fn drop_file(&self, file_id: i32, change_policy: ChangeCreationPolicy) -> Result<()> {
         diesel::delete(files::table.find(file_id))
             .execute(&self.connection)?;
+
+        unimplemented!("Does not use change_policy");
         Ok(())
     }
 
@@ -228,6 +230,15 @@ impl FileDatabase {
         match result {
             Ok(val) => Some(val),
             Err(_) => None,
+        }
+    }
+
+    pub fn get_file_with_id_result(&self, id: i32) -> Result<File> {
+        let result = files::table.find(id).get_result::<File>(&self.connection);
+
+        match result {
+            Ok(val) => Ok(val),
+            Err(e) => Err(e.into())
         }
     }
 

@@ -5,7 +5,7 @@ use std::sync::mpsc::{channel, Receiver};
 use file_database::{FileDatabase, File};
 use file_util::{generate_thumbnail, get_file_timestamp};
 
-use error::{Result};
+use error::{Result, Error};
 
 use chrono::NaiveDateTime;
 
@@ -25,7 +25,7 @@ use byte_source::ByteSource;
 #[derive(Debug)]
 pub enum FileSavingResult {
     Success,
-    Failure(io::Error),
+    Failure(Error),
 }
 
 
@@ -111,16 +111,25 @@ fn save_file_to_disk<B>(destination_path: &Path, content: Arc<ByteSource>) -> Re
 }
 
 
-pub fn remove_file(file_id: i32, fdb: &FileDatabase, create_change: bool) -> Result<()> {
+/**
+  Drops a file from the database and removes it from the file system.
+
+  Creates a change if the `change_policy` says to do so
+*/
+pub fn remove_file(file_id: i32, fdb: &FileDatabase, change_policy: ChangeCreationPolicy) -> Result<()> {
     // Fetch the file details from the database
-    if create_change {
-        fdb.drop_file_without_creating_change(file_id)?;
-    }
-    else {
-        unimplemented!()
-    }
+    let file = fdb.get_file_with_id_result(file_id)?;
+
+    // Drop the file from the database
+    fdb.drop_file(file_id, change_policy)?;
 
     // Remove the actual file in the file system
-    unimplemented!();
+    unimplemented!("Perform the change in the file system");
+
+    Ok(())
 }
+
+
+
+
 

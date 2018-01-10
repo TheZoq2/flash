@@ -5,7 +5,7 @@ use error::Result;
 
 use std::iter::Iterator;
 
-pub type ByteSource = Iterator<Item = Result<u8>>;
+pub type ByteSource = Iterator<Item = Result<u8>> + Sync + Send;
 
 pub struct FileByteSource {
     file: File
