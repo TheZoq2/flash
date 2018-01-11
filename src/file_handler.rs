@@ -36,7 +36,7 @@ pub enum ThumbnailStrategy<'a> {
 
 pub fn save_file(
         source_content: Arc<ByteSource>,
-        source_thumbnail: Arc<ByteSource>,
+        source_thumbnail: Option<Arc<ByteSource>>,
         id: i32,
         tags: &[String],
         fdb: &FileDatabase,
@@ -49,16 +49,24 @@ pub fn save_file(
     //Get the folder where we want to place the stored file
     let destination_dir = PathBuf::from(fdb.get_file_save_path());
 
-    let thumbnail_filename = format!("thumb_{}.jpg", id);
-
-    let thumbnail_path = destination_dir.join(&PathBuf::from(thumbnail_filename.clone()));
-
     //Copy the file to the destination
     //Get the name and path of the new file
     let filename = format!("{}.{}", id, file_extension);
     let new_file_path = destination_dir.join(PathBuf::from(filename.clone()));
 
-    save_file_to_disk(&thumbnail_path, source_thumbnail);
+    // Save the file to disk 
+    let thumbnail_filename = if let Some(source_thumbnail) = source_thumbnail {
+        let thumbnail_filename = format!("thumb_{}.jpg", id);
+
+        let thumbnail_path = destination_dir.join(&PathBuf::from(thumbnail_filename.clone()));
+
+        save_file_to_disk(&thumbnail_path, source_thumbnail)?;
+
+        Some(thumbnail_filename)
+    }
+    else {
+        None
+    };
 
     //let timestamp = get_file_timestamp(source_path);
 
@@ -66,11 +74,11 @@ pub fn save_file(
     let saved_file = {
         fdb.add_new_file(
             id,
-            &filename.to_owned(),
-            Some(&thumbnail_filename.to_string()),
+            &filename,
+            thumbnail_filename.map(|x| x.as_ref()),
             tags,
             file_timestamp,
-            ChangeCreationPolicy::Yes(change_timestamp),
+            change_policy
         )
     };
 

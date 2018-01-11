@@ -1,10 +1,13 @@
 use changelog::{Change, SyncPoint, ChangeType, UpdateType, ChangeCreationPolicy};
 
+use byte_source::{VecByteSource, ByteSource};
+
 use file_database::{FileDatabase};
 use error::{Result, ErrorKind};
 use file_handler;
 
 use chrono::prelude::*;
+use std::sync::Arc;
 
 pub struct FileDetails {
     pub extension: String,
@@ -91,13 +94,17 @@ fn apply_changes(
             ChangeType::FileAdded => {
                 let file_details = foreign_server.get_file_details(change.affected_file)?;
 
+                let file = Arc::new(VecByteSource{data: foreign_server.get_file(change.affected_file)?});
+                let thumbnail: Option<Arc<ByteSource>> = match foreign_server.get_thumbnail(change.affected_file)? {
+                    Some(data) => Some(Arc::new(VecByteSource{data})),
+                    None => None
+                };
+
                 let file_timestamp = unimplemented!("Fetch timestamp from foreign server");
 
                 file_handler::save_file(
-                            //This needs to create a bytesource by downloading it from the foreign
-                            //server
-                            &file_details.file,
-                            &file_details.thumbnail,
+                            file,
+                            thumbnail,
                             change.affected_file,
                             &vec!(),
                             fdb,

@@ -290,7 +290,13 @@ fn save_new_file(
     let file_identifier = get_semi_unique_identifier();
 
     let mut fdb = db.lock().unwrap();
-    save_file(original_path, ThumbnailStrategy::Generate, &mut fdb, file_identifier, tags)
+    save_file(
+        original_path,
+        ThumbnailStrategy::Generate,
+        &mut fdb,
+        file_identifier,
+        tags
+    )
 }
 
 
