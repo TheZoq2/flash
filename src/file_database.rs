@@ -163,7 +163,7 @@ impl FileDatabase {
         Ok(())
     }
 
-    pub fn add_change(self, change: Change) -> Result<()> {
+    pub fn add_change(self, change: &Change) -> Result<()> {
         diesel::insert(&InsertableChange::from(ChangeDbEntry::from(change)))
             .into(changes::table)
             .execute(&self.connection)?;

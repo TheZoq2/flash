@@ -55,8 +55,8 @@ pub struct ChangeDbEntry {
     affected_file: i32,
 }
 
-impl From<Change> for ChangeDbEntry {
-    fn from(other: Change) -> Self {
+impl<'a> From<&'a Change> for ChangeDbEntry {
+    fn from(other: &Change) -> Self {
         Self {
             id: 0,
             json_data: serde_json::to_string(&other.change_type).unwrap(),

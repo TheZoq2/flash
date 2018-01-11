@@ -39,11 +39,10 @@ pub fn save_file(
         source_thumbnail: Arc<ByteSource>,
         id: i32,
         tags: &[String],
-        fdb: &mut FileDatabase,
-        create_change: bool,
+        fdb: &FileDatabase,
+        change_policy: ChangeCreationPolicy,
         file_extension: &str,
         file_timestamp: u64,
-        change_timestamp: NaiveDateTime
     )
     -> Result<(File, Receiver<FileSavingResult>)>
 {
@@ -99,8 +98,7 @@ pub fn save_file(
     Ok((saved_file, save_result_rx))
 }
 
-fn save_file_to_disk<B>(destination_path: &Path, content: Arc<ByteSource>) -> Result<()> 
-{
+fn save_file_to_disk<B>(destination_path: &Path, content: Arc<ByteSource>) -> Result<()>  {
     let mut file = fs::File::create(destination_path)?;
     let mut bytes = vec!();
 

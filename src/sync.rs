@@ -1,4 +1,4 @@
-use changelog::{Change, SyncPoint, ChangeType, UpdateType};
+use changelog::{Change, SyncPoint, ChangeType, UpdateType, ChangeCreationPolicy};
 
 use file_database::{FileDatabase};
 use error::{Result, ErrorKind};
@@ -91,21 +91,29 @@ fn apply_changes(
             ChangeType::FileAdded => {
                 let file_details = foreign_server.get_file_details(change.affected_file)?;
 
-                file_handler::save_file(&file_details.file,
+                let file_timestamp = unimplemented!("Fetch timestamp from foreign server");
+
+                file_handler::save_file(
+                            //This needs to create a bytesource by downloading it from the foreign
+                            //server
+                            &file_details.file,
                             &file_details.thumbnail,
                             change.affected_file,
-                            vec!(),
+                            &vec!(),
                             fdb,
+                            ChangeCreationPolicy::No,
+                            &file_details.extension,
+                            file_timestamp
                         );
             }
             ChangeType::FileRemoved => {
-                file_handler::remove_file(change.affected_file, fdb, false)?;
+                file_handler::remove_file(change.affected_file, fdb, ChangeCreationPolicy::No)?;
             }
         }
     }
 
     for change in changes {
-        fdb.add_change(&change);
+        fdb.add_change(change);
     }
 
     Ok(())
