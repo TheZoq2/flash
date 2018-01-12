@@ -46,7 +46,7 @@ impl Iterator for VecByteSource {
 mod tests {
     use super::*;
 
-    fn drain_byte_source<B: ByteSource>(bs: &mut B) -> Result<Vec<u8>> {
+    fn drain_byte_source(bs: &mut ByteSource) -> Result<Vec<u8>> {
         let mut result = vec!();
         while let Some(val) = bs.next() {
             result.push(val)?;
@@ -67,6 +67,6 @@ mod tests {
 
         let bs = FileByteSource{file};
 
-        assert_eq!(drain_byte_source(bs), include_bytes!("test/files/exif1.txt"));
+        assert_eq!(drain_byte_source(bs), include_bytes!("../test/files/exif1.txt"));
     }
 }
