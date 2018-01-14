@@ -102,7 +102,7 @@ impl FileDatabase {
      */
     //TODO: Handle errors when writing to the database
     pub fn add_new_file(
-            &mut self,
+            &self,
             id: i32,
             filename: &str,
             thumb_name: Option<&str>,
@@ -163,8 +163,8 @@ impl FileDatabase {
         Ok(())
     }
 
-    pub fn add_change(self, change: &Change) -> Result<()> {
-        diesel::insert(&InsertableChange::from(ChangeDbEntry::from(change)))
+    pub fn add_change(&self, change: &Change) -> Result<()> {
+        diesel::insert(&InsertableChange::from(&ChangeDbEntry::from(change)))
             .into(changes::table)
             .execute(&self.connection)?;
 

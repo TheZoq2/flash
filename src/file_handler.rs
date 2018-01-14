@@ -3,16 +3,13 @@ use std::path::{PathBuf, Path};
 use std::sync::mpsc::{channel, Receiver};
 
 use file_database::{FileDatabase, File};
-use file_util::{generate_thumbnail, get_file_timestamp};
 
 use error::{Result, Error};
 
-use chrono::NaiveDateTime;
 
 use std::thread;
 
 use std::fs;
-use std::io;
 use std::io::prelude::*;
 
 use std::sync::Arc;
@@ -29,14 +26,15 @@ pub enum FileSavingResult {
 }
 
 
-pub enum ThumbnailStrategy<'a> {
+pub enum ThumbnailStrategy {
+    None,
     Generate,
-    FromFile(&'a Path)
+    FromByteSource(Arc<ByteSource>)
 }
 
 pub fn save_file(
         source_content: Arc<ByteSource>,
-        source_thumbnail: Option<Arc<ByteSource>>,
+        thumbnail_strategy: ThumbnailStrategy,
         id: i32,
         tags: &[String],
         fdb: &FileDatabase,
@@ -54,18 +52,15 @@ pub fn save_file(
     let filename = format!("{}.{}", id, file_extension);
     let new_file_path = destination_dir.join(PathBuf::from(filename.clone()));
 
-    // Save the file to disk 
-    let thumbnail_filename = if let Some(source_thumbnail) = source_thumbnail {
-        let thumbnail_filename = format!("thumb_{}.jpg", id);
-
-        let thumbnail_path = destination_dir.join(&PathBuf::from(thumbnail_filename.clone()));
-
-        save_file_to_disk(&thumbnail_path, source_thumbnail)?;
-
-        Some(thumbnail_filename)
+    // Save the thumbnail to disk
+    let thumbnail_filename = if let ThumbnailStrategy::None = thumbnail_strategy {
+        None
     }
     else {
-        None
+        let thumbnail_filename = format!("thumb_{}.jpg", id);
+        let thumbnail_path = destination_dir.join(PathBuf::from(thumbnail_filename.clone()));
+
+        Some(thumbnail_filename)
     };
 
     //let timestamp = get_file_timestamp(source_path);
@@ -75,7 +70,7 @@ pub fn save_file(
         fdb.add_new_file(
             id,
             &filename,
-            thumbnail_filename.map(|x| x.as_ref()),
+            thumbnail_filename.as_ref().map(|x| &**x),
             tags,
             file_timestamp,
             change_policy
@@ -106,7 +101,7 @@ pub fn save_file(
     Ok((saved_file, save_result_rx))
 }
 
-fn save_file_to_disk<B>(destination_path: &Path, content: Arc<ByteSource>) -> Result<()>  {
+fn save_file_to_disk(destination_path: &Path, content: Arc<ByteSource>) -> Result<()>  {
     let mut file = fs::File::create(destination_path)?;
     let mut bytes = vec!();
 

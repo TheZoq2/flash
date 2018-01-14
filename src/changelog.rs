@@ -74,8 +74,8 @@ pub struct InsertableChange<'a> {
     timestamp: NaiveDateTime
 }
 
-impl<'a> From<ChangeDbEntry> for InsertableChange<'a> {
-    fn from(other: ChangeDbEntry) -> Self {
+impl<'a> From<&'a ChangeDbEntry> for InsertableChange<'a> {
+    fn from(other: &'a ChangeDbEntry) -> Self {
         Self {
             json_data: &other.json_data,
             affected_file: other.affected_file,

@@ -5,6 +5,7 @@ use byte_source::{VecByteSource, ByteSource};
 use file_database::{FileDatabase};
 use error::{Result, ErrorKind};
 use file_handler;
+use file_handler::ThumbnailStrategy;
 
 use chrono::prelude::*;
 use std::sync::Arc;
@@ -95,9 +96,10 @@ fn apply_changes(
                 let file_details = foreign_server.get_file_details(change.affected_file)?;
 
                 let file = Arc::new(VecByteSource{data: foreign_server.get_file(change.affected_file)?});
-                let thumbnail: Option<Arc<ByteSource>> = match foreign_server.get_thumbnail(change.affected_file)? {
-                    Some(data) => Some(Arc::new(VecByteSource{data})),
-                    None => None
+                let thumbnail = match foreign_server.get_thumbnail(change.affected_file)? {
+                    Some(data) => 
+                        ThumbnailStrategy::FromByteSource(Arc::new(VecByteSource{data})),
+                    None => ThumbnailStrategy::None
                 };
 
                 let file_timestamp = unimplemented!("Fetch timestamp from foreign server");

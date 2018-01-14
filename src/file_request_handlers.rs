@@ -1,19 +1,18 @@
-use std::path::PathBuf;
 
 use serde_json;
 
 use iron::*;
-
 use persistent::Write;
+
 use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
 
 use std::sync::Mutex;
 use std::sync::Arc;
-
-use std::path::Path;
-
-use std::io;
 use std::sync::mpsc::{channel, Receiver};
+
+use chrono::{NaiveDateTime, Utc};
 
 use file_database;
 use file_database::FileDatabase;
@@ -24,6 +23,8 @@ use file_util::sanitize_tag_names;
 use file_util::{get_semi_unique_identifier, get_file_timestamp};
 use request_helpers::get_get_variable;
 use file_handler::{save_file, FileSavingResult, ThumbnailStrategy};
+use byte_source::FileByteSource;
+use changelog;
 
 use file_list_response;
 
@@ -256,7 +257,8 @@ fn handle_save_request(
 ) -> Result<FileSaveRequestResult> {
     match *file_location {
         FileLocation::Unsaved(ref path) => {
-            match save_new_file(db, path, tags) {
+            let current_time = NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0);
+            match save_new_file(db, path, tags, current_time) {
                 Ok((db_entry, save_result_rx)) => {
                     Ok(FileSaveRequestResult::NewDatabaseEntry(
                         FileLocation::Database(db_entry),
@@ -286,16 +288,29 @@ fn save_new_file(
     db: Arc<Mutex<FileDatabase>>,
     original_path: &Path,
     tags: &[String],
+    current_time: NaiveDateTime
 ) -> Result<(file_database::File, Receiver<FileSavingResult>)> {
     let file_identifier = get_semi_unique_identifier();
 
-    let mut fdb = db.lock().unwrap();
+    let file = Arc::new(FileByteSource{file: fs::File::open(original_path)?});
+
+    let fdb = db.lock().unwrap();
+
+    let extension = match original_path.extension() {
+        Some(val) => Ok(val),
+        None => Err(ErrorKind::NoFileExtension(original_path.to_owned().into()))
+    }?;
+
+
     save_file(
-        original_path,
+        file,
         ThumbnailStrategy::Generate,
-        &mut fdb,
         file_identifier,
-        tags
+        tags,
+        &fdb,
+        changelog::ChangeCreationPolicy::Yes(current_time),
+        &extension.to_string_lossy(),
+        current_time.timestamp() as u64
     )
 }
 
