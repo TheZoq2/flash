@@ -49,7 +49,7 @@ mod tests {
     fn drain_byte_source(bs: &mut ByteSource) -> Result<Vec<u8>> {
         let mut result = vec!();
         while let Some(val) = bs.next() {
-            result.push(val)?;
+            result.push(val?);
         }
         Ok(result)
     }
@@ -58,15 +58,21 @@ mod tests {
     fn vec_byte_source() {
         let mut bytesource = VecByteSource{data: vec!(0,1,2,3)};
 
-        assert_eq!(drain_byte_source(&mut bytesource), vec!(0,1,2,3));
+        assert_eq!(drain_byte_source(&mut bytesource).unwrap(), vec!(0,1,2,3));
     }
 
     #[test]
     fn file_byte_source() {
         let mut file = File::open("test/files/exif1.txt").expect("test/files/exif1.txt does not exist");
 
-        let bs = FileByteSource{file};
+        let mut bs = FileByteSource{file};
 
-        assert_eq!(drain_byte_source(bs), include_bytes!("../test/files/exif1.txt"));
+        assert_eq!(
+            drain_byte_source(&mut bs).unwrap(),
+            include_bytes!("../test/files/exif1.txt")
+                .into_iter()
+                .map(|x| *x)
+                .collect::<Vec<_>>()
+        );
     }
 }

@@ -164,6 +164,12 @@ mod sync_tests {
 
     use std::path::PathBuf;
 
+    use chrono;
+
+    fn create_change(date_string: &str) -> chrono::format::ParseResult<ChangeCreationPolicy> {
+        Ok(ChangeCreationPolicy::Yes(naive_datetime_from_date(date_string)?))
+    }
+
     struct MockForeignServer {
         file_data: HashMap<i32, FileDetails>
     }
@@ -211,8 +217,8 @@ mod sync_tests {
     }
 
     fn only_tag_additions(fdb: &mut FileDatabase) {
-        fdb.add_new_file(1, "yolo.jpg", None, &vec!(), 0);
-        fdb.add_new_file(2, "swag.jpg", None, &vec!(), 0);
+        fdb.add_new_file(1, "yolo.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
+        fdb.add_new_file(2, "swag.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
 
         let changes = vec!(
                 Change::new(
@@ -234,8 +240,8 @@ mod sync_tests {
     }
 
     fn only_tag_removals(fdb: &mut FileDatabase) {
-        fdb.add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0);
-        fdb.add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0);
+        fdb.add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
+        fdb.add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
 
         let changes = vec!(
                 Change::new(
@@ -257,8 +263,22 @@ mod sync_tests {
     }
 
     fn tag_removals_and_additions(fdb: &mut FileDatabase) {
-        fdb.add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0);
-        fdb.add_new_file(2, "swag.jpg", None, &vec!(), 0);
+        fdb.add_new_file(
+            1,
+            "yolo.jpg",
+            None,
+            &mapvec!(String::from: "things"),
+            0,
+            create_change("2017-02-02").unwrap()
+        );
+        fdb.add_new_file(
+            2,
+            "swag.jpg",
+            None,
+            &vec!(),
+            0,
+            create_change("2017-02-02").unwrap()
+        );
 
         let changes = vec!(
                 Change::new(
@@ -292,8 +312,13 @@ mod sync_tests {
     fn creation_date_updates(fdb: &mut FileDatabase) {
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
         let new_timestamp = naive_datetime_from_date("2017-01-02").unwrap();
-        fdb.add_new_file(1, "yolo.jpg", Some("t_yolo.jpg"), &mapvec!(String::from: "things")
-                         , original_timestamp.timestamp() as u64);
+        fdb.add_new_file(1,
+                         "yolo.jpg",
+                         Some("t_yolo.jpg"),
+                         &mapvec!(String::from: "things"),
+                         original_timestamp.timestamp() as u64,
+                         create_change("2017-02-02").unwrap()
+                    );
 
 
         let changes = vec!(
@@ -315,8 +340,14 @@ mod sync_tests {
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
 
         let original_filename = "yolo.jpg";
-        fdb.add_new_file(1, original_filename, None, &mapvec!(String::from: "things")
-                         , original_timestamp.timestamp() as u64);
+        fdb.add_new_file(
+            1,
+            original_filename,
+            None,
+            &mapvec!(String::from: "things"),
+            original_timestamp.timestamp() as u64,
+            create_change("2017-02-02").unwrap()
+        );
 
         let added_bytes = include_bytes!("../test/media/DSC_0001.JPG").into_iter()
             .map(|a| *a)
@@ -377,7 +408,7 @@ mod sync_tests {
         unimplemented!("Make sure new files are created");
         // Ensure that the old file was deleted
         {
-            let path = fdb.get_file_save_path().join(PathBuf::new(original_filename));
+            let path = fdb.get_file_save_path().join(PathBuf::from(original_filename));
             assert!(!path.exists())
         }
     }

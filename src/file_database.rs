@@ -417,7 +417,10 @@ pub mod db_test_helpers {
  */
 #[cfg(test)]
 mod db_tests {
-    use file_database::*;
+    use super::*;
+
+    use changelog::ChangeCreationPolicy;
+    use chrono::NaiveDate;
 
     use std::sync::Arc;
 
@@ -432,6 +435,8 @@ mod db_tests {
         get_file_paths_with_tags,
         get_file_paths_from_files
     };
+
+    use changelog::{ChangeType, Change, UpdateType};
 
     //////////////////////////////////////////////////
     // Tests
@@ -463,6 +468,7 @@ mod db_tests {
             Some("thumb1"),
             &vec!["tag1".to_string(), "tag2".to_string()],
             0,
+            ChangeCreationPolicy::No
         );
         fdb.add_new_file(
             2,
@@ -470,6 +476,7 @@ mod db_tests {
             Some("thumb2"),
             &vec!["tag1".to_string(), "tag3".to_string()],
             0,
+            ChangeCreationPolicy::No
         );
 
         assert_eq!(fdb.get_file_amount(), 2);
@@ -517,6 +524,7 @@ mod db_tests {
             Some("thumb1"),
             &vec!["common_tag".to_string(), "only1_tag".to_string()],
             0,
+            ChangeCreationPolicy::No
         );
         fdb.add_new_file(
             2,
@@ -524,6 +532,7 @@ mod db_tests {
             Some("thumb2"),
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
             0,
+            ChangeCreationPolicy::No
         );
         fdb.add_new_file(
             3,
@@ -531,6 +540,7 @@ mod db_tests {
             Some("thumb3"),
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
             0,
+            ChangeCreationPolicy::No
         );
 
         let common_2_3 = get_files_with_tags(
@@ -557,7 +567,14 @@ mod db_tests {
     }
 
     fn modify_tags_test(fdb: &mut FileDatabase) {
-        let file = fdb.add_new_file(1, "test1", Some("thumb1"), &vec!["old_tag".to_string()], 0);
+        let file = fdb.add_new_file(
+            1,
+            "test1",
+            Some("thumb1"),
+            &vec!["old_tag".to_string()],
+            0,
+            ChangeCreationPolicy::No
+        );
 
         fdb.change_file_tags(&file, &vec!["new_tag".to_string()])
             .unwrap();
@@ -580,6 +597,7 @@ mod db_tests {
             Some("thumb1"),
             &vec!["common_tag".to_string(), "only1_tag".to_string()],
             0,
+            ChangeCreationPolicy::No
         );
         fdb.add_new_file(
             2,
@@ -587,6 +605,7 @@ mod db_tests {
             Some("thumb2"),
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
             0,
+            ChangeCreationPolicy::No
         );
         fdb.add_new_file(
             3,
@@ -594,6 +613,7 @@ mod db_tests {
             Some("thumb3"),
             &vec!["common_tag".to_string(), "only2_3_tag".to_string()],
             0,
+            ChangeCreationPolicy::No
         );
 
         let result = get_files_with_tags(
@@ -612,21 +632,24 @@ mod db_tests {
                 "file1",
                 Some("thumb1"),
                 &vec!["tag1".to_owned(), "tag2".to_owned()],
-                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
         fdb.add_new_file(
                 2,
                 "file2",
                 Some("thumb2"),
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
-                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
         fdb.add_new_file(
                 3,
                 "file3",
                 Some("thumb2"),
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
-                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
 
         let intervals = vec!(
@@ -668,21 +691,24 @@ mod db_tests {
                 "file1",
                 Some("thumb1"),
                 &vec!["tag1".to_owned(), "tag2".to_owned()],
-                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
         fdb.add_new_file(
                 2,
                 "file2",
                 Some("thumb2"),
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
-                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
         fdb.add_new_file(
                 3,
                 "file3",
                 Some("thumb2"),
                 &vec!["tag1".to_owned(), "tag3".to_owned()],
-                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
 
         let result = fdb.search_files(search::SavedSearchQuery::empty());
@@ -696,21 +722,24 @@ mod db_tests {
                 "file1",
                 Some("thumb1"),
                 &vec![],
-                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
         fdb.add_new_file(
                 2,
                 "file2",
                 Some("thumb2"),
                 &vec![],
-                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
         fdb.add_new_file(
                 3,
                 "file3",
                 Some("thumb2"),
                 &vec![],
-                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2017-06-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
 
         let result = fdb.search_files(search::SavedSearchQuery::empty());
@@ -733,14 +762,16 @@ mod db_tests {
                 "file1",
                 Some("thumb1"),
                 &mapvec![String::from: "tag"],
-                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
         fdb.add_new_file(
                 2,
                 "file2",
                 Some("thumb2"),
                 &mapvec![String::from: "tag"],
-                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
 
         let mut file = fdb.get_file_with_id(1).unwrap();
@@ -760,17 +791,19 @@ mod db_tests {
                 "file1",
                 Some("thumb1"),
                 &mapvec![String::from: "tag"],
-                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
         fdb.add_new_file(
                 2,
                 "file2",
                 Some("thumb2"),
                 &mapvec![String::from: "tag"],
-                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64
+                naive_datetime_from_date("2016-01-01").unwrap().timestamp() as u64,
+                ChangeCreationPolicy::No
             );
 
-        fdb.drop_file_without_creating_change(2).unwrap();
+        fdb.drop_file(2, ChangeCreationPolicy::No).unwrap();
 
         let file = fdb.get_file_with_id(1);
         assert_matches!(file, Some(_));
@@ -778,23 +811,49 @@ mod db_tests {
         assert_matches!(file, None);
     }
 
+    /**
+      Ensures that the correct changes get added to the database.
+    */
     fn database_changes_create_change_entries(fdb: &mut FileDatabase) {
-        let first_change_timestamp = 
+        let first_file_timestamp = NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0);
+        let second_file_timestamp = NaiveDate::from_ymd(2017,1,2).and_hms(0,0,0);
+
         fdb.add_new_file(
                 1,
                 "file1",
                 Some("thumb1"),
                 &mapvec![String::from: "tag"],
                 naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64,
-                naive_datetime_from_date("2017-01-02").unwrap().timestamp() as u64
+                ChangeCreationPolicy::Yes(first_file_timestamp)
             );
         fdb.add_new_file(
                 2,
                 "file2",
                 Some("thumb1"),
-                &mapvec![String::from: "tag"],
+                &vec!(),
                 naive_datetime_from_date("2017-01-01").unwrap().timestamp() as u64,
-                naive_datetime_from_date("2017-01-05").unwrap().timestamp() as u64
+                ChangeCreationPolicy::Yes(second_file_timestamp)
             );
+
+        let changes = fdb.get_all_changes().unwrap();
+        assert_eq!(changes.len(), 3); // Two additions, one tag addition
+
+        assert_eq!(changes[0], Change::new(
+            first_file_timestamp,
+            1,
+            ChangeType::FileAdded,
+        ));
+        assert_eq!(changes[0], Change::new(
+            first_file_timestamp,
+            1,
+            ChangeType::Update(UpdateType::TagAdded("tag".into())),
+        ));
+        assert_eq!(changes[0], Change::new(
+            second_file_timestamp,
+            1,
+            ChangeType::FileAdded,
+        ));
+
+        // TODO: Add tests for other edits than addition
     }
 }

@@ -414,6 +414,9 @@ mod file_request_tests {
 
     use file_list::{FileList, FileListSource};
 
+    use chrono::NaiveDate;
+
+    use changelog::ChangeCreationPolicy;
 
     fn dummy_database_entry(file_path: &str, thumbnail_path: &str) -> file_database::File {
         file_database::File {
@@ -522,7 +525,12 @@ mod file_request_tests {
     fn saving_a_file_without_extension_fails(fdb: Arc<Mutex<FileDatabase>>) {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
         assert_matches!(
-                save_new_file(fdb.clone(), &PathBuf::from("test"), &tags),
+                save_new_file(
+                    fdb.clone(),
+                    &PathBuf::from("test"),
+                    &tags,
+                    NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0)
+                ),
                 Err(Error(ErrorKind::NoFileExtension(_), _))
             );
     }
@@ -531,7 +539,13 @@ mod file_request_tests {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
 
         let src_path = PathBuf::from("test/media/DSC_0001.JPG");
-        let (result, save_result_rx) = save_new_file(fdb.clone(), &src_path, &tags).unwrap();
+        let (result, save_result_rx) = save_new_file(
+                fdb.clone(),
+                &src_path,
+                &tags,
+                NaiveDate::from_ymd(2017, 1, 1).and_hms(0,0,0)
+            )
+            .unwrap();
 
 
         let save_result = save_result_rx.recv().unwrap();
@@ -600,7 +614,14 @@ mod file_request_tests {
         let old_tags = vec!(String::from("old"));
         let old_location = {
             let mut fdb = fdb.lock().unwrap();
-            fdb.add_new_file(1, "test", Some("thumb"), &old_tags, 0)
+            fdb.add_new_file(
+                1,
+                "test",
+                Some("thumb"),
+                &old_tags,
+                0,
+                ChangeCreationPolicy::No
+            )
         };
 
         let tags = vec!("new1".to_owned());
