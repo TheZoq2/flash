@@ -292,7 +292,7 @@ fn save_new_file(
 ) -> Result<(file_database::File, Receiver<FileSavingResult>)> {
     let file_identifier = get_semi_unique_identifier();
 
-    let file = Arc::new(FileByteSource{file: fs::File::open(original_path)?});
+    let file = Box::new(FileByteSource{file: fs::File::open(original_path)?});
 
     let fdb = db.lock().unwrap();
 

@@ -95,10 +95,10 @@ fn apply_changes(
             ChangeType::FileAdded => {
                 let file_details = foreign_server.get_file_details(change.affected_file)?;
 
-                let file = Arc::new(VecByteSource{data: foreign_server.get_file(change.affected_file)?});
+                let file = Box::new(VecByteSource{data: foreign_server.get_file(change.affected_file)?});
                 let thumbnail = match foreign_server.get_thumbnail(change.affected_file)? {
                     Some(data) => 
-                        ThumbnailStrategy::FromByteSource(Arc::new(VecByteSource{data})),
+                        ThumbnailStrategy::FromByteSource(Box::new(VecByteSource{data})),
                     None => ThumbnailStrategy::None
                 };
 

@@ -15,12 +15,12 @@ impl Iterator for FileByteSource {
     type Item = Result<u8>;
 
     fn next(&mut self) -> Option<Result<u8>> {
-        match self.file.bytes().next() {
-            Some(data) => match data {
-                Ok(data) => Some(Ok(data)),
-                Err(e) => Some(Err(e.into()))
-            },
-            None => None
+        let mut buffer = [0];
+
+        match self.file.read(&mut buffer) {
+            Ok(0) => None,
+            Ok(_) => Some(Ok(buffer[0])),
+            Err(e) => Some(Err(e.into()))
         }
     }
 }

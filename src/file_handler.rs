@@ -29,11 +29,11 @@ pub enum FileSavingResult {
 pub enum ThumbnailStrategy {
     None,
     Generate,
-    FromByteSource(Arc<ByteSource>)
+    FromByteSource(Box<ByteSource>)
 }
 
 pub fn save_file(
-        source_content: Arc<ByteSource>,
+        source_content: Box<ByteSource>,
         thumbnail_strategy: ThumbnailStrategy,
         id: i32,
         tags: &[String],
@@ -101,7 +101,7 @@ pub fn save_file(
     Ok((saved_file, save_result_rx))
 }
 
-fn save_file_to_disk(destination_path: &Path, content: Arc<ByteSource>) -> Result<()>  {
+fn save_file_to_disk(destination_path: &Path, mut content: Box<ByteSource>) -> Result<()>  {
     let mut file = fs::File::create(destination_path)?;
     let mut bytes = vec!();
 
