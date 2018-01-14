@@ -27,7 +27,16 @@ impl Iterator for FileByteSource {
 
 
 pub struct VecByteSource {
-    pub data: Vec<u8>
+    data: Vec<u8>
+}
+
+impl VecByteSource {
+    pub fn new(mut data: Vec<u8>) -> Self {
+        data.reverse();
+        Self {
+            data
+        }
+    }
 }
 
 impl Iterator for VecByteSource {
@@ -56,7 +65,7 @@ mod tests {
 
     #[test]
     fn vec_byte_source() {
-        let mut bytesource = VecByteSource{data: vec!(0,1,2,3)};
+        let mut bytesource = Box::new(VecByteSource::new(vec!(0,1,2,3)));
 
         assert_eq!(drain_byte_source(&mut bytesource).unwrap(), vec!(0,1,2,3));
     }
