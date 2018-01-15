@@ -173,33 +173,51 @@ mod sync_tests {
     }
 
     struct MockForeignServer {
-        file_data: HashMap<i32, FileDetails>
+        file_data: HashMap<i32, FileDetails>,
+        syncpoints: Vec<SyncPoint>,
+        changes: Vec<(NaiveDateTime, Change)>
     }
 
     impl MockForeignServer {
-        pub fn new(files: Vec<(i32, FileDetails)>) -> Self {
+        pub fn new(
+            files: Vec<(i32, FileDetails)>,
+            syncpoints: Vec<SyncPoint>,
+            changes: Vec<(NaiveDateTime, Change)>
+        ) -> Self {
             let mut file_data = HashMap::new();
             for (id, details) in files {
                 file_data.insert(id, details);
             }
             Self {
-                file_data
+                file_data,
+                syncpoints,
+                changes
             }
         }
     }
 
     impl ForeignServer for MockForeignServer {
         fn get_syncpoints(&self) -> Result<Vec<SyncPoint>>{
-            unimplemented!()
+            Ok(self.syncpoints.clone())
         }
-        fn get_changes(&self, starting_timestamp: &Option<SyncPoint>) -> Result<Vec<Change>> {
-            unimplemented!()
+        fn get_changes(&self, starting_syncpoint: &Option<SyncPoint>) -> Result<Vec<Change>> {
+            match *starting_syncpoint {
+                Some(SyncPoint{last_change}) => {
+                    Ok(self.changes.iter()
+                        .filter(|&&(time, sp)| time >= last_change)
+                        .map(|&(_, sp)| sp.clone())
+                        .collect()
+                    )
+                },
+                None => Ok(self.changes.iter().map(|&(_, sp)| sp).collect())
+            }
         }
         fn get_file_details(&self, id: i32) -> Result<FileDetails> {
-            unimplemented!()
+            Ok(self.file_data[&id])
         }
         fn send_changes(&self, changes: &[Change], new_syncpoint: &SyncPoint) -> Result<()> {
-            unimplemented!()
+            //unimplemented!()
+            Ok(())
         }
         fn get_file(&self, id: i32) -> Result<Vec<u8>> {
             unimplemented!()
@@ -230,7 +248,7 @@ mod sync_tests {
                 ),
             );
 
-        apply_changes(fdb, &MockForeignServer::new(vec!()), &changes, &vec!()).unwrap();
+        apply_changes(fdb, &MockForeignServer::new(vec!(), vec!(), vec!()), &changes, &vec!()).unwrap();
 
         let files_with_tag = get_files_with_tags(fdb, mapvec!(String::from: "things"), vec!());
 

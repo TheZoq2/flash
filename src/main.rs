@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 #![allow(unused_doc_comment)]
-//TODO: Remove
-#![allow(unused_imports)]
 
 #![recursion_limit="1024"]
 

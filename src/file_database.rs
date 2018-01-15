@@ -19,7 +19,15 @@ use std::path::PathBuf;
 
 use search;
 use error::{Result};
-use changelog::{Change, ChangeDbEntry, SyncPoint, InsertableChange, ChangeCreationPolicy};
+use changelog::{
+    Change,
+    ChangeDbEntry,
+    SyncPoint,
+    InsertableChange,
+    ChangeCreationPolicy,
+    ChangeType,
+    UpdateType
+};
 
 
 /**
@@ -125,11 +133,13 @@ impl FileDatabase {
             .get_result(&self.connection)
             .expect("Error saving new file");
 
-        match change_policy {
-            ChangeCreationPolicy::Yes(date) => {
-                unimplemented!();
-            }
-            ChangeCreationPolicy::No => {}
+        self.handle_change_creation_policy(&change_policy, id, ChangeType::FileAdded).unwrap();
+        for tag in tags {
+            self.handle_change_creation_policy(
+                &change_policy,
+                id,
+                ChangeType::Update(UpdateType::TagAdded(tag.to_owned()))
+            ).unwrap();
         }
 
         file
@@ -159,7 +169,8 @@ impl FileDatabase {
         diesel::delete(files::table.find(file_id))
             .execute(&self.connection)?;
 
-        unimplemented!("Does not use change_policy");
+        self.handle_change_creation_policy(&change_policy, file_id, ChangeType::FileRemoved)?;
+
         Ok(())
     }
 
@@ -299,9 +310,28 @@ impl FileDatabase {
         files.count().get_result(&self.connection).unwrap()
     }
 
+    fn handle_change_creation_policy(
+            &self,
+            policy: &ChangeCreationPolicy,
+            affected_file: i32,
+            change_type: ChangeType,
+        ) -> Result<()> {
+        if let ChangeCreationPolicy::Yes(date) = *policy {
+            self.add_change(&Change::new(date, affected_file, change_type))
+        } else {
+            Ok(())
+        }
+    }
+
     #[cfg(test)]
     pub fn reset(&self) {
         diesel::delete(files::table)
+            .execute(&self.connection)
+            .unwrap();
+        diesel::delete(changes::table)
+            .execute(&self.connection)
+            .unwrap();
+        diesel::delete(syncpoints::table)
             .execute(&self.connection)
             .unwrap();
     }
@@ -843,14 +873,14 @@ mod db_tests {
             1,
             ChangeType::FileAdded,
         ));
-        assert_eq!(changes[0], Change::new(
+        assert_eq!(changes[1], Change::new(
             first_file_timestamp,
             1,
             ChangeType::Update(UpdateType::TagAdded("tag".into())),
         ));
-        assert_eq!(changes[0], Change::new(
+        assert_eq!(changes[2], Change::new(
             second_file_timestamp,
-            1,
+            2,
             ChangeType::FileAdded,
         ));
 
