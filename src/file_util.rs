@@ -18,7 +18,9 @@ use chrono::NaiveDateTime;
 
 use exiftool;
 use exiftool::{ExifData};
+use byte_source::{ByteSource, vec_from_byte_source};
 
+const THUMBNAIL_SIZE: u32 = 200;
 
 /**
   Enum for different types of media
@@ -61,20 +63,19 @@ pub fn get_mediatype(path: &Path) -> MediaType {
 
 //TODO: Send errors back to caller over a channel instead of ignoring them
 pub fn generate_thumbnail(
-    source_path: &Path,
+    source: Box<ByteSource>,
     destination_path: &Path,
-    max_size: u32,
 ) -> Result<()> {
     {
         let destination_path = destination_path.to_owned();
-        let source_path_clone = source_path.to_owned();
         thread::spawn(move || {
-            let img = match image::open(source_path_clone) {
+            let file_content = vec_from_byte_source(source).unwrap();
+            let img = match image::load_from_memory(&file_content) {
                 Ok(val) => val,
                 Err(_) => return,
             };
 
-            let thumb_data = generate_thumbnail_from_generic_image(&img, max_size);
+            let thumb_data = generate_thumbnail_from_generic_image(&img, THUMBNAIL_SIZE);
 
             let fout = &mut File::create(&destination_path).unwrap();
             thumb_data.save(fout, image::PNG).unwrap();

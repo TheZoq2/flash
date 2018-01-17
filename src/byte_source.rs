@@ -51,6 +51,10 @@ impl Iterator for VecByteSource {
     }
 }
 
+pub fn vec_from_byte_source(source: Box<ByteSource>) -> Result<Vec<u8>> {
+    unimplemented!()
+}
+
 pub fn write_byte_source_to_file(source: Box<ByteSource>, path: &Path) -> Result<()> {
     unimplemented!()
 }

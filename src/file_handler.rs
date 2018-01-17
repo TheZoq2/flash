@@ -16,6 +16,8 @@ use changelog::ChangeCreationPolicy;
 
 use byte_source::{ByteSource, write_byte_source_to_file};
 
+use file_util::generate_thumbnail;
+
 // TODO: Remove if unused
 #[derive(Debug)]
 pub enum FileSavingResult {
@@ -59,10 +61,14 @@ pub fn save_file(
         let thumbnail_path = destination_dir.join(PathBuf::from(thumbnail_filename.clone()));
 
         match thumbnail_strategy {
-            ThumbnailStrategy::Generate => unimplemented!(),
+            ThumbnailStrategy::Generate =>
+                generate_thumbnail(source_content, &thumbnail_path)?,
             ThumbnailStrategy::FromByteSource(source) =>
-                Ok(write_byte_source_to_file(source,) &thumbnail_path)
-        }
+                write_byte_source_to_file(source, &thumbnail_path)?,
+            ThumbnailStrategy::None => panic!("Unreachable statement")
+        };
+
+        Some(thumbnail_filename)
     };
 
     //let timestamp = get_file_timestamp(source_path);
