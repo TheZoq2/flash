@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::Read;
+use std::path::Path;
 
 use error::Result;
 
@@ -48,6 +49,10 @@ impl Iterator for VecByteSource {
             None => None
         }
     }
+}
+
+pub fn write_byte_source_to_file(source: Box<ByteSource>, path: &Path) -> Result<()> {
+    unimplemented!()
 }
 
 

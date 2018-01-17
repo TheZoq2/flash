@@ -14,7 +14,7 @@ use std::io::prelude::*;
 
 use changelog::ChangeCreationPolicy;
 
-use byte_source::ByteSource;
+use byte_source::{ByteSource, write_byte_source_to_file};
 
 // TODO: Remove if unused
 #[derive(Debug)]
@@ -58,9 +58,11 @@ pub fn save_file(
         let thumbnail_filename = format!("thumb_{}.jpg", id);
         let thumbnail_path = destination_dir.join(PathBuf::from(thumbnail_filename.clone()));
 
-        unimplemented!("Create or copy the thumbnail to the correct location");
-
-        Some(thumbnail_filename)
+        match thumbnail_strategy {
+            ThumbnailStrategy::Generate => unimplemented!(),
+            ThumbnailStrategy::FromByteSource(source) =>
+                Ok(write_byte_source_to_file(source,) &thumbnail_path)
+        }
     };
 
     //let timestamp = get_file_timestamp(source_path);
