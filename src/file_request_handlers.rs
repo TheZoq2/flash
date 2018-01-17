@@ -23,7 +23,7 @@ use file_util::sanitize_tag_names;
 use file_util::{get_semi_unique_identifier, get_file_timestamp};
 use request_helpers::get_get_variable;
 use file_handler::{save_file, FileSavingResult, ThumbnailStrategy};
-use byte_source::FileByteSource;
+use byte_source::ByteSource;
 use changelog;
 
 use file_list_response;
@@ -292,7 +292,7 @@ fn save_new_file(
 ) -> Result<(file_database::File, Receiver<FileSavingResult>)> {
     let file_identifier = get_semi_unique_identifier();
 
-    let file = Box::new(FileByteSource{file: fs::File::open(original_path)?});
+    let file = ByteSource::File(original_path.into());
 
     let fdb = db.lock().unwrap();
 

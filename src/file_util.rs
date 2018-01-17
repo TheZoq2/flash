@@ -63,7 +63,7 @@ pub fn get_mediatype(path: &Path) -> MediaType {
 
 //TODO: Send errors back to caller over a channel instead of ignoring them
 pub fn generate_thumbnail(
-    source: Box<ByteSource>,
+    source: ByteSource,
     destination_path: &Path,
 ) -> Result<()> {
     {

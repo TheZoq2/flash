@@ -1,62 +1,35 @@
 use std::fs::File;
-use std::io::Read;
-use std::path::Path;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 
 use error::Result;
 
-use std::iter::Iterator;
-
-pub type ByteSource = Iterator<Item = Result<u8>> + Sync + Send;
-
-pub struct FileByteSource {
-    pub file: File
+#[derive(Clone)]
+pub enum ByteSource {
+    File(PathBuf),
+    Memory(Vec<u8>)
 }
 
-impl Iterator for FileByteSource {
-    type Item = Result<u8>;
+pub fn vec_from_byte_source(source: ByteSource) -> Result<Vec<u8>> {
+    match source {
+        ByteSource::File(path) => {
+            let mut file = File::open(&path)?;
+            let mut buffer = vec!();
+            file.read_to_end(&mut buffer)?;
 
-    fn next(&mut self) -> Option<Result<u8>> {
-        let mut buffer = [0];
-
-        match self.file.read(&mut buffer) {
-            Ok(0) => None,
-            Ok(_) => Some(Ok(buffer[0])),
-            Err(e) => Some(Err(e.into()))
-        }
+            Ok(buffer)
+        },
+        ByteSource::Memory(vec) => Ok(vec)
     }
 }
 
+pub fn write_byte_source_to_file(source: ByteSource, path: &Path) -> Result<()> {
+    let content = vec_from_byte_source(source)?;
 
-pub struct VecByteSource {
-    data: Vec<u8>
-}
+    let mut file = File::create(path)?;
+    file.write_all(&content)?;
 
-impl VecByteSource {
-    pub fn new(mut data: Vec<u8>) -> Self {
-        data.reverse();
-        Self {
-            data
-        }
-    }
-}
-
-impl Iterator for VecByteSource {
-    type Item = Result<u8>;
-
-    fn next(&mut self) -> Option<Result<u8>> {
-        match self.data.pop() {
-            Some(data) => Some(Ok(data)),
-            None => None
-        }
-    }
-}
-
-pub fn vec_from_byte_source(source: Box<ByteSource>) -> Result<Vec<u8>> {
-    unimplemented!()
-}
-
-pub fn write_byte_source_to_file(source: Box<ByteSource>, path: &Path) -> Result<()> {
-    unimplemented!()
+    Ok(())
 }
 
 
@@ -64,26 +37,16 @@ pub fn write_byte_source_to_file(source: Box<ByteSource>, path: &Path) -> Result
 mod tests {
     use super::*;
 
-    fn drain_byte_source(bs: &mut ByteSource) -> Result<Vec<u8>> {
-        let mut result = vec!();
-        while let Some(val) = bs.next() {
-            result.push(val?);
-        }
-        Ok(result)
-    }
-
     #[test]
     fn vec_byte_source() {
-        let mut bytesource = Box::new(VecByteSource::new(vec!(0,1,2,3)));
+        let mut bytesource = ByteSource::Memory(vec!(0,1,2,3));
 
-        assert_eq!(drain_byte_source(&mut bytesource).unwrap(), vec!(0,1,2,3));
+        assert_eq!(vec_from_byte_source(&mut bytesource).unwrap(), vec!(0,1,2,3));
     }
 
     #[test]
     fn file_byte_source() {
-        let mut file = File::open("test/files/exif1.txt").expect("test/files/exif1.txt does not exist");
-
-        let mut bs = FileByteSource{file};
+        let mut bs = ByteSource::File(PathBuf::from("../test/files/exif1.txt"));
 
         assert_eq!(
             drain_byte_source(&mut bs).unwrap(),

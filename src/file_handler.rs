@@ -14,7 +14,7 @@ use std::io::prelude::*;
 
 use changelog::ChangeCreationPolicy;
 
-use byte_source::{ByteSource, write_byte_source_to_file};
+use byte_source::{ByteSource, write_byte_source_to_file, vec_from_byte_source};
 
 use file_util::generate_thumbnail;
 
@@ -29,11 +29,11 @@ pub enum FileSavingResult {
 pub enum ThumbnailStrategy {
     None,
     Generate,
-    FromByteSource(Box<ByteSource>)
+    FromByteSource(ByteSource)
 }
 
 pub fn save_file(
-        source_content: Box<ByteSource>,
+        source_content: ByteSource,
         thumbnail_strategy: ThumbnailStrategy,
         id: i32,
         tags: &[String],
@@ -62,9 +62,9 @@ pub fn save_file(
 
         match thumbnail_strategy {
             ThumbnailStrategy::Generate =>
-                generate_thumbnail(source_content, &thumbnail_path)?,
-            ThumbnailStrategy::FromByteSource(source) =>
-                write_byte_source_to_file(source, &thumbnail_path)?,
+                generate_thumbnail(source_content.clone(), &thumbnail_path)?,
+            ThumbnailStrategy::FromByteSource(data) =>
+                write_byte_source_to_file(data, &thumbnail_path)?,
             ThumbnailStrategy::None => panic!("Unreachable statement")
         };
 
@@ -109,14 +109,10 @@ pub fn save_file(
     Ok((saved_file, save_result_rx))
 }
 
-fn save_file_to_disk(destination_path: &Path, mut content: Box<ByteSource>) -> Result<()>  {
+fn save_file_to_disk(destination_path: &Path, content: ByteSource) -> Result<()>  {
     let mut file = fs::File::create(destination_path)?;
-    let mut bytes = vec!();
 
-    while let Some(b) = content.next() {
-        bytes.push(b?)
-    }
-    Ok(file.write_all(&bytes)?)
+    Ok(file.write_all(&vec_from_byte_source(content)?)?)
 }
 
 
@@ -132,8 +128,7 @@ pub fn remove_file(file_id: i32, fdb: &FileDatabase, change_policy: ChangeCreati
     // Drop the file from the database
     fdb.drop_file(file_id, change_policy)?;
 
-    // Remove the actual file in the file system
-    unimplemented!("Perform the change in the file system");
+    fs::remove_file(file.filename)?;
 
     Ok(())
 }
