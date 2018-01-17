@@ -12,8 +12,6 @@ use std::thread;
 use std::fs;
 use std::io::prelude::*;
 
-use std::sync::Arc;
-
 use changelog::ChangeCreationPolicy;
 
 use byte_source::ByteSource;
@@ -59,6 +57,8 @@ pub fn save_file(
     else {
         let thumbnail_filename = format!("thumb_{}.jpg", id);
         let thumbnail_path = destination_dir.join(PathBuf::from(thumbnail_filename.clone()));
+
+        unimplemented!("Create or copy the thumbnail to the correct location");
 
         Some(thumbnail_filename)
     };

@@ -1,6 +1,6 @@
 use changelog::{Change, SyncPoint, ChangeType, UpdateType, ChangeCreationPolicy};
 
-use byte_source::{VecByteSource, ByteSource};
+use byte_source::{VecByteSource};
 
 use file_database::{FileDatabase};
 use error::{Result, ErrorKind};
@@ -8,17 +8,15 @@ use file_handler;
 use file_handler::ThumbnailStrategy;
 
 use chrono::prelude::*;
-use std::sync::Arc;
 
 pub struct FileDetails {
     pub extension: String,
-    pub file: Vec<u8>,
-    pub thumbnail: Option<Vec<u8>>
+    pub timestamp: NaiveDateTime
 }
 
 impl FileDetails {
-    pub fn new(extension: String, file: Vec<u8>, thumbnail: Option<Vec<u8>>) -> Self {
-        Self { extension, file, thumbnail }
+    pub fn new(extension: String, timestamp: NaiveDateTime) -> Self {
+        Self { extension, timestamp }
     }
 }
 
@@ -104,7 +102,7 @@ fn apply_changes(
                     None => ThumbnailStrategy::None
                 };
 
-                let file_timestamp = unimplemented!("Fetch timestamp from foreign server");
+                let file_timestamp = file_details.timestamp;
 
                 file_handler::save_file(
                             file,
@@ -114,8 +112,8 @@ fn apply_changes(
                             fdb,
                             ChangeCreationPolicy::No,
                             &file_details.extension,
-                            file_timestamp
-                        );
+                            file_timestamp.timestamp() as u64
+                        )?;
             }
             ChangeType::FileRemoved => {
                 file_handler::remove_file(change.affected_file, fdb, ChangeCreationPolicy::No)?;
@@ -124,7 +122,7 @@ fn apply_changes(
     }
 
     for change in changes {
-        fdb.add_change(change);
+        fdb.add_change(change)?;
     }
 
     Ok(())
