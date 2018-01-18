@@ -3,8 +3,6 @@ use std::collections::HashMap;
 extern crate regex;
 extern crate chrono;
 
-use std::str::FromStr;
-
 use self::regex::Regex;
 
 use std::process::Command;

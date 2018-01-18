@@ -41,7 +41,7 @@ mod tests {
     fn vec_byte_source() {
         let mut bytesource = ByteSource::Memory(vec!(0,1,2,3));
 
-        assert_eq!(vec_from_byte_source(&mut bytesource).unwrap(), vec!(0,1,2,3));
+        assert_eq!(vec_from_byte_source(bytesource).unwrap(), vec!(0,1,2,3));
     }
 
     #[test]
@@ -49,7 +49,7 @@ mod tests {
         let mut bs = ByteSource::File(PathBuf::from("../test/files/exif1.txt"));
 
         assert_eq!(
-            drain_byte_source(&mut bs).unwrap(),
+            vec_from_byte_source(bs).unwrap(),
             include_bytes!("../test/files/exif1.txt")
                 .into_iter()
                 .map(|x| *x)

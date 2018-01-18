@@ -9,6 +9,7 @@ use file_handler::ThumbnailStrategy;
 
 use chrono::prelude::*;
 
+#[derive(Clone)]
 pub struct FileDetails {
     pub extension: String,
     pub timestamp: NaiveDateTime
@@ -95,7 +96,7 @@ fn apply_changes(
 
                 let file = ByteSource::Memory(foreign_server.get_file(change.affected_file)?);
                 let thumbnail = match foreign_server.get_thumbnail(change.affected_file)? {
-                    Some(data) => 
+                    Some(data) =>
                         ThumbnailStrategy::FromByteSource(ByteSource::Memory(data)),
                     None => ThumbnailStrategy::None
                 };
@@ -200,16 +201,16 @@ mod sync_tests {
             match *starting_syncpoint {
                 Some(SyncPoint{last_change}) => {
                     Ok(self.changes.iter()
-                        .filter(|&&(time, sp)| time >= last_change)
-                        .map(|&(_, sp)| sp.clone())
+                        .filter(|&&(ref time, ref sp)| time >= &last_change)
+                        .map(|&(_, ref sp)| sp.clone())
                         .collect()
                     )
                 },
-                None => Ok(self.changes.iter().map(|&(_, sp)| sp).collect())
+                None => Ok(self.changes.iter().map(|&(_, ref sp)| sp.clone()).collect())
             }
         }
         fn get_file_details(&self, id: i32) -> Result<FileDetails> {
-            Ok(self.file_data[&id])
+            Ok(self.file_data[&id].clone())
         }
         fn send_changes(&self, changes: &[Change], new_syncpoint: &SyncPoint) -> Result<()> {
             //unimplemented!()
@@ -267,7 +268,12 @@ mod sync_tests {
                 ),
             );
 
-        apply_changes(fdb, &MockForeignServer::new(vec!()), &changes, &vec!()).unwrap();
+        apply_changes(
+            fdb,
+            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &changes,
+            &vec!()
+        ).unwrap();
 
         let files_with_tag = get_files_with_tags(fdb, mapvec!(String::from: "things"), vec!());
 
@@ -314,7 +320,12 @@ mod sync_tests {
                 ),
             );
 
-        apply_changes(fdb, &MockForeignServer::new(vec!()), &changes, &vec!()).unwrap();
+        apply_changes(
+            fdb,
+            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &changes,
+            &vec!()
+        ).unwrap();
 
         let files_with_tag = get_files_with_tags(fdb, mapvec!(String::from: "things"), vec!());
 
@@ -345,7 +356,12 @@ mod sync_tests {
                 ),
             );
 
-        apply_changes(fdb, &MockForeignServer::new(vec!()), &changes, &vec!()).unwrap();
+        apply_changes(
+            fdb,
+            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &changes,
+            &vec!()
+        ).unwrap();
 
         let file = fdb.get_file_with_id(1).unwrap();
 
@@ -375,13 +391,16 @@ mod sync_tests {
         let foreign_server = MockForeignServer::new(
                 vec!(
                     (2, FileDetails::new(
-                            "jpg".into(),
-                            added_bytes.clone(),
-                            Some(added_thumbnail_bytes)
-                        )
-                    ),
-                    (3, FileDetails::new("jpg".into(), added_bytes.clone(), None))
-                )
+                        "jpg".into(),
+                        NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+                    )),
+                    (3, FileDetails::new(
+                        "jpg".into(),
+                        NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+                    )),
+                ),
+                vec!(), // TODO: Changes
+                vec!()
             );
 
         let changes = vec!(

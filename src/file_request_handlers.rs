@@ -4,13 +4,11 @@ use serde_json;
 use iron::*;
 use persistent::Write;
 
-use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use std::sync::Mutex;
 use std::sync::Arc;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::{Receiver};
 
 use chrono::{NaiveDateTime, Utc};
 
@@ -20,7 +18,7 @@ use file_list::{FileListList, FileLocation};
 use file_list_worker;
 use persistent_file_list;
 use file_util::sanitize_tag_names;
-use file_util::{get_semi_unique_identifier, get_file_timestamp};
+use file_util::{get_semi_unique_identifier};
 use request_helpers::get_get_variable;
 use file_handler::{save_file, FileSavingResult, ThumbnailStrategy};
 use byte_source::ByteSource;
