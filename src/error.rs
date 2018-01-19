@@ -46,6 +46,19 @@ error_chain! {
         }
 
 
+        // Intermediate errors
+        ByteSourceExpansionFailed {
+            description("An error occured when expanding the byte source")
+            display("Byte source expansion failed")
+        }
+
+        // File handling errors
+        FileRemovalFailed(id: i32) {
+            description("The file could not be removed")
+            display("File {} could not be removed", id)
+        }
+
+
         // Errors specific to file requests
         NoSuchList(id: usize) {
             description("Unknown file list")

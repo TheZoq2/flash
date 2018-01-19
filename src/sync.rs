@@ -170,14 +170,14 @@ mod sync_tests {
     }
 
     struct MockForeignServer {
-        file_data: HashMap<i32, FileDetails>,
+        file_data: HashMap<i32, (FileDetails, Vec<u8>, Option<Vec<u8>>)>,
         syncpoints: Vec<SyncPoint>,
         changes: Vec<(NaiveDateTime, Change)>
     }
 
     impl MockForeignServer {
         pub fn new(
-            files: Vec<(i32, FileDetails)>,
+            files: Vec<(i32, (FileDetails, Vec<u8>, Option<Vec<u8>>))>,
             syncpoints: Vec<SyncPoint>,
             changes: Vec<(NaiveDateTime, Change)>
         ) -> Self {
@@ -210,17 +210,17 @@ mod sync_tests {
             }
         }
         fn get_file_details(&self, id: i32) -> Result<FileDetails> {
-            Ok(self.file_data[&id].clone())
+            Ok(self.file_data[&id].0.clone())
         }
         fn send_changes(&self, changes: &[Change], new_syncpoint: &SyncPoint) -> Result<()> {
             //unimplemented!()
             Ok(())
         }
         fn get_file(&self, id: i32) -> Result<Vec<u8>> {
-            unimplemented!()
+            Ok(self.file_data[&id].1.clone())
         }
         fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>> {
-            unimplemented!()
+            Ok(self.file_data[&id].2.clone())
         }
     }
 
@@ -390,14 +390,14 @@ mod sync_tests {
 
         let foreign_server = MockForeignServer::new(
                 vec!(
-                    (2, FileDetails::new(
+                    (2, (FileDetails::new(
                         "jpg".into(),
                         NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
-                    )),
-                    (3, FileDetails::new(
+                    ), vec!(), None)),
+                    (3, (FileDetails::new(
                         "jpg".into(),
                         NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
-                    )),
+                    ), vec!(), None)),
                 ),
                 vec!(), // TODO: Changes
                 vec!()

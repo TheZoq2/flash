@@ -4,7 +4,7 @@ use std::sync::mpsc::{channel, Receiver};
 
 use file_database::{FileDatabase, File};
 
-use error::{Result, Error};
+use error::{Result, Error, ErrorKind, ResultExt};
 
 
 use std::thread;
@@ -123,12 +123,14 @@ fn save_file_to_disk(destination_path: &Path, content: ByteSource) -> Result<()>
 */
 pub fn remove_file(file_id: i32, fdb: &FileDatabase, change_policy: ChangeCreationPolicy) -> Result<()> {
     // Fetch the file details from the database
-    let file = fdb.get_file_with_id_result(file_id)?;
+    let file = fdb.get_file_with_id_result(file_id)
+        .chain_err(|| ErrorKind::FileRemovalFailed(file_id))?;
 
     // Drop the file from the database
     fdb.drop_file(file_id, change_policy)?;
 
-    fs::remove_file(file.filename)?;
+    fs::remove_file(file.filename)
+        .chain_err(|| ErrorKind::FileRemovalFailed(file_id))?;
 
     Ok(())
 }

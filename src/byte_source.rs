@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use error::Result;
+use error::{Result, ErrorKind, ResultExt};
 
 #[derive(Clone)]
 pub enum ByteSource {
@@ -13,9 +13,11 @@ pub enum ByteSource {
 pub fn vec_from_byte_source(source: ByteSource) -> Result<Vec<u8>> {
     match source {
         ByteSource::File(path) => {
-            let mut file = File::open(&path)?;
+            let mut file = File::open(&path)
+                .chain_err(||ErrorKind::ByteSourceExpansionFailed)?;
             let mut buffer = vec!();
-            file.read_to_end(&mut buffer)?;
+            file.read_to_end(&mut buffer)
+                .chain_err(||ErrorKind::ByteSourceExpansionFailed)?;
 
             Ok(buffer)
         },
@@ -46,7 +48,7 @@ mod tests {
 
     #[test]
     fn file_byte_source() {
-        let mut bs = ByteSource::File(PathBuf::from("../test/files/exif1.txt"));
+        let mut bs = ByteSource::File(PathBuf::from("test/files/exif1.txt"));
 
         assert_eq!(
             vec_from_byte_source(bs).unwrap(),
