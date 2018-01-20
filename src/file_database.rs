@@ -807,7 +807,7 @@ mod db_tests {
         let mut file = fdb.get_file_with_id(1).unwrap();
         assert_eq!(file.id, 1);
         file.tags = vec!();
-        fdb.update_file_without_creating_change(&file);
+        fdb.update_file_without_creating_change(&file).expect("File update failed");
 
         let files_with_tag = get_file_paths_with_tags(&fdb, vec!["tag".to_string()], vec![]);
 

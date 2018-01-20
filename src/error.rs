@@ -53,9 +53,13 @@ error_chain! {
         }
 
         // File handling errors
-        FileRemovalFailed(id: i32) {
+        FileDatabaseRemovalFailed(id: i32) {
+            description("The file could not be removed from the database")
+            display("File {} could not be removed from database", id)
+        }
+        FileRemovalFailed(filename: String) {
             description("The file could not be removed")
-            display("File {} could not be removed", id)
+            display("File {} could not be removed", filename)
         }
 
 

@@ -124,13 +124,15 @@ fn save_file_to_disk(destination_path: &Path, content: ByteSource) -> Result<()>
 pub fn remove_file(file_id: i32, fdb: &FileDatabase, change_policy: ChangeCreationPolicy) -> Result<()> {
     // Fetch the file details from the database
     let file = fdb.get_file_with_id_result(file_id)
-        .chain_err(|| ErrorKind::FileRemovalFailed(file_id))?;
+        .chain_err(|| ErrorKind::FileDatabaseRemovalFailed(file_id))?;
 
     // Drop the file from the database
     fdb.drop_file(file_id, change_policy)?;
 
-    fs::remove_file(file.filename)
-        .chain_err(|| ErrorKind::FileRemovalFailed(file_id))?;
+    let full_path = fdb.get_file_save_path().join(file.filename);
+
+    fs::remove_file(full_path.clone())
+        .chain_err(|| ErrorKind::FileRemovalFailed(full_path.to_string_lossy().into()))?;
 
     Ok(())
 }

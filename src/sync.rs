@@ -201,7 +201,7 @@ mod sync_tests {
             match *starting_syncpoint {
                 Some(SyncPoint{last_change}) => {
                     Ok(self.changes.iter()
-                        .filter(|&&(ref time, ref sp)| time >= &last_change)
+                        .filter(|&&(ref time, _)| time >= &last_change)
                         .map(|&(_, ref sp)| sp.clone())
                         .collect()
                     )
@@ -212,7 +212,8 @@ mod sync_tests {
         fn get_file_details(&self, id: i32) -> Result<FileDetails> {
             Ok(self.file_data[&id].0.clone())
         }
-        fn send_changes(&self, changes: &[Change], new_syncpoint: &SyncPoint) -> Result<()> {
+
+        fn send_changes(&self, _: &[Change], _: &SyncPoint) -> Result<()> {
             //unimplemented!()
             Ok(())
         }
@@ -371,15 +372,18 @@ mod sync_tests {
     fn file_system_changes_work(fdb: &mut FileDatabase) {
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
 
-        let original_filename = "yolo.jpg";
-        fdb.add_new_file(
+        let original_filename = "test/media/DSC_0001.JPG.jpg";
+
+        let (initial_file, _chananel) = file_handler::save_file(
+            ByteSource::File(PathBuf::from(original_filename)),
+            ThumbnailStrategy::Generate,
             1,
-            original_filename,
-            None,
             &mapvec!(String::from: "things"),
-            original_timestamp.timestamp() as u64,
-            create_change("2017-02-02").unwrap()
-        );
+            fdb,
+            create_change("2017-02-02").unwrap(),
+            "jpg",
+            original_timestamp.timestamp() as u64
+        ).expect("Failed to save initial file");
 
         let added_bytes = include_bytes!("../test/media/DSC_0001.JPG").into_iter()
             .map(|a| *a)
@@ -393,7 +397,7 @@ mod sync_tests {
                     (2, (FileDetails::new(
                         "jpg".into(),
                         NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
-                    ), vec!(), None)),
+                    ), added_bytes, Some(added_thumbnail_bytes))),
                     (3, (FileDetails::new(
                         "jpg".into(),
                         NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
@@ -421,7 +425,8 @@ mod sync_tests {
                 ),
             );
 
-        apply_changes(fdb, &foreign_server, &changes, &vec!()).unwrap();
+        apply_changes(fdb, &foreign_server, &changes, &vec!())
+            .expect("Failed to apply changes");
 
         // Ensure that the correct files are in the database
         let file_1 = fdb.get_file_with_id(1);
@@ -431,7 +436,10 @@ mod sync_tests {
         assert_matches!(file_2, Some(_));
         assert_matches!(file_3, Some(_));
 
-        let (file_2, file_3) = (file_2.unwrap(), file_3.unwrap());
+        let (file_2, file_3) = (
+            file_2.expect("File 2 was added"),
+            file_3.expect("File 3 was added")
+        );
 
         // Open the file and compare the bytes to the expected values
         let actual_file_2 = PathBuf::from(file_2.filename);
@@ -440,11 +448,46 @@ mod sync_tests {
         let actual_file_3 = PathBuf::from(file_3.filename);
         assert_matches!(file_3.thumbnail_path, None);
 
-        unimplemented!("Make sure new files are created");
         // Ensure that the old file was deleted
         {
-            let path = fdb.get_file_save_path().join(PathBuf::from(original_filename));
-            assert!(!path.exists())
+            let path = fdb.get_file_save_path().join(PathBuf::from(initial_file.filename));
+            assert!(!path.exists());
+        }
+
+        // Ensure that the old thumbnail was deleted
+        {
+            let path = fdb.get_file_save_path()
+                .join(PathBuf::from(
+                    initial_file.thumbnail_path.expect("Initial file had no thumbnail")
+                ));
+            assert!(!path.exists());
+        }
+
+        // Ensure that the new are created
+        {
+            let path = fdb.get_file_save_path().join(actual_file_2);
+            assert!(path.exists());
+        }
+        {
+            let path = fdb.get_file_save_path().join(actual_file_3);
+            assert!(path.exists());
+        }
+
+        // Ensure that the new thumbnail for file 2 was created
+        {
+            let path = fdb.get_file_save_path()
+                .join(PathBuf::from(
+                    actual_thumbnail_2.expect("File 2 should have a filename")
+                ));
+            assert!(path.exists());
+        }
+        // Ensure that the no file for file 3 was created
+        {
+            let path = fdb.get_file_save_path()
+                .join(PathBuf::from(
+                    "thumb_3.jpg"
+                ));
+            assert!(!path.exists());
         }
     }
 }
