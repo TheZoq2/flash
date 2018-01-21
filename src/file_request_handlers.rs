@@ -4,11 +4,13 @@ use serde_json;
 use iron::*;
 use persistent::Write;
 
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use std::sync::Mutex;
 use std::sync::Arc;
-use std::sync::mpsc::{Receiver};
+use std::sync::mpsc::{channel, Receiver};
 
 use chrono::{NaiveDateTime, Utc};
 
@@ -18,9 +20,9 @@ use file_list::{FileListList, FileLocation};
 use file_list_worker;
 use persistent_file_list;
 use file_util::sanitize_tag_names;
-use file_util::{get_semi_unique_identifier};
+use file_util::{get_semi_unique_identifier, get_file_timestamp};
 use request_helpers::get_get_variable;
-use file_handler::{save_file, FileSavingResult, ThumbnailStrategy};
+use file_handler::{save_file, FileSavingWorkerResults, ThumbnailStrategy};
 use byte_source::ByteSource;
 use changelog;
 
@@ -82,7 +84,7 @@ impl FileData {
 
 #[derive(Debug)]
 enum FileSaveRequestResult {
-    NewDatabaseEntry(FileLocation, Receiver<FileSavingResult>),
+    NewDatabaseEntry(FileLocation, FileSavingWorkerResults),
     UpdatedDatabaseEntry(FileLocation),
 }
 
@@ -287,7 +289,7 @@ fn save_new_file(
     original_path: &Path,
     tags: &[String],
     current_time: NaiveDateTime
-) -> Result<(file_database::File, Receiver<FileSavingResult>)> {
+) -> Result<(file_database::File, FileSavingWorkerResults)> {
     let file_identifier = get_semi_unique_identifier();
 
     let file = ByteSource::File(original_path.into());
@@ -537,7 +539,7 @@ mod file_request_tests {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
 
         let src_path = PathBuf::from("test/media/DSC_0001.JPG");
-        let (result, save_result_rx) = save_new_file(
+        let (result, worker_results) = save_new_file(
                 fdb.clone(),
                 &src_path,
                 &tags,
@@ -546,8 +548,10 @@ mod file_request_tests {
             .unwrap();
 
 
-        let save_result = save_result_rx.recv().unwrap();
-        assert_matches!(save_result, FileSavingResult::Success);
+        let save_result = worker_results.file.recv().unwrap();
+        assert_matches!(save_result, Ok(()));
+        let thumbnail_save_result = worker_results.thumbnail.unwrap().recv().unwrap();
+        assert_matches!(thumbnail_save_result, Ok(()));
 
         let full_path = {
             let fdb = fdb.lock().unwrap();
@@ -583,8 +587,14 @@ mod file_request_tests {
 
             assert_matches!(result, FileSaveRequestResult::NewDatabaseEntry(FileLocation::Database(_), _));
             match result {
-                FileSaveRequestResult::NewDatabaseEntry(file_entry, receiver) => {
-                    assert_matches!(receiver.recv().unwrap(), FileSavingResult::Success);
+                FileSaveRequestResult::NewDatabaseEntry(file_entry, worker_receivers) => {
+                    assert_matches!(worker_receivers.file.recv().unwrap(), Ok(()));
+                    assert_matches!(worker_receivers
+                            .thumbnail
+                            .expect("Thumbnail generator channel not created")
+                            .recv()
+                            .expect("Thumbnail saving failed"), Ok(())
+                        );
 
                     match file_entry {
                         FileLocation::Database(result) => {

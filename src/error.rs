@@ -62,6 +62,11 @@ error_chain! {
             display("File {} could not be removed", filename)
         }
 
+        ThumbnailGenerationFailed {
+            description("Thumbnail generation failed")
+            display("Failed to generate thumbnail")
+        }
+
 
         // Errors specific to file requests
         NoSuchList(id: usize) {

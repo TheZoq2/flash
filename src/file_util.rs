@@ -12,13 +12,15 @@ use std::thread;
 
 use glob::glob;
 
-use error::Result;
+use error::{Result, ResultExt, ErrorKind};
 
 use chrono::NaiveDateTime;
 
 use exiftool;
 use exiftool::{ExifData};
 use byte_source::{ByteSource, vec_from_byte_source};
+
+use std::sync::mpsc;
 
 const THUMBNAIL_SIZE: u32 = 200;
 
@@ -61,28 +63,35 @@ pub fn get_mediatype(path: &Path) -> MediaType {
   landscape mode will be at most `max_width` tall
  */
 
-//TODO: Send errors back to caller over a channel instead of ignoring them
 pub fn generate_thumbnail(
     source: ByteSource,
     destination_path: &Path,
-) -> Result<()> {
-    {
-        let destination_path = destination_path.to_owned();
-        thread::spawn(move || {
-            let file_content = vec_from_byte_source(source).unwrap();
-            let img = match image::load_from_memory(&file_content) {
-                Ok(val) => val,
-                Err(_) => return,
-            };
+) -> mpsc::Receiver<Result<()>> {
+    let destination_path = destination_path.to_owned();
+
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let handler = || -> Result<()> {
+            let file_content = vec_from_byte_source(source)?;
+            let img = image::load_from_memory(&file_content)?;
 
             let thumb_data = generate_thumbnail_from_generic_image(&img, THUMBNAIL_SIZE);
 
-            let fout = &mut File::create(&destination_path).unwrap();
-            thumb_data.save(fout, image::PNG).unwrap();
-        });
-    }
+            let fout = &mut File::create(&destination_path)?;
+            thumb_data.save(fout, image::PNG)?;
+            Ok(())
+        };
 
-    Ok(())
+        let generation_result = handler()
+            .chain_err(|| ErrorKind::ThumbnailGenerationFailed);
+
+        /// We don't care if the result could not be sent because it probably means
+        /// that the receiver does not care
+        let _result = tx.send(generation_result);
+    });
+
+    rx
 }
 
 

@@ -20,9 +20,9 @@ use file_util::generate_thumbnail;
 
 // TODO: Remove if unused
 #[derive(Debug)]
-pub enum FileSavingResult {
-    Success,
-    Failure(Error),
+pub struct FileSavingWorkerResults {
+    pub file: Receiver<Result<()>>,
+    pub thumbnail: Option<Receiver<Result<()>>>,
 }
 
 
@@ -42,7 +42,7 @@ pub fn save_file(
         file_extension: &str,
         file_timestamp: u64,
     )
-    -> Result<(File, Receiver<FileSavingResult>)>
+    -> Result<(File, FileSavingWorkerResults)>
 {
     //Get the folder where we want to place the stored file
     let destination_dir = PathBuf::from(fdb.get_file_save_path());
@@ -53,25 +53,28 @@ pub fn save_file(
     let new_file_path = destination_dir.join(PathBuf::from(filename.clone()));
 
     // Save the thumbnail to disk
-    let thumbnail_filename = if let ThumbnailStrategy::None = thumbnail_strategy {
-        None
-    }
-    else {
-        let thumbnail_filename = format!("thumb_{}.jpg", id);
-        let thumbnail_path = destination_dir.join(PathBuf::from(thumbnail_filename.clone()));
+    let (thumbnail_filename, thumbnail_worker_result) =
+        if let ThumbnailStrategy::None = thumbnail_strategy {
+            (None, None)
+        }
+        else {
+            let thumbnail_filename = format!("thumb_{}.jpg", id);
+            let thumbnail_path = destination_dir.join(PathBuf::from(thumbnail_filename.clone()));
 
-        match thumbnail_strategy {
-            ThumbnailStrategy::Generate =>
-                generate_thumbnail(source_content.clone(), &thumbnail_path)?,
-            ThumbnailStrategy::FromByteSource(data) =>
-                write_byte_source_to_file(data, &thumbnail_path)?,
-            ThumbnailStrategy::None => panic!("Unreachable statement")
+            let thumbnail_worker_result = match thumbnail_strategy {
+                ThumbnailStrategy::Generate => {
+                    Some(generate_thumbnail(source_content.clone(), &thumbnail_path))
+                },
+                ThumbnailStrategy::FromByteSource(data) => {
+                    write_byte_source_to_file(data, &thumbnail_path)
+                        .chain_err(|| "Failed to write thumbnail to disk")?;
+                    None
+                },
+                ThumbnailStrategy::None => panic!("Unreachable statement")
+            };
+
+            (Some(thumbnail_filename), thumbnail_worker_result)
         };
-
-        Some(thumbnail_filename)
-    };
-
-    //let timestamp = get_file_timestamp(source_path);
 
     //Store the file in the database
     let saved_file = {
@@ -90,10 +93,7 @@ pub fn save_file(
         let (tx, rx) = channel();
 
         thread::spawn(move || {
-            let save_result = match save_file_to_disk(&new_file_path, source_content) {
-                Ok(_) => FileSavingResult::Success,
-                Err(e) => FileSavingResult::Failure(e),
-            };
+            let save_result = save_file_to_disk(&new_file_path, source_content);
 
             // We ignore any failures to send the file save result since
             // it most likely means that the caller of the save function
@@ -106,7 +106,13 @@ pub fn save_file(
         rx
     };
 
-    Ok((saved_file, save_result_rx))
+    Ok((
+        saved_file,
+        FileSavingWorkerResults{
+            file: save_result_rx,
+            thumbnail: thumbnail_worker_result
+        }
+    ))
 }
 
 fn save_file_to_disk(destination_path: &Path, content: ByteSource) -> Result<()>  {

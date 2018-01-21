@@ -26,7 +26,7 @@ pub enum ChangeType {
 pub struct Change {
     pub change_type: ChangeType,
     pub affected_file: i32,
-    timestamp: NaiveDateTime
+    pub timestamp: NaiveDateTime
 }
 
 impl Change {

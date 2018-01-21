@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use error::{Result, ErrorKind, ResultExt};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ByteSource {
     File(PathBuf),
     Memory(Vec<u8>)

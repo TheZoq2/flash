@@ -172,14 +172,14 @@ mod sync_tests {
     struct MockForeignServer {
         file_data: HashMap<i32, (FileDetails, Vec<u8>, Option<Vec<u8>>)>,
         syncpoints: Vec<SyncPoint>,
-        changes: Vec<(NaiveDateTime, Change)>
+        changes: Vec<Change>
     }
 
     impl MockForeignServer {
         pub fn new(
             files: Vec<(i32, (FileDetails, Vec<u8>, Option<Vec<u8>>))>,
             syncpoints: Vec<SyncPoint>,
-            changes: Vec<(NaiveDateTime, Change)>
+            changes: Vec<Change>
         ) -> Self {
             let mut file_data = HashMap::new();
             for (id, details) in files {
@@ -201,12 +201,12 @@ mod sync_tests {
             match *starting_syncpoint {
                 Some(SyncPoint{last_change}) => {
                     Ok(self.changes.iter()
-                        .filter(|&&(ref time, _)| time >= &last_change)
-                        .map(|&(_, ref sp)| sp.clone())
+                        .filter(|change| change.timestamp >= last_change)
+                        .map(|change| change.clone())
                         .collect()
                     )
                 },
-                None => Ok(self.changes.iter().map(|&(_, ref sp)| sp.clone()).collect())
+                None => Ok(self.changes.iter().map(|change| change.clone()).collect())
             }
         }
         fn get_file_details(&self, id: i32) -> Result<FileDetails> {
@@ -370,11 +370,11 @@ mod sync_tests {
     }
 
     fn file_system_changes_work(fdb: &mut FileDatabase) {
+        // Set up the intial database
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
+        let original_filename = "test/media/10x10.png";
 
-        let original_filename = "test/media/DSC_0001.JPG.jpg";
-
-        let (initial_file, _chananel) = file_handler::save_file(
+        let (initial_file, worker_receiver) = file_handler::save_file(
             ByteSource::File(PathBuf::from(original_filename)),
             ThumbnailStrategy::Generate,
             1,
@@ -385,12 +385,39 @@ mod sync_tests {
             original_timestamp.timestamp() as u64
         ).expect("Failed to save initial file");
 
+        // Wait for the file to be saved and ensure that no error was thrown
+        // let save_result = worker_receiver.file.recv()
+        //     .expect("File saving worker did not send result");
+        // save_result.expect("File saving failed");
+        // // Wait for the thumbnail to be generatad and ensure that no error was thrown
+        // let thumbnail_result = worker_receiver
+        //     .thumbnail
+        //     .expect("Thumbnail generator channel not created")
+        //     .recv()
+        //     .expect("Thumbnail worker did not send result");
+        // thumbnail_result.expect("Thumbnail generation failed");
+
+        // Set up the foreign server
         let added_bytes = include_bytes!("../test/media/DSC_0001.JPG").into_iter()
             .map(|a| *a)
             .collect::<Vec<_>>();
         let added_thumbnail_bytes = include_bytes!("../test/media/512x512.png").into_iter()
             .map(|a| *a)
             .collect::<Vec<_>>();
+
+        // Set up foreign changes
+        let remote_changes = vec!(
+                Change::new(
+                    original_timestamp,
+                    3,
+                    ChangeType::FileAdded
+                ),
+                Change::new(
+                    original_timestamp,
+                    2,
+                    ChangeType::FileAdded
+                ),
+            );
 
         let foreign_server = MockForeignServer::new(
                 vec!(
@@ -403,21 +430,12 @@ mod sync_tests {
                         NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
                     ), vec!(), None)),
                 ),
-                vec!(), // TODO: Changes
-                vec!()
+                vec!(),
+                remote_changes
             );
 
-        let changes = vec!(
-                Change::new(
-                    original_timestamp,
-                    2,
-                    ChangeType::FileAdded
-                ),
-                Change::new(
-                    original_timestamp,
-                    3,
-                    ChangeType::FileAdded
-                ),
+        // Set up local changes
+        let local_changes = vec!(
                 Change::new(
                     original_timestamp,
                     1,
@@ -425,8 +443,10 @@ mod sync_tests {
                 ),
             );
 
-        apply_changes(fdb, &foreign_server, &changes, &vec!())
+        // Apply the changes
+        apply_changes(fdb, &foreign_server, &local_changes, &vec!())
             .expect("Failed to apply changes");
+
 
         // Ensure that the correct files are in the database
         let file_1 = fdb.get_file_with_id(1);
