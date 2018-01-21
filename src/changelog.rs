@@ -7,6 +7,8 @@ use schema::{changes, syncpoints};
 
 use error::Result;
 
+use std::cmp::Ordering;
+
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub enum UpdateType {
     TagAdded(String),
@@ -45,6 +47,34 @@ impl Change {
             change_type: serde_json::from_str(&db_entry.json_data)?
         })
     }
+}
+
+fn type_order_int(change_type: &ChangeType) -> u8 {
+    match *change_type {
+        ChangeType::FileAdded => 0,
+        ChangeType::Update(_) => 1,
+        ChangeType::FileRemoved => 2
+    }
+}
+/**
+  Sorts a given vector of changes first according to timestamps and if there
+  are conflicts it ensures that additions happen before updates which happens
+  before removals
+*/
+pub fn sort_changes(changes: Vec<Change>) -> Vec<Change> {
+
+    let mut result = changes.clone();
+    result.sort_by(|change1, change2| {
+        match change1.timestamp.cmp(&change2.timestamp) {
+            Ordering::Equal => {
+                type_order_int(&change1.change_type).cmp(&type_order_int(&change2.change_type))
+            }
+            not_equal => not_equal
+        }
+    });
+
+
+    result
 }
 
 #[derive(Queryable)]
@@ -94,4 +124,83 @@ pub struct SyncPoint {
 pub enum ChangeCreationPolicy {
     Yes(NaiveDateTime),
     No
+}
+
+
+
+#[cfg(test)]
+mod changelog_tests {
+    use super::*;
+    use chrono::NaiveDate;
+
+    #[test]
+    fn change_sorting() {
+        let changes = vec!(
+            Change::new(
+                NaiveDate::from_ymd(2016,04,01).and_hms(0,0,0),
+                0,
+                ChangeType::FileAdded,
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2016,01,01).and_hms(0,0,0),
+                0,
+                ChangeType::FileAdded,
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
+                0,
+                ChangeType::Update(UpdateType::TagAdded("yolo".into())),
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
+                0,
+                ChangeType::FileAdded,
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
+                0,
+                ChangeType::FileRemoved,
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2016,02,01).and_hms(0,0,0),
+                0,
+                ChangeType::FileAdded,
+            ),
+        );
+
+        let expected_order = vec!(
+            Change::new(
+                NaiveDate::from_ymd(2016,01,01).and_hms(0,0,0),
+                0,
+                ChangeType::FileAdded,
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2016,02,01).and_hms(0,0,0),
+                0,
+                ChangeType::FileAdded,
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
+                0,
+                ChangeType::FileAdded,
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
+                0,
+                ChangeType::Update(UpdateType::TagAdded("yolo".into())),
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
+                0,
+                ChangeType::FileRemoved,
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2016,04,01).and_hms(0,0,0),
+                0,
+                ChangeType::FileAdded,
+            )
+        );
+
+        assert_eq!(sort_changes(changes), expected_order);
+    }
 }

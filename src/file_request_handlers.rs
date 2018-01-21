@@ -538,7 +538,7 @@ mod file_request_tests {
     fn file_list_saving_works(fdb: Arc<Mutex<FileDatabase>>) {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
 
-        let src_path = PathBuf::from("test/media/DSC_0001.JPG");
+        let src_path = PathBuf::from("test/media/10x10.png");
         let (result, worker_results) = save_new_file(
                 fdb.clone(),
                 &src_path,
@@ -575,7 +575,7 @@ mod file_request_tests {
     }
 
     fn file_list_save_requests_work(fdb: Arc<Mutex<FileDatabase>>) {
-        let old_path = PathBuf::from("test/media/DSC_0001.JPG");
+        let old_path = PathBuf::from("test/media/10x10.png");
 
         let tags = vec!("new1".to_owned());
 

@@ -47,15 +47,19 @@ pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
 }
 
 pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> Result<()> {
+    // Get the syncpoints from the local and remote servers
     let local_syncpoints = fdb.get_syncpoints()?;
     let remote_syncpoints = foreign_server.get_syncpoints()?;
 
+    // Find the highest common syncpoint
     let sync_merge_start = last_common_syncpoint(&local_syncpoints, &remote_syncpoints);
 
+    // Get the changes that have been made locally since that change
     let local_changes = match sync_merge_start {
         Some(ref syncpoint) => fdb.get_changes_after_timestamp(&syncpoint.last_change)?,
         None => fdb.get_all_changes()?
     };
+    // Find all files that have been removed localy
     let local_removed_files: Vec<_> = local_changes.iter()
         .filter_map(|change| match change.change_type {
             ChangeType::FileRemoved => Some(change.affected_file),
@@ -63,14 +67,18 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
         })
         .collect();
 
+    // Fetch all remote changes that have been made on the remote server
     let remote_changes = foreign_server.get_changes(&sync_merge_start)?;
 
+    // Create a new syncpoint
     let new_syncpoint = SyncPoint{
             last_change: NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)
         };
 
+    // Send the changes to the remote server to apply
     foreign_server.send_changes(&local_changes, &new_syncpoint)?;
 
+    // Apply changes locally
     apply_changes(fdb, foreign_server, &remote_changes, &local_removed_files)
 }
 
@@ -385,17 +393,17 @@ mod sync_tests {
             original_timestamp.timestamp() as u64
         ).expect("Failed to save initial file");
 
-        // Wait for the file to be saved and ensure that no error was thrown
-        // let save_result = worker_receiver.file.recv()
-        //     .expect("File saving worker did not send result");
-        // save_result.expect("File saving failed");
-        // // Wait for the thumbnail to be generatad and ensure that no error was thrown
-        // let thumbnail_result = worker_receiver
-        //     .thumbnail
-        //     .expect("Thumbnail generator channel not created")
-        //     .recv()
-        //     .expect("Thumbnail worker did not send result");
-        // thumbnail_result.expect("Thumbnail generation failed");
+        //Wait for the file to be saved and ensure that no error was thrown
+        let save_result = worker_receiver.file.recv()
+            .expect("File saving worker did not send result");
+        save_result.expect("File saving failed");
+        // Wait for the thumbnail to be generatad and ensure that no error was thrown
+        let thumbnail_result = worker_receiver
+            .thumbnail
+            .expect("Thumbnail generator channel not created")
+            .recv()
+            .expect("Thumbnail worker did not send result");
+        thumbnail_result.expect("Thumbnail generation failed");
 
         // Set up the foreign server
         let added_bytes = include_bytes!("../test/media/DSC_0001.JPG").into_iter()
@@ -404,6 +412,7 @@ mod sync_tests {
         let added_thumbnail_bytes = include_bytes!("../test/media/512x512.png").into_iter()
             .map(|a| *a)
             .collect::<Vec<_>>();
+
 
         // Set up foreign changes
         let remote_changes = vec!(
@@ -419,6 +428,16 @@ mod sync_tests {
                 ),
             );
 
+        let mut all_changes = vec!();
+        for change in &remote_changes {
+            all_changes.push(change.clone());
+        }
+        for change in &fdb.get_all_changes().expect("Failed to get changes from db") {
+            all_changes.push(change.clone());
+        }
+        all_changes.sort_by_key(|change| change.timestamp);
+
+        // Set up the foreign server
         let foreign_server = MockForeignServer::new(
                 vec!(
                     (2, (FileDetails::new(
@@ -434,18 +453,14 @@ mod sync_tests {
                 remote_changes
             );
 
-        // Set up local changes
-        let local_changes = vec!(
-                Change::new(
-                    original_timestamp,
-                    1,
-                    ChangeType::FileRemoved
-                ),
-            );
-
         // Apply the changes
-        apply_changes(fdb, &foreign_server, &local_changes, &vec!())
-            .expect("Failed to apply changes");
+        sync_with_foreign(fdb, &foreign_server).expect("Foreign server sync failed");
+
+        // Assert that the local database now contains all changes
+        assert_eq!(
+            all_changes,
+            fdb.get_all_changes().expect("Failed to get changes from database")
+        );
 
 
         // Ensure that the correct files are in the database
