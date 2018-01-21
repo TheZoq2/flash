@@ -426,6 +426,11 @@ mod sync_tests {
                     2,
                     ChangeType::FileAdded
                 ),
+                Change::new(
+                    original_timestamp,
+                    1,
+                    ChangeType::FileRemoved
+                ),
             );
 
         let mut all_changes = vec!();

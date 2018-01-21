@@ -136,9 +136,17 @@ pub fn remove_file(file_id: i32, fdb: &FileDatabase, change_policy: ChangeCreati
     fdb.drop_file(file_id, change_policy)?;
 
     let full_path = fdb.get_file_save_path().join(file.filename);
+    let full_thumb_path = file.thumbnail_path.map( |filename| {
+        fdb.get_file_save_path().join(filename)
+    });
 
     fs::remove_file(full_path.clone())
         .chain_err(|| ErrorKind::FileRemovalFailed(full_path.to_string_lossy().into()))?;
+
+    if let Some(path) = full_thumb_path {
+        fs::remove_file(path.clone())
+            .chain_err(|| ErrorKind::FileRemovalFailed(path.to_string_lossy().into()))?;
+    }
 
     Ok(())
 }
