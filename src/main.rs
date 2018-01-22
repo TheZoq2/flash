@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_doc_comment)]
 
-#![feature(associated_type_defaults)]
+//#![feature(associated_type_defaults)]
 
 #![recursion_limit="1024"]
 

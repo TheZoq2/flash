@@ -45,7 +45,7 @@ pub fn save_file(
     -> Result<(File, FileSavingWorkerResults)>
 {
     //Get the folder where we want to place the stored file
-    let destination_dir = PathBuf::from(fdb.get_file_save_path());
+    let destination_dir = fdb.get_file_save_path();
 
     //Copy the file to the destination
     //Get the name and path of the new file
