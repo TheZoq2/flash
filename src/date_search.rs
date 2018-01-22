@@ -1,4 +1,4 @@
-use chrono::{NaiveDateTime, NaiveTime, NaiveDate, Datelike, Duration};
+use chrono::{NaiveDateTime, NaiveTime, NaiveDate, Datelike, Duration, Weekday};
 
 use std::vec::Vec;
 use std::str::{FromStr, SplitWhitespace};
@@ -198,9 +198,9 @@ pub fn parse_date_query(query: &str, current_time: &NaiveDateTime)
             Ok(DateConstraints::with_intervals(parse_absolute_search(&mut words, current_time)?)),
         Some("in") | Some("on") =>
             Ok(DateConstraints::with_constraints(parse_date_pattern_search(&mut words)?)),
-        Some("between") => unimplemented!(),
         // Special keywords, or unexpected tokens
         Some("since") => Ok(DateConstraints::with_intervals(parse_full_date_string(&mut words, current_time)?)),
+        // Some("between") => unimplemented!(), TODO
         Some(other) => Err(TimeParseError::UnexpectedWord(other.to_string())),
         None => Err(TimeParseError::UnexpectedEndOfQuery)
     }
@@ -217,7 +217,10 @@ fn parse_modulu_search(query: &mut SplitWhitespace, current_time: &NaiveDateTime
 
     let start_date = match time_descriptor {
         TimeDescriptor::Day => current_time.date(),
-        TimeDescriptor::Week => unimplemented!("NaiveDateTime does not have a week concept"),
+        TimeDescriptor::Week => {
+            let week = current_time.iso_week();
+            NaiveDate::from_isoywd(current_time.year(), week.week(), Weekday::Mon)
+        }
         TimeDescriptor::Month => current_time.date().with_day0(0).unwrap(),
         TimeDescriptor::Year => current_time.date().with_day0(0)
                 .unwrap()
@@ -332,22 +335,12 @@ mod parse_tests {
     */
     fn test_query(
             query: &str,
-            current_time: &str,
-            expected_in: Vec<&str>,
-            expected_out: Vec<&str>
+            current_time: NaiveDateTime,
+            expected_in: Vec<NaiveDateTime>,
+            expected_out: Vec<NaiveDateTime>
         ) -> Result<(), String>
     {
-        let current_time = NaiveDateTime::parse_from_str(current_time, "%Y-%m-%d %H:%M:%S")
-                .unwrap();
-
         let query_result = parse_date_query(query, &current_time)?;
-
-        let expected_in: Vec<NaiveDateTime> = expected_in.iter()
-                .map(|val| NaiveDateTime::parse_from_str(val, "%Y-%m-%d %H:%M:%S").unwrap())
-                .collect();
-        let expected_out: Vec<NaiveDateTime> = expected_out.iter()
-                .map(|val| NaiveDateTime::parse_from_str(val, "%Y-%m-%d %H:%M:%S").unwrap())
-                .collect();
 
         for time in expected_in {
             if !timestamp_in_query_result(&time, &query_result) {
@@ -372,40 +365,54 @@ mod parse_tests {
     fn modulu_search_test() {
         assert_matches!(test_query(
                 "this day",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-09-09 09:30:36",
+                    NaiveDate::from_ymd(2017,09,09).and_hms(09,30,36),
                 ),
                 vec!(
-                    "2017-09-10 12:00:00",
-                    "2017-10-10 12:00:00",
-                    "2016-09-09 12:00:00",
+                    NaiveDate::from_ymd(2017,09,10).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,10,10).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2016,09,09).and_hms(12,00,00),
                 )
             ), Ok(()));
 
         assert_matches!(test_query(
                 "this month",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-09-09 09:30:36",
-                    "2017-09-01 09:30:36",
+                    NaiveDate::from_ymd(2017,09,09).and_hms(09,30,36),
+                    NaiveDate::from_ymd(2017,09,01).and_hms(09,30,36),
                 ),
                 vec!(
-                    "2017-10-10 12:00:00",
-                    "2016-09-09 12:00:00",
+                    NaiveDate::from_ymd(2017,10,10).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2016,09,09).and_hms(12,00,00),
                 )
             ), Ok(()));
 
         assert_matches!(test_query(
                 "this year",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-09-09 09:30:36",
-                    "2017-09-01 09:30:36",
-                    "2017-07-10 19:03:35"
+                    NaiveDate::from_ymd(2017,09,09).and_hms(09,30,36),
+                    NaiveDate::from_ymd(2017,09,01).and_hms(09,30,36),
+                    NaiveDate::from_ymd(2017,07,10).and_hms(19,03,35)
                 ),
                 vec!(
-                    "2016-09-09 12:00:00",
+                    NaiveDate::from_ymd(2016,09,09).and_hms(12,00,00),
+                )
+            ), Ok(()));
+
+        // First of january 2018 was a monday Started on
+        assert_matches!(test_query(
+                "this week",
+                NaiveDate::from_ymd(2018,01,03).and_hms(12,00,00),
+                vec!(
+                    NaiveDate::from_ymd(2018,01,02).and_hms(09,30,36),
+                    NaiveDate::from_ymd(2018,01,01).and_hms(09,30,36),
+                ),
+                vec!(
+                    NaiveDate::from_ymd(2017,12,31).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2018,01,08).and_hms(12,00,00),
                 )
             ), Ok(()));
     }
@@ -414,58 +421,58 @@ mod parse_tests {
     fn absolute_search_test() {
         assert_matches!(test_query(
                 "past day",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-09-08 23:30:36",
-                    "2017-09-09 10:30:36",
+                    NaiveDate::from_ymd(2017,09,08).and_hms(23,30,36),
+                    NaiveDate::from_ymd(2017,09,09).and_hms(10,30,36),
                 ),
                 vec!(
-                    "2017-07-10 19:03:35",
-                    "2017-09-07 19:03:35"
+                    NaiveDate::from_ymd(2017,07,10).and_hms(19,03,35),
+                    NaiveDate::from_ymd(2017,09,07).and_hms(19,03,35)
                 )
             ), Ok(()));
 
         assert_matches!(test_query(
                 "past week",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-09-08 23:30:36",
-                    "2017-09-09 10:30:36",
-                    "2017-09-02 23:30:36",
+                    NaiveDate::from_ymd(2017,09,08).and_hms(23,30,36),
+                    NaiveDate::from_ymd(2017,09,09).and_hms(10,30,36),
+                    NaiveDate::from_ymd(2017,09,02).and_hms(23,30,36),
                 ),
                 vec!(
-                    "2016-09-01 12:00:00",
-                    "2017-07-10 19:03:35"
+                    NaiveDate::from_ymd(2016,09,01).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,07,10).and_hms(19,03,35)
                 )
             ), Ok(()));
 
         assert_matches!(test_query(
                 "past month",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-09-08 23:30:36",
-                    "2017-09-09 10:30:36",
-                    "2017-09-02 23:30:36",
-                    "2017-08-10 23:30:36",
+                    NaiveDate::from_ymd(2017,09,08).and_hms(23,30,36),
+                    NaiveDate::from_ymd(2017,09,09).and_hms(10,30,36),
+                    NaiveDate::from_ymd(2017,09,02).and_hms(23,30,36),
+                    NaiveDate::from_ymd(2017,08,10).and_hms(23,30,36),
                 ),
                 vec!(
-                    "2016-08-08 12:00:00",
-                    "2017-07-10 19:03:35"
+                    NaiveDate::from_ymd(2016,08,08).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,07,10).and_hms(19,03,35)
                 )
             ), Ok(()));
 
         assert_matches!(test_query(
                 "past year",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-09-08 23:30:36",
-                    "2017-09-09 10:30:36",
-                    "2017-09-02 23:30:36",
-                    "2017-08-10 23:30:36",
-                    "2016-09-30 19:03:35"
+                    NaiveDate::from_ymd(2017,09,08).and_hms(23,30,36),
+                    NaiveDate::from_ymd(2017,09,09).and_hms(10,30,36),
+                    NaiveDate::from_ymd(2017,09,02).and_hms(23,30,36),
+                    NaiveDate::from_ymd(2017,08,10).and_hms(23,30,36),
+                    NaiveDate::from_ymd(2016,09,30).and_hms(19,03,35)
                 ),
                 vec!(
-                    "2016-09-08 12:00:00",
+                    NaiveDate::from_ymd(2016,09,08).and_hms(12,00,00),
                 )
             ), Ok(()));
     }
@@ -475,54 +482,54 @@ mod parse_tests {
         // From a single month
         assert_matches!(test_query(
                 "in august",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-08-08 12:00:00",
-                    "2017-08-20 12:00:00",
-                    "2016-08-20 12:00:00",
-                    "2015-08-20 12:00:00"
+                    NaiveDate::from_ymd(2017,08,08).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,08,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2016,08,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2015,08,20).and_hms(12,00,00)
                 ),
                 vec!(
-                    "2017-09-08 12:00:00",
-                    "2017-06-20 12:00:00",
-                    "2016-09-20 12:00:00",
-                    "2015-07-20 12:00:00"
+                    NaiveDate::from_ymd(2017,09,08).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,06,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2016,09,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2015,07,20).and_hms(12,00,00)
                 )
             ), Ok(()));
 
         // From a sepcific day number
         assert_matches!(test_query(
                 "on 25",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-09-25 12:00:00",
-                    "2017-06-25 12:00:00",
-                    "2016-09-25 12:00:00",
-                    "2015-08-25 12:00:00"
+                    NaiveDate::from_ymd(2017,09,25).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,06,25).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2016,09,25).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2015,08,25).and_hms(12,00,00)
                 ),
                 vec!(
-                    "2017-09-08 12:00:00",
-                    "2017-06-20 12:00:00",
-                    "2016-09-20 12:00:00",
-                    "2015-07-20 12:00:00"
+                    NaiveDate::from_ymd(2017,09,08).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,06,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2016,09,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2015,07,20).and_hms(12,00,00)
                 )
             ), Ok(()));
         //
         // From a sepcific year
         assert_matches!(test_query(
                 "in 2017",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-09-25 12:00:00",
-                    "2017-06-25 12:00:00",
-                    "2017-09-08 12:00:00",
-                    "2017-06-20 12:00:00",
+                    NaiveDate::from_ymd(2017,09,25).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,06,25).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,09,08).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,06,20).and_hms(12,00,00),
                 ),
                 vec!(
-                    "2016-09-20 12:00:00",
-                    "2015-07-20 12:00:00",
-                    "2016-09-25 12:00:00",
-                    "2015-08-25 12:00:00"
+                    NaiveDate::from_ymd(2016,09,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2015,07,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2016,09,25).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2015,08,25).and_hms(12,00,00)
                 )
             ), Ok(()));
     }
@@ -532,14 +539,14 @@ mod parse_tests {
         // From a single month
         assert_matches!(test_query(
                 "since 2017-10-01",
-                "2017-12-23 12:00:00",
+                NaiveDate::from_ymd(2017,12,23).and_hms(12,00,00),
                 vec!(
-                    "2017-10-20 12:00:00",
-                    "2017-11-20 12:00:00"
+                    NaiveDate::from_ymd(2017,10,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,11,20).and_hms(12,00,00)
                 ),
                 vec!(
-                    "2016-08-08 12:00:00",
-                    "2017-09-20 12:00:00",
+                    NaiveDate::from_ymd(2016,08,08).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,09,20).and_hms(12,00,00),
                 )
             ), Ok(()));
     }
@@ -549,34 +556,34 @@ mod parse_tests {
         // From a month in a year
         assert_matches!(test_query(
                 "in august 2017",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-08-25 12:00:00",
-                    "2017-08-25 12:00:00",
-                    "2017-08-08 12:00:00",
+                    NaiveDate::from_ymd(2017,08,25).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,08,25).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,08,08).and_hms(12,00,00),
                 ),
                 vec!(
-                    "2017-09-20 12:00:00",
-                    "2017-07-20 12:00:00",
-                    "2016-08-25 12:00:00",
-                    "2015-08-25 12:00:00"
+                    NaiveDate::from_ymd(2017,09,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,07,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2016,08,25).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2015,08,25).and_hms(12,00,00)
                 )
             ), Ok(()));
 
         // From a specific date any year
         assert_matches!(test_query(
                 "on august 26",
-                "2017-09-09 12:00:00",
+                NaiveDate::from_ymd(2017,09,09).and_hms(12,00,00),
                 vec!(
-                    "2017-08-26 12:00:00",
-                    "2016-08-26 12:00:00",
-                    "2015-08-26 12:00:00",
+                    NaiveDate::from_ymd(2017,08,26).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2016,08,26).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2015,08,26).and_hms(12,00,00),
                 ),
                 vec!(
-                    "2017-09-20 12:00:00",
-                    "2017-07-20 12:00:00",
-                    "2016-08-25 12:00:00",
-                    "2015-08-25 12:00:00"
+                    NaiveDate::from_ymd(2017,09,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2017,07,20).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2016,08,25).and_hms(12,00,00),
+                    NaiveDate::from_ymd(2015,08,25).and_hms(12,00,00)
                 )
             ), Ok(()));
     }
