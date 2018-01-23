@@ -27,7 +27,7 @@ use changelog::{
     ChangeCreationPolicy,
     ChangeType,
     UpdateType,
-    sort_changes
+    sorted_changes
 };
 
 
@@ -285,7 +285,7 @@ impl FileDatabase {
         for db_entry in db_entries {
             changes.push(Change::from_db_entry(&db_entry)?);
         }
-        Ok(sort_changes(changes))
+        Ok(sorted_changes(&changes))
     }
 
     pub fn add_syncpoint(&self, syncpoint: &SyncPoint) -> Result<()> {

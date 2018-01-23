@@ -61,9 +61,10 @@ fn type_order_int(change_type: &ChangeType) -> u8 {
   are conflicts it ensures that additions happen before updates which happens
   before removals
 */
-pub fn sort_changes(changes: Vec<Change>) -> Vec<Change> {
+pub fn sorted_changes(changes: &[Change]) -> Vec<Change> {
 
-    let mut result = changes.clone();
+    let mut result = changes.to_vec();
+
     result.sort_by(|change1, change2| {
         match change1.timestamp.cmp(&change2.timestamp) {
             Ordering::Equal => {

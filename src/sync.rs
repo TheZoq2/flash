@@ -115,7 +115,7 @@ fn apply_changes(
                             file,
                             thumbnail,
                             change.affected_file,
-                            &vec!(),
+                            &[],
                             fdb,
                             ChangeCreationPolicy::No,
                             &file_details.extension,
