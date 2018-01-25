@@ -487,21 +487,6 @@ pub mod db_test_helpers {
     }
 }
 
-#[cfg(test)]
-macro_rules! db_test {
-    ($fn_name:ident($fdbname:ident) $function:tt) => {
-        #[test]
-        fn $fn_name() {
-            mod internal {
-                use super::*;
-                pub fn testfun($fdbname: &mut FileDatabase)
-                    $function
-            }
-            db_test_helpers::run_test(internal::testfun);
-        }
-    }
-}
-
 /*
    Tests
  */
