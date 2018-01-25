@@ -4,7 +4,7 @@ use std::sync::mpsc::{channel, Receiver};
 
 use file_database::{FileDatabase, File};
 
-use error::{Result, Error, ErrorKind, ResultExt};
+use error::{Result, ErrorKind, ResultExt};
 
 
 use std::thread;

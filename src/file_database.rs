@@ -149,7 +149,12 @@ impl FileDatabase {
     /**
       Changes the tags of a specified file. Returns the new file object
     */
-    pub fn change_file_tags(&self, file: &File, tags: &[String]) -> Result<File> {
+    pub fn change_file_tags(
+        &self,
+        file: &File,
+        tags: &[String],
+        change_policy: ChangeCreationPolicy
+    ) -> Result<File> {
         let result = diesel::update(files::table.find(file.id))
             .set(files::tags.eq(tags))
             .get_result(&self.connection);
@@ -183,7 +188,12 @@ impl FileDatabase {
         Ok(())
     }
 
-    pub fn set_file_timestamp(&self, file: &File, timestamp: &NaiveDateTime) -> Result<()> {
+    pub fn set_file_timestamp(
+        &self,
+        file: &File,
+        timestamp: &NaiveDateTime,
+        cange_policy: ChangeCreationPolicy
+    ) -> Result<()> {
         let result = diesel::update(files::table.find(file.id))
             .set(files::creation_date.eq(timestamp))
             .execute(&self.connection);
@@ -443,6 +453,21 @@ pub mod db_test_helpers {
     }
 }
 
+#[cfg(test)]
+macro_rules! db_test {
+    ($fn_name:ident($fdbname:ident) $function:tt) => {
+        #[test]
+        fn $fn_name() {
+            mod internal {
+                use super::*;
+                pub fn testfun($fdbname: &mut FileDatabase)
+                    $function
+            }
+            db_test_helpers::run_test(internal::testfun);
+        }
+    }
+}
+
 /*
    Tests
  */
@@ -458,40 +483,17 @@ mod db_tests {
 
     use date_search;
 
-    use test_macros::naive_datetime_from_date;
-
     use super::db_test_helpers::{
         get_files_with_tags,
         get_file_paths_with_tags,
         get_file_paths_from_files
     };
 
-    use changelog::{ChangeType, Change, UpdateType};
-
     //////////////////////////////////////////////////
     // Tests
     //////////////////////////////////////////////////
 
-    /**
-      Since the results of these tests depend on the database state,
-      they can not be run concurrently
-    */
-    #[test]
-    fn database_test() {
-        db_test_helpers::run_test(empty_search_should_return_all_files);
-        db_test_helpers::run_test(add_test);
-        db_test_helpers::run_test(multi_tag_test);
-        db_test_helpers::run_test(modify_tags_test);
-        db_test_helpers::run_test(negated_tags_test);
-        db_test_helpers::run_test(timestamp_search);
-        db_test_helpers::run_test(files_should_be_ordered_by_date);
-        db_test_helpers::run_test(update_only_updates_the_affected_file);
-        db_test_helpers::run_test(file_drop_works);
-        db_test_helpers::run_test(file_drop_works);
-        db_test_helpers::run_test(database_changes_create_change_entries);
-    }
-
-    fn add_test(fdb: &mut FileDatabase) {
+    db_test!{add_test(fdb) {
         fdb.add_new_file(
             1,
             "test1",
@@ -545,9 +547,9 @@ mod db_tests {
             get_file_paths_with_tags(&fdb, vec!["unused_tag".to_string()], vec![])
                 .is_empty()
         );
-    }
+    }}
 
-    fn multi_tag_test(fdb: &mut FileDatabase) {
+    db_test!{multi_tag_test(fdb) {
         fdb.add_new_file(
             1,
             "test1",
@@ -594,9 +596,9 @@ mod db_tests {
 
         let no_tags = get_files_with_tags(&fdb, vec![], vec![]);
         assert!(no_tags.len() == 3);
-    }
+    }}
 
-    fn modify_tags_test(fdb: &mut FileDatabase) {
+    db_test!{modify_tags_test(fdb) {
         let file = fdb.add_new_file(
             1,
             "test1",
@@ -606,7 +608,7 @@ mod db_tests {
             ChangeCreationPolicy::No
         );
 
-        fdb.change_file_tags(&file, &vec!["new_tag".to_string()])
+        fdb.change_file_tags(&file, &vec!["new_tag".to_string()], ChangeCreationPolicy::No)
             .unwrap();
 
         assert!(
@@ -617,10 +619,10 @@ mod db_tests {
             get_files_with_tags(&fdb, vec!["old_tag".to_string()], vec![])
                 .len() == 0
         );
-    }
+    }}
 
 
-    fn negated_tags_test(fdb: &mut FileDatabase) {
+    db_test!{negated_tags_test(fdb) {
         fdb.add_new_file(
             1,
             "test1",
@@ -654,9 +656,9 @@ mod db_tests {
         assert!(get_file_paths_from_files(&result).contains(&"test1".to_owned()) == false);
         assert!(get_file_paths_from_files(&result).contains(&"test2".to_owned()));
         assert!(get_file_paths_from_files(&result).contains(&"test3".to_owned()));
-    }
+    }}
 
-    fn timestamp_search(fdb: &mut FileDatabase) {
+    db_test!{timestamp_search(fdb) {
         fdb.add_new_file(
                 1,
                 "file1",
@@ -713,9 +715,9 @@ mod db_tests {
         assert!(get_file_paths_from_files(&function_result).contains(&"file1".to_owned()));
         assert!(get_file_paths_from_files(&function_result).contains(&"file2".to_owned()) == false);
         assert!(get_file_paths_from_files(&function_result).contains(&"file3".to_owned()) == false);
-    }
+    }}
 
-    fn empty_search_should_return_all_files(fdb: &mut FileDatabase) {
+    db_test!{empty_search_should_return_all_files(fdb) {
         fdb.add_new_file(
                 1,
                 "file1",
@@ -744,9 +746,9 @@ mod db_tests {
         let result = fdb.search_files(search::SavedSearchQuery::empty());
 
         assert_eq!(result.len(), 3);
-    }
+    }}
 
-    fn files_should_be_ordered_by_date(fdb: &mut FileDatabase) {
+    db_test!{files_should_be_ordered_by_date(fdb) {
         fdb.add_new_file(
                 1,
                 "file1",
@@ -781,12 +783,12 @@ mod db_tests {
             }
             last_date = file.creation_date;
         }
-    }
+    }}
 
     /**
       Investigates bug with changelog changes affecting multiple files
     */
-    fn update_only_updates_the_affected_file(fdb: &mut FileDatabase) {
+    db_test!{update_only_updates_the_affected_file(fdb) {
         fdb.add_new_file(
                 1,
                 "file1",
@@ -813,9 +815,9 @@ mod db_tests {
 
         assert!( files_with_tag.contains(&"file1".to_string()) == false);
         assert!( files_with_tag .contains(&"file2".to_string()));
-    }
+    }}
 
-    fn file_drop_works(fdb: &mut FileDatabase) {
+    db_test!{file_drop_works(fdb) {
         fdb.add_new_file(
                 1,
                 "file1",
@@ -839,12 +841,24 @@ mod db_tests {
         assert_matches!(file, Some(_));
         let file = fdb.get_file_with_id(2);
         assert_matches!(file, None);
-    }
+    }}
+}
+
+#[cfg(test)]
+mod chage_tests {
+    use super::*;
+
+    use changelog::ChangeCreationPolicy;
+
+    use chrono::{NaiveDate};
+
+
+    use changelog::{ChangeType, Change, UpdateType};
 
     /**
       Ensures that the correct changes get added to the database.
     */
-    fn database_changes_create_change_entries(fdb: &mut FileDatabase) {
+    db_test!{file_additions_create_changes(fdb) {
         let first_file_timestamp = NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0);
         let second_file_timestamp = NaiveDate::from_ymd(2017,1,2).and_hms(0,0,0);
 
@@ -883,7 +897,76 @@ mod db_tests {
             2,
             ChangeType::FileAdded,
         ));
+    }}
 
-        // TODO: Add tests for other edits than addition
-    }
+    /**
+      Ensures that tag removals and additions create changes
+    */
+    db_test!{tag_edits_create_changes(fdb) {
+        let timestamp = NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0);
+
+        // Set up a file with a single tag
+        let file = fdb.add_new_file(
+                1,
+                "file1",
+                Some("thumb1"),
+                &mapvec![String::from: "tag", "yolo"],
+                NaiveDate::from_ymd(2017,01,01).and_hms(0,0,0).timestamp() as u64,
+                ChangeCreationPolicy::No
+            );
+
+        // Set new tags for the file. Yolo is kept and no change should be created for it
+        fdb.change_file_tags(
+            &file,
+            &mapvec![String::from: "yolo", "swag"],
+            ChangeCreationPolicy::Yes(timestamp)
+        );
+
+        let changes = fdb.get_all_changes().expect("Failed to get changes from database");
+        assert_eq!(changes.len(), 2);
+
+
+        assert!(changes.contains(&Change::new(
+            timestamp,
+            1,
+            ChangeType::Update(UpdateType::TagAdded("swag".into())),
+        )));
+        assert!(changes.contains(&Change::new(
+            timestamp,
+            1,
+            ChangeType::Update(UpdateType::TagRemoved("tag".into())),
+        )));
+    }}
+
+    db_test!{timestamp_changes_create_edits(fdb) {
+        let change_timestamp = NaiveDate::from_ymd(2017,10,1).and_hms(0,0,0);
+        let new_timestamp = NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0);
+
+        // Set up a file with a single tag
+        let file = fdb.add_new_file(
+                1,
+                "file1",
+                Some("thumb1"),
+                &mapvec![String::from: "tag", "yolo"],
+                NaiveDate::from_ymd(2017,01,01).and_hms(0,0,0).timestamp() as u64,
+                ChangeCreationPolicy::No
+            );
+
+        // Set new tags for the file. Yolo is kept and no change should be created for it
+        fdb.set_file_timestamp(
+            &file,
+            &new_timestamp,
+            ChangeCreationPolicy::Yes(change_timestamp)
+        );
+
+        let changes = fdb.get_all_changes().expect("FAiled to get changes from database");
+        assert_eq!(changes.len(), 1);
+
+
+        assert!(changes.contains(&Change::new(
+            change_timestamp,
+            1,
+            ChangeType::Update(UpdateType::CreationDateChanged(new_timestamp)),
+        )));
+    }}
 }

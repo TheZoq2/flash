@@ -4,16 +4,26 @@ use search::SavedSearchQuery;
 
 use file_util;
 
+use chrono::Utc;
+
+use changelog::ChangeCreationPolicy;
+
 pub fn fix_timestamps(fdb: &FileDatabase) {
     // Fetch all files
     let files = fdb.search_files(SavedSearchQuery::empty());
+
+    let change_policy = ChangeCreationPolicy::Yes(Utc::now().naive_utc());
 
     // Read their creation time from exif. If it fails do nothing. Else update the file
     for file in files {
         let path = fdb.get_file_save_path().join(&file.filename);
 
         match file_util::get_file_timestamp_from_metadata(&path) {
-            Ok(Some(actual_creation_date)) => fdb.set_file_timestamp(&file, &actual_creation_date).unwrap(),
+            Ok(Some(actual_creation_date)) => fdb.set_file_timestamp(
+                &file,
+                &actual_creation_date,
+                change_policy.clone()
+            ).unwrap(),
             Ok(None) => {},
             Err(e) => {
                 println!("Failed to read file timestamp: {}", e);

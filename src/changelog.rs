@@ -122,6 +122,7 @@ pub struct SyncPoint {
     pub last_change: NaiveDateTime
 }
 
+#[derive(Clone)]
 pub enum ChangeCreationPolicy {
     Yes(NaiveDateTime),
     No
@@ -202,6 +203,6 @@ mod changelog_tests {
             )
         );
 
-        assert_eq!(sort_changes(changes), expected_order);
+        assert_eq!(sorted_changes(&changes), expected_order);
     }
 }

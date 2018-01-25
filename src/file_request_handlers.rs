@@ -4,13 +4,10 @@ use serde_json;
 use iron::*;
 use persistent::Write;
 
-use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use std::sync::Mutex;
 use std::sync::Arc;
-use std::sync::mpsc::{channel, Receiver};
 
 use chrono::{NaiveDateTime, Utc};
 
@@ -20,11 +17,12 @@ use file_list::{FileListList, FileLocation};
 use file_list_worker;
 use persistent_file_list;
 use file_util::sanitize_tag_names;
-use file_util::{get_semi_unique_identifier, get_file_timestamp};
+use file_util::{get_semi_unique_identifier};
 use request_helpers::get_get_variable;
 use file_handler::{save_file, FileSavingWorkerResults, ThumbnailStrategy};
 use byte_source::ByteSource;
 use changelog;
+use changelog::ChangeCreationPolicy;
 
 use file_list_response;
 
@@ -158,8 +156,8 @@ fn file_request_handler(request: &mut Request, action: &FileAction) -> IronResul
         FileAction::Save => {
             let db = request.get::<Write<FileDatabase>>().unwrap();
             let tags = get_tags_from_request(request)?;
-
-            match handle_save_request(db, &file_location, &tags)? {
+            let current_time = NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0);
+            match handle_save_request(db, &file_location, &tags, current_time)? {
                 FileSaveRequestResult::NewDatabaseEntry(new_location, _) |
                 FileSaveRequestResult::UpdatedDatabaseEntry(new_location) => {
                     let mut file_list_list = request.get::<Write<FileListList>>().unwrap();
@@ -254,11 +252,11 @@ fn handle_save_request(
     db: Arc<Mutex<FileDatabase>>,
     file_location: &FileLocation,
     tags: &[String],
+    change_timestamp: NaiveDateTime
 ) -> Result<FileSaveRequestResult> {
     match *file_location {
         FileLocation::Unsaved(ref path) => {
-            let current_time = NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0);
-            match save_new_file(db, path, tags, current_time) {
+            match save_new_file(db, path, tags, change_timestamp) {
                 Ok((db_entry, save_result_rx)) => {
                     Ok(FileSaveRequestResult::NewDatabaseEntry(
                         FileLocation::Database(db_entry),
@@ -269,7 +267,7 @@ fn handle_save_request(
             }
         }
         FileLocation::Database(ref old_file) => {
-            match update_stored_file(db, old_file, tags) {
+            match update_stored_file_tags(db, old_file, tags, change_timestamp) {
                 Ok(db_entry) => {
                     Ok(FileSaveRequestResult::UpdatedDatabaseEntry(
                         FileLocation::Database(db_entry),
@@ -318,13 +316,14 @@ fn save_new_file(
 /**
   Updates a specified file in the database with new tags
 */
-fn update_stored_file(
+fn update_stored_file_tags(
     db: Arc<Mutex<FileDatabase>>,
     old_entry: &file_database::File,
     tags: &[String],
+    change_timestamp: NaiveDateTime
 ) -> Result<file_database::File> {
     let db = db.lock().unwrap();
-    db.change_file_tags(old_entry, tags)
+    db.change_file_tags(old_entry, tags, ChangeCreationPolicy::Yes(change_timestamp))
 }
 
 
@@ -580,7 +579,13 @@ mod file_request_tests {
         let tags = vec!("new1".to_owned());
 
         let saved_entry = {
-            let result = handle_save_request(fdb.clone(), &FileLocation::Unsaved(old_path), &tags);
+            let timestamp = NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0);
+            let result = handle_save_request(
+                fdb.clone(),
+                &FileLocation::Unsaved(old_path),
+                &tags,
+                timestamp
+            );
 
             assert_matches!(result, Ok(_));
             let result = result.unwrap();
@@ -635,8 +640,15 @@ mod file_request_tests {
         let tags = vec!("new1".to_owned());
 
         let saved_entry = {
+            let timestamp = NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0);
+
             let result =
-                handle_save_request(fdb.clone(), &FileLocation::Database(old_location), &tags);
+                handle_save_request(
+                    fdb.clone(),
+                    &FileLocation::Database(old_location),
+                    &tags,
+                    timestamp
+                );
 
             assert_matches!(result, Ok(_));
             let result = result.unwrap();
