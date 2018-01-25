@@ -159,6 +159,34 @@ impl FileDatabase {
             .set(files::tags.eq(tags))
             .get_result(&self.connection);
 
+        if let ChangeCreationPolicy::Yes(timestamp) = change_policy {
+            // Filter removed tags and add changes for them
+            let removed_tags =
+                file.tags.iter()
+                    .filter(|tag| !tags.contains(tag))
+                    .collect::<Vec<_>>();
+
+            let added_tags =
+                tags.iter()
+                    .filter(|tag| !file.tags.contains(tag))
+                    .collect::<Vec<_>>();
+
+            for tag in removed_tags {
+                self.add_change(&Change::new(
+                        timestamp,
+                        file.id,
+                        ChangeType::Update(UpdateType::TagRemoved(tag.to_string()))
+                    ))?;
+            }
+            for tag in added_tags {
+                self.add_change(&Change::new(
+                        timestamp,
+                        file.id,
+                        ChangeType::Update(UpdateType::TagAdded(tag.to_string()))
+                    ))?;
+            }
+        }
+
         match result {
             Ok(val) => Ok(val),
             Err(e) => Err(e.into())
@@ -191,12 +219,18 @@ impl FileDatabase {
     pub fn set_file_timestamp(
         &self,
         file: &File,
-        timestamp: &NaiveDateTime,
-        cange_policy: ChangeCreationPolicy
+        timestamp: NaiveDateTime,
+        change_policy: ChangeCreationPolicy
     ) -> Result<()> {
         let result = diesel::update(files::table.find(file.id))
             .set(files::creation_date.eq(timestamp))
             .execute(&self.connection);
+
+        self.handle_change_creation_policy(
+            &change_policy,
+            file.id,
+            ChangeType::Update(UpdateType::CreationDateChanged(timestamp))
+        )?;
 
         match result {
             Ok(_) => Ok(()),
@@ -955,7 +989,7 @@ mod chage_tests {
         // Set new tags for the file. Yolo is kept and no change should be created for it
         fdb.set_file_timestamp(
             &file,
-            &new_timestamp,
+            new_timestamp,
             ChangeCreationPolicy::Yes(change_timestamp)
         );
 

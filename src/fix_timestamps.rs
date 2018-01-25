@@ -21,7 +21,7 @@ pub fn fix_timestamps(fdb: &FileDatabase) {
         match file_util::get_file_timestamp_from_metadata(&path) {
             Ok(Some(actual_creation_date)) => fdb.set_file_timestamp(
                 &file,
-                &actual_creation_date,
+                actual_creation_date,
                 change_policy.clone()
             ).unwrap(),
             Ok(None) => {},
