@@ -498,7 +498,7 @@ mod db_tests {
 
     use std::sync::Arc;
 
-    use chrono::{Datelike, NaiveDate};
+    use chrono::{NaiveDate};
 
     use date_search;
 
@@ -939,7 +939,7 @@ mod chage_tests {
             &file,
             &mapvec![String::from: "yolo", "swag"],
             ChangeCreationPolicy::Yes(timestamp)
-        );
+        ).expect("File tag change failed");
 
         let changes = fdb.get_all_changes().expect("Failed to get changes from database");
         assert_eq!(changes.len(), 2);
@@ -976,7 +976,7 @@ mod chage_tests {
             &file,
             new_timestamp,
             ChangeCreationPolicy::Yes(change_timestamp)
-        );
+        ).expect("Failed to set file timestamp");
 
         let changes = fdb.get_all_changes().expect("FAiled to get changes from database");
         assert_eq!(changes.len(), 1);
