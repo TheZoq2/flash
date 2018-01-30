@@ -498,7 +498,7 @@ mod db_tests {
 
     use std::sync::Arc;
 
-    use chrono::{NaiveDate};
+    use chrono::{NaiveDate, Datelike};
 
     use date_search;
 
@@ -869,10 +869,10 @@ mod chage_tests {
 
     use changelog::ChangeCreationPolicy;
 
-    use chrono::{NaiveDate};
-
+    use chrono::{NaiveDate, Datelike};
 
     use changelog::{ChangeType, Change, UpdateType};
+
 
     /**
       Ensures that the correct changes get added to the database.

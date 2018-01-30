@@ -17,6 +17,10 @@ extern crate regex;
 #[macro_use]
 extern crate error_chain;
 
+extern crate futures;
+extern crate hyper;
+extern crate tokio_core;
+
 #[macro_use]
 extern crate diesel;
 extern crate dotenv;
@@ -59,6 +63,7 @@ mod sync;
 mod util;
 mod file_handler;
 mod byte_source;
+mod foreign_server;
 
 mod fix_timestamps;
 

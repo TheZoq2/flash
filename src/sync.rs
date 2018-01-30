@@ -9,26 +9,7 @@ use file_handler::ThumbnailStrategy;
 
 use chrono::prelude::*;
 
-#[derive(Clone)]
-pub struct FileDetails {
-    pub extension: String,
-    pub timestamp: NaiveDateTime
-}
-
-impl FileDetails {
-    pub fn new(extension: String, timestamp: NaiveDateTime) -> Self {
-        Self { extension, timestamp }
-    }
-}
-
-pub trait ForeignServer {
-    fn get_syncpoints(&self) -> Result<Vec<SyncPoint>>;
-    fn get_changes(&self, starting_timestamp: &Option<SyncPoint>) -> Result<Vec<Change>>;
-    fn get_file_details(&self, id: i32) -> Result<FileDetails>;
-    fn send_changes(&self, changes: &[Change], new_syncpoint: &SyncPoint) -> Result<()>;
-    fn get_file(&self, id: i32) -> Result<Vec<u8>>;
-    fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>>;
-}
+use foreign_server::{ForeignServer, FileDetails};
 
 
 

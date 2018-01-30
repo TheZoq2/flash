@@ -14,6 +14,9 @@ error_chain! {
         Diesel(::diesel::result::Error);
         ImageError(::image::ImageError);
         Utf8(::std::string::FromUtf8Error);
+        StrUtf8(::std::str::Utf8Error);
+        Hyper(::hyper::Error);
+        HyperUri(::hyper::error::UriError);
     }
 
     errors {
@@ -82,6 +85,12 @@ error_chain! {
         NoSuchFileInDatabase(file_id: i32) {
             description("The database did not contain a file with the specified id")
             display("The database did not contain a file with id {}", file_id)
+        }
+
+        // Foreign server errors
+        ForeignHttpError(url: String) {
+            description("Failed to contact foreign server")
+            display("Foreign server communication failed. Url: {}", url)
         }
     }
 }
