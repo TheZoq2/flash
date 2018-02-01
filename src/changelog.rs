@@ -24,7 +24,7 @@ pub enum ChangeType {
     Update(UpdateType)
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Change {
     pub change_type: ChangeType,
     pub affected_file: i32,
@@ -116,7 +116,7 @@ impl<'a> From<&'a ChangeDbEntry> for InsertableChange<'a> {
 }
 
 
-#[derive(Queryable, Insertable, PartialEq, Clone, Debug)]
+#[derive(Queryable, Insertable, Serialize, Deserialize, PartialEq, Clone, Debug)]
 #[table_name="syncpoints"]
 pub struct SyncPoint {
     pub last_change: NaiveDateTime

@@ -2,6 +2,8 @@ use error::{Result, ErrorKind, ResultExt};
 use changelog::{SyncPoint, Change};
 use chrono::NaiveDateTime;
 
+use itertools::Itertools;
+
 use serde_json;
 use serde;
 
@@ -45,6 +47,59 @@ pub trait ForeignServer {
 //                      Http implementation
 ////////////////////////////////////////////////////////////////////////////////
 
+const FOREIGN_SCHEME: &'static str = "http";
+
+fn construct_url(scheme: &str, dns: &str, path: &[String], query: &[(String, String)]) -> String {
+    let mut result = String::new();
+    result += scheme;
+    result += "://";
+    result += dns;
+    result += "/";
+
+    let path_str = path.iter()
+        .map(|s| s.clone())
+        .intersperse("/".to_string())
+        .collect::<String>();
+
+    result += &path_str;
+
+    result += "?";
+    let query_str = query.iter()
+        .map(|&(ref var, ref val)| var.clone() + "=" + &val)
+        .intersperse("&".to_string())
+        .collect::<String>();
+
+    result += &query_str;
+
+    result
+}
+/**
+  Sends a request to the foreign server and parses the result as `T`
+*/
+fn send_request<'a, T: serde::de::DeserializeOwned>(full_url: String) -> Result<T> {
+    // Combine the url and request
+    let uri = full_url.parse().chain_err(|| ErrorKind::ForeignHttpError(full_url.clone()))?;
+
+    // Create a tokio core to exectue the request
+    let mut core = Core::new()?;
+
+    //Set up a hyper client client
+    let client = Client::new(&core.handle());
+
+    // Create the future
+    let work = client.get(uri)
+        .and_then(|res| {
+            // Parse the chunks
+            res.body().concat2()
+        })
+        .map(|body| -> Result<T> {
+            Ok(serde_json::from_str::<T>(from_utf8(body.as_ref())?)?)
+        });
+
+    // Execute the future
+    core.run(work)?
+}
+
 struct HttpForeignServer {
     url: String,
 }
@@ -56,42 +111,30 @@ impl HttpForeignServer {
         }
     }
 
-    /**
-      Sends a request to the foreign server and parses the result as `T`
-    */
-    fn send_request<'a, T: serde::de::DeserializeOwned>(&self, request: &str) -> Result<T> {
-        // Combine the url and request
-        let full_url = self.url.clone() + request;
-        let uri = full_url.parse().chain_err(|| ErrorKind::ForeignHttpError(full_url.clone()))?;
-
-        // Create a tokio core to exectue the request
-        let mut core = Core::new()?;
-
-        //Set up a hyper client client
-        let client = Client::new(&core.handle());
-
-        // Create the future
-        let work = client.get(uri)
-            .and_then(|res| {
-                // Parse the chunks
-                res.body().concat2()
-            })
-            .map(|body| -> Result<T> {
-                Ok(serde_json::from_str::<T>(from_utf8(body.as_ref())?)?)
-            });
-
-        // Execute the future
-        core.run(work)?
-    }
 }
 
 
 impl ForeignServer for HttpForeignServer {
     fn get_syncpoints(&self) -> Result<Vec<SyncPoint>> {
-        unimplemented!()
+        let syncpoint_path = vec!(String::from("sync"), String::from("syncpoints"));
+        let url = construct_url(FOREIGN_SCHEME, &self.url, &syncpoint_path, &[]);
+
+        Ok(send_request(url)?)
     }
-    fn get_changes(&self, starting_timestamp: &Option<SyncPoint>) -> Result<Vec<Change>> {
-        unimplemented!()
+    fn get_changes(&self, starting_syncpoint: &Option<SyncPoint>) -> Result<Vec<Change>> {
+        let change_path = vec!(String::from("sync"), String::from("changes"));
+
+        let query = match *starting_syncpoint {
+            Some(SyncPoint{last_change}) => vec!((
+                String::from("timestamp"),
+                format!("{}", last_change.timestamp())
+            )),
+            None => vec!()
+        };
+
+        let url = construct_url(FOREIGN_SCHEME, &self.url, &change_path, &query);
+
+        Ok(send_request(url)?)
     }
     fn get_file_details(&self, id: i32) -> Result<FileDetails> {
         unimplemented!()
@@ -107,6 +150,7 @@ impl ForeignServer for HttpForeignServer {
     }
 }
 
+
 #[cfg(test)]
 mod http_tests {
     use super::*;
@@ -118,10 +162,41 @@ mod http_tests {
             pub url: String
         }
 
-        let foreign_server = HttpForeignServer::new("http://httpbin.org".to_string());
-        let response = foreign_server.send_request::<Response>("/get?test=true");
+        let response = send_request::<Response>("http://httpbin.org/get?test=true".to_string());
 
         let expected = Response{url: "http://httpbin.org/get?test=true".to_string()};
+        assert_matches!(response, Ok(expected));
+    }
+
+    #[test]
+    fn url_construction_test() {
+        let url = construct_url(
+            "https",
+            "httpbin.org",
+            &mapvec!(String::from: "path", "to"),
+            &vec!(("var".to_string(), "val".to_string()), ("test".to_string(), "something".to_string()))
+        );
+
+        assert_eq!(url, "https://httpbin.org/path/to?var=val&test=something");
+    }
+
+    #[test]
+    fn constructed_urls_are_valid() {
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Response {
+            pub url: String
+        }
+
+        let url = construct_url(
+            "http",
+            "httpbin.org",
+            &vec!("get".to_string()),
+            &vec!(("test".to_string(), "true".to_string()))
+        );
+        assert_eq!(url, "http://httpbin.org/get?test=true");
+        let response = send_request::<Response>(url.clone());
+
+        let expected = Response{url: url.to_string()};
         assert_matches!(response, Ok(expected));
     }
 }

@@ -16,6 +16,7 @@ extern crate lazy_static;
 extern crate regex;
 #[macro_use]
 extern crate error_chain;
+extern crate itertools;
 
 extern crate futures;
 extern crate hyper;
@@ -60,6 +61,7 @@ mod file_list_response;
 mod error;
 mod changelog;
 mod sync;
+mod sync_handlers;
 mod util;
 mod file_handler;
 mod byte_source;
