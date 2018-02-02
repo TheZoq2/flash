@@ -7,7 +7,6 @@ use itertools::Itertools;
 use serde_json;
 use serde;
 
-use std::io::{self, Write};
 use futures::{Future, Stream};
 use hyper::Client;
 use tokio_core::reactor::Core;
@@ -74,10 +73,16 @@ fn construct_url(scheme: &str, dns: &str, path: &[String], query: &[(String, Str
     result
 }
 /**
-  Sends a request to the foreign server and parses the result as `T`
+  Sends a request to the foreign server and parses the result as json for `T`
 */
 fn send_request<'a, T: serde::de::DeserializeOwned>(full_url: String) -> Result<T> {
-    // Combine the url and request
+    let bytes = send_request_for_bytes(full_url)?;
+
+    Ok(serde_json::from_str::<T>(from_utf8(&bytes)?)?)
+}
+
+fn send_request_for_bytes(full_url: String) -> Result<Vec<u8>> {
+    // Parse the url into a hyper uri
     let uri = full_url.parse().chain_err(|| ErrorKind::ForeignHttpError(full_url.clone()))?;
 
     // Create a tokio core to exectue the request
@@ -92,12 +97,12 @@ fn send_request<'a, T: serde::de::DeserializeOwned>(full_url: String) -> Result<
             // Parse the chunks
             res.body().concat2()
         })
-        .map(|body| -> Result<T> {
-            Ok(serde_json::from_str::<T>(from_utf8(body.as_ref())?)?)
+        .map(|body| -> Vec<u8> {
+            body.to_vec()
         });
 
     // Execute the future
-    core.run(work)?
+    Ok(core.run(work)?)
 }
 
 struct HttpForeignServer {
@@ -110,7 +115,6 @@ impl HttpForeignServer {
             url,
         }
     }
-
 }
 
 
@@ -143,7 +147,11 @@ impl ForeignServer for HttpForeignServer {
         unimplemented!()
     }
     fn get_file(&self, id: i32) -> Result<Vec<u8>> {
-        unimplemented!()
+        let file_path = vec!(String::from("sync"), String::from("file"));
+        let query = vec!((String::from("file_id"), format!("{}", id)));
+        let url = construct_url("http", &self.url, &file_path, &query);
+
+        Ok(send_request_for_bytes(url)?)
     }
     fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>> {
         unimplemented!()
@@ -165,7 +173,8 @@ mod http_tests {
         let response = send_request::<Response>("http://httpbin.org/get?test=true".to_string());
 
         let expected = Response{url: "http://httpbin.org/get?test=true".to_string()};
-        assert_matches!(response, Ok(expected));
+        assert_matches!(response, Ok(_));
+        assert_eq!(response.unwrap(), expected);
     }
 
     #[test]
@@ -197,7 +206,8 @@ mod http_tests {
         let response = send_request::<Response>(url.clone());
 
         let expected = Response{url: url.to_string()};
-        assert_matches!(response, Ok(expected));
+        assert_matches!(response, Ok(_));
+        assert_eq!(response.unwrap(), expected);
     }
 }
 
