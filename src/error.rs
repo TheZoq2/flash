@@ -92,6 +92,11 @@ error_chain! {
             description("Failed to contact foreign server")
             display("Foreign server communication failed. Url: {}", url)
         }
+
+        WrongHttpStatusCode(code: ::hyper::StatusCode) {
+            description("Got an unexpected HTTP statuscode")
+            display("HTTP request returned status {}", code.as_u16())
+        }
     }
 }
 
