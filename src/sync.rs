@@ -130,7 +130,7 @@ fn apply_file_update(fdb: &FileDatabase, affected_file: i32, file_update: &Updat
         UpdateType::TagRemoved(ref tag) => {
             file.tags = file.tags.into_iter().filter(|t| t != tag).collect()
         }
-        UpdateType::CreationDateChanged(date) => file.creation_date = Some(date)
+        UpdateType::CreationDateChanged(date) => file.creation_date = date
     }
 
     fdb.update_file_without_creating_change(&file)?;
@@ -355,7 +355,7 @@ mod sync_tests {
 
         let file = fdb.get_file_with_id(1).unwrap();
 
-        assert_eq!(file.creation_date, Some(new_timestamp));
+        assert_eq!(file.creation_date, new_timestamp);
     }
 
     fn file_system_changes_work(fdb: &mut FileDatabase) {

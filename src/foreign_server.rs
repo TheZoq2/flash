@@ -30,7 +30,7 @@ impl FileDetails {
 
 impl<'a> From<&'a ::file_database::File> for FileDetails {
     fn from(file: &'a ::file_database::File) -> Self {
-        let extension = ::std::path::PathBuf::from(file.filename)
+        let extension = ::std::path::PathBuf::from(file.filename.clone())
             .extension()
             .map(|e| e.to_string_lossy().to_string())
             .unwrap_or("".to_string());

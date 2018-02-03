@@ -422,7 +422,7 @@ mod file_request_tests {
             id: 0,
             filename: file_path.to_owned(),
             thumbnail_path: Some(thumbnail_path.to_owned()),
-            creation_date: None,
+            creation_date: NaiveDate::from_ymd(2016,1,1).and_hms(0,0,0),
             is_uploaded: true,
             tags: vec![],
         }

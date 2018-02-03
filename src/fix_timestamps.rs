@@ -65,8 +65,8 @@ mod timestamp_fix_tests {
         let first_file = fdb.get_file_with_id(first_file_id).unwrap();
         let second_file = fdb.get_file_with_id(second_file_id).unwrap();
         let third_file = fdb.get_file_with_id(third_file_id).unwrap();
-        assert_eq!(first_file.creation_date, Some(NaiveDate::from_ymd(2016,12,16).and_hms(21,34,26)));
-        assert_eq!(second_file.creation_date, Some(NaiveDateTime::from_timestamp(500, 0)));
-        assert_eq!(third_file.creation_date, Some(NaiveDate::from_ymd(2017,10,24).and_hms(18,3,0)));
+        assert_eq!(first_file.creation_date, NaiveDate::from_ymd(2016,12,16).and_hms(21,34,26));
+        assert_eq!(second_file.creation_date, NaiveDateTime::from_timestamp(500, 0));
+        assert_eq!(third_file.creation_date, NaiveDate::from_ymd(2017,10,24).and_hms(18,3,0));
     }
 }

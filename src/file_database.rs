@@ -271,10 +271,7 @@ impl FileDatabase {
                 date_constraints.constraints
                     .iter()
                     .fold(true, |acc, constraint_function|{
-                        if let Some(creation_date) = file.creation_date {
-                            acc && constraint_function(&creation_date)
-                        }
-                        else {false}
+                        acc && constraint_function(&file.creation_date)
                     })
             })
             .collect()

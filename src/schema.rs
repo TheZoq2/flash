@@ -13,7 +13,7 @@ table! {
         id -> Int4,
         filename -> Text,
         thumbnail_path -> Nullable<Text>,
-        creation_date -> Nullable<Timestamp>,
+        creation_date -> Timestamp,
         is_uploaded -> Bool,
         tags -> Array<Text>,
     }
@@ -25,4 +25,3 @@ table! {
         last_change -> Timestamp,
     }
 }
-
