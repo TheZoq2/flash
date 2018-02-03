@@ -43,7 +43,7 @@ pub struct File {
 
     pub thumbnail_path: Option<String>,
 
-    pub creation_date: Option<NaiveDateTime>,
+    pub creation_date: NaiveDateTime,
 
     pub is_uploaded: bool,
 

@@ -28,6 +28,20 @@ impl FileDetails {
     }
 }
 
+impl<'a> From<&'a ::file_database::File> for FileDetails {
+    fn from(file: &'a ::file_database::File) -> Self {
+        let extension = ::std::path::PathBuf::from(file.filename)
+            .extension()
+            .map(|e| e.to_string_lossy().to_string())
+            .unwrap_or("".to_string());
+
+        FileDetails {
+            extension,
+            timestamp: file.creation_date
+        }
+    }
+}
+
 /**
   Trait for communicating with another flash server
 */

@@ -13,6 +13,8 @@ use chrono::NaiveDateTime;
 use std::fs::File;
 use std::io::prelude::*;
 
+use foreign_server::FileDetails;
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //                  Request handlers
@@ -54,6 +56,31 @@ pub fn file_request_handler(request: &mut Request) -> IronResult<Response> {
     Ok(Response::with((status::Ok, file)))
 }
 
+pub fn thumbnail_request_handler(request: &mut Request) -> IronResult<Response> {
+    let mutex = request.get::<Write<FileDatabase>>().unwrap();
+    let fdb = mutex.lock().unwrap();
+
+    let file_id = get_get_i64(request, "file_id")?;
+
+    let thumb = match handle_thumbnail_request(&fdb, file_id as i32)? {
+        Some(bytes) => bytes,
+        None => vec!()
+    };
+
+    Ok(Response::with((status::Ok, thumb)))
+}
+
+pub fn file_detail_handler(request: &mut Request) -> IronResult<Response> {
+    let mutex = request.get::<Write<FileDatabase>>().unwrap();
+    let fdb = mutex.lock().unwrap();
+
+    let file_id = get_get_i64(request, "file_id")?;
+
+    let file_details = handle_file_detail_request(&fdb, file_id as i32)?;
+
+    Ok(Response::with((status::Ok, to_json_with_result(&file_details)?)))
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //                  Private functions for handling requests
 ////////////////////////////////////////////////////////////////////////////////
@@ -84,8 +111,23 @@ fn handle_file_request(fdb: &FileDatabase, id: i32) -> Result<Vec<u8>> {
     Ok(content)
 }
 
+fn handle_thumbnail_request(fdb: &FileDatabase, id: i32) -> Result<Option<Vec<u8>>> {
+    let thumbnail_path = fdb.get_file_with_id_result(id)?.thumbnail_path;
 
+    if let Some(thumbnail_path) = thumbnail_path {
+        let mut file = File::open(thumbnail_path)?;
+        let mut content = vec!();
+        file.read_to_end(&mut content)?;
 
+        Ok(Some(content))
+    }
+    else {
+        Ok(None)
+    }
+}
 
+fn handle_file_detail_request(fdb: &FileDatabase, id: i32) -> Result<FileDetails> {
+    let file = fdb.get_file_with_id_result(id)?;
+}
 
 
