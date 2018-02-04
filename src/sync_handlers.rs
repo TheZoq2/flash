@@ -129,7 +129,7 @@ fn handle_thumbnail_request(fdb: &FileDatabase, id: i32) -> Result<Option<Vec<u8
 fn handle_file_detail_request(fdb: &FileDatabase, id: i32) -> Result<FileDetails> {
     let file = fdb.get_file_with_id_result(id)?;
 
-    unimplemented!()
+    Ok(FileDetails::from(&file))
 }
 
 
