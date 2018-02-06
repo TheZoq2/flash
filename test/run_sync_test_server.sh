@@ -13,10 +13,12 @@ if ! mkdir -p ${FILE_STORAGE_PATH} > /dev/null; then
     exit -1
 fi
 
-# Clear the folder target folder
-if ! rm -r ${FILE_STORAGE_PATH:?}/* > /dev/null; then
-    echo "Failed to remove content of storage folder"
-    exit -1
+# Clear the folder target folder if it is non-empty
+if [ -z "$(ls ${FILE_STORAGE_PATH})" ]; then : ; else
+    if ! rm -r ${FILE_STORAGE_PATH:?}/* > /dev/null; then
+        echo "Failed to remove content of storage folder"
+        exit -1
+    fi
 fi
 
 
