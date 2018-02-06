@@ -117,7 +117,11 @@ fn send_request_for_bytes(full_url: String) -> Result<Vec<u8>> {
                 StatusCode::Ok => {
                     Ok(body.to_vec())
                 }
-                code => Err(ErrorKind::WrongHttpStatusCode(status).into())
+                code => {
+                    let body = String::from_utf8(body.to_vec())
+                        .unwrap_or("Invalid UTF8".to_string());
+                    Err(ErrorKind::WrongHttpStatusCode(code, body.to_string()).into())
+                }
             }
         });
 
@@ -125,7 +129,7 @@ fn send_request_for_bytes(full_url: String) -> Result<Vec<u8>> {
     Ok(core.run(work)??)
 }
 
-struct HttpForeignServer {
+pub struct HttpForeignServer {
     url: String,
 }
 
@@ -261,3 +265,104 @@ mod http_tests {
     }
 }
 
+
+#[cfg(test)]
+mod sync_integration {
+    use super::*;
+    use foreign_server::HttpForeignServer;
+    use file_database::{db_test_helpers, FileDatabase};
+
+    /**
+      Runs the foreign server by launching the test script and kills it when
+      it goes out of scope. This ensures that the server does not keep running
+      after failed assertions
+    */
+    struct ForeignServerRunner {
+        pid: String
+    }
+    impl ForeignServerRunner {
+        pub fn run() -> Self {
+            // Start the foreign server
+            let mut command = ::std::process::Command::new("test/run_sync_test_server.sh");
+
+            // Read the output from the startup script
+            let output = command.output().expect("Failed to read test server starter output");
+
+            // Ensure that the test server starts correctly
+            if !output.status.success() {
+                panic!("Test server startup failed. Output: {:#?}", output);
+            };
+
+            // Get the pid of the test server to kill it later
+            let test_script_output = String::from_utf8(output.stdout)
+                .expect("Output was not valid utf-8");
+            let pid = test_script_output
+                .lines()
+                .next()
+                .expect("test script output did not have any lines")
+                .to_string();
+
+            Self{pid}
+        }
+    }
+    impl ::std::ops::Drop for ForeignServerRunner {
+        fn drop(&mut self) {
+            // Kill the test server as it is no longer needed
+            let kill_output = ::std::process::Command::new("kill")
+                .arg(self.pid.clone())
+                .output()
+                .expect("Failed to kill test server");
+        }
+    }
+
+    db_test!{sync_works(fdb) {
+        let _process = ForeignServerRunner::run();
+
+        let url = "localhost:3001";
+
+        // Actual tests
+        sync_test(url, fdb);
+
+    }}
+
+    fn sync_test(foreign_url: &str, fdb: &FileDatabase) {
+        let foreign_server = HttpForeignServer::new(foreign_url.to_string());
+
+        // Set up some files on the foreign server
+        // Create a file list
+        send_request_for_bytes(construct_url(
+            "http",
+            foreign_url,
+            &vec!("search".into()),
+            &vec!(("query".into(), "/".into()))
+        )).expect("Search request failed");
+
+        // Save the first file in the list
+        send_request_for_bytes(construct_url(
+            "http",
+            foreign_url,
+            &vec!("list".into()),
+            &vec!(
+                ("action".into(), "save".into()),
+                ("list_id".into(), "0".into()),
+                ("index".into(), "0".into()),
+                ("tags".into(), "[\"test\",\"stuff\"]".into())
+            )
+        )).expect("First save request failed");
+
+        // Update the tags
+        send_request_for_bytes(construct_url(
+            "http",
+            foreign_url,
+            &vec!("list".into()),
+            &vec!(
+                ("action".into(), "save".into()),
+                ("list_id".into(), "0".into()),
+                ("index".into(), "0".into()),
+                ("tags".into(), "[\"test\",\"things\"]".into())
+            )
+        )).expect("Second Save request failed");
+
+        ::sync::sync_with_foreign(fdb, &foreign_server);
+    }
+}

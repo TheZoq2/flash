@@ -140,6 +140,7 @@ fn main() {
     let url = format!("0.0.0.0:{}", port);
     match Iron::new(chain).http(url) {
         Ok(_) => {
+            println!("ready");
             println!("Server running on port {}", port);
             println!("Open http://localhost:{}/album.html", port);
         }

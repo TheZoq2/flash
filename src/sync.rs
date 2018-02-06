@@ -203,7 +203,6 @@ mod sync_tests {
         }
 
         fn send_changes(&self, _: &[Change], _: &SyncPoint) -> Result<()> {
-            //unimplemented!()
             Ok(())
         }
         fn get_file(&self, id: i32) -> Result<Vec<u8>> {

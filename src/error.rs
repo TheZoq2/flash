@@ -93,9 +93,9 @@ error_chain! {
             display("Foreign server communication failed. Url: {}", url)
         }
 
-        WrongHttpStatusCode(code: ::hyper::StatusCode) {
+        WrongHttpStatusCode(code: ::hyper::StatusCode, body: String) {
             description("Got an unexpected HTTP statuscode")
-            display("HTTP request returned status {}", code.as_u16())
+            display("HTTP request returned status {}. Response: {}", code.as_u16(), body)
         }
     }
 }
