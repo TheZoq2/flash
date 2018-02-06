@@ -17,6 +17,7 @@ Params:
 
 Variants:
 - `lists`
+
 #### Per list
 Params:
 - `list_id`: `usize`. Id of the queried list
