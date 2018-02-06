@@ -79,4 +79,19 @@ be overwritten but the tags will be updated
 Params:
 - `tags` List of strings to use as the tags for the saved file
 
+## Sync
+
+Subpaths:
+- `syncpoints`
+- `file_details`
+- `file`
+- `thumbnail`
+- `changes`
+
+### `changes`
+
+Returns all changes after a certain time
+
+Params:
+- `starting_timestamp`: `i64` Timestamp after which the returned changes should be made
 

@@ -115,7 +115,7 @@ fn handle_thumbnail_request(fdb: &FileDatabase, id: i32) -> Result<Option<Vec<u8
     let thumbnail_path = fdb.get_file_with_id_result(id)?.thumbnail_path;
 
     if let Some(thumbnail_path) = thumbnail_path {
-        let mut file = File::open(thumbnail_path)?;
+        let mut file = File::open(fdb.get_file_save_path().join(thumbnail_path))?;
         let mut content = vec!();
         file.read_to_end(&mut content)?;
 

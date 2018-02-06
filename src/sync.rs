@@ -3,7 +3,7 @@ use changelog::{Change, SyncPoint, ChangeType, UpdateType, ChangeCreationPolicy}
 use byte_source::{ByteSource};
 
 use file_database::{FileDatabase};
-use error::{Result, ErrorKind};
+use error::{Result, ErrorKind, ResultExt};
 use file_handler;
 use file_handler::ThumbnailStrategy;
 
@@ -29,17 +29,20 @@ pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
 
 pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> Result<()> {
     // Get the syncpoints from the local and remote servers
-    let local_syncpoints = fdb.get_syncpoints()?;
-    let remote_syncpoints = foreign_server.get_syncpoints()?;
+    let local_syncpoints = fdb.get_syncpoints()
+        .chain_err(|| "Failed to get local syncpoints")?;
+    let remote_syncpoints = foreign_server.get_syncpoints()
+        .chain_err(|| "Failed to get remote syncpoints")?;
 
     // Find the highest common syncpoint
     let sync_merge_start = last_common_syncpoint(&local_syncpoints, &remote_syncpoints);
 
     // Get the changes that have been made locally since that change
     let local_changes = match sync_merge_start {
-        Some(ref syncpoint) => fdb.get_changes_after_timestamp(&syncpoint.last_change)?,
-        None => fdb.get_all_changes()?
-    };
+        Some(ref syncpoint) => fdb.get_changes_after_timestamp(&syncpoint.last_change),
+        None => fdb.get_all_changes()
+    }.chain_err(|| "Failed to get local changes")?;
+
     // Find all files that have been removed localy
     let local_removed_files: Vec<_> = local_changes.iter()
         .filter_map(|change| match change.change_type {
@@ -49,7 +52,8 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
         .collect();
 
     // Fetch all remote changes that have been made on the remote server
-    let remote_changes = foreign_server.get_changes(&sync_merge_start)?;
+    let remote_changes = foreign_server.get_changes(&sync_merge_start)
+        .chain_err(|| "Failed to get remote changes")?;
 
     // Create a new syncpoint
     let new_syncpoint = SyncPoint{
@@ -57,10 +61,12 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
         };
 
     // Send the changes to the remote server to apply
-    foreign_server.send_changes(&local_changes, &new_syncpoint)?;
+    foreign_server.send_changes(&local_changes, &new_syncpoint)
+        .chain_err(|| "Failed to send changes")?;
 
     // Apply changes locally
     apply_changes(fdb, foreign_server, &remote_changes, &local_removed_files)
+        .chain_err(|| "Failed to apply changes")
 }
 
 
@@ -81,13 +87,21 @@ fn apply_changes(
                 apply_file_update(fdb, change.affected_file, update_type)?
             }
             ChangeType::FileAdded => {
-                let file_details = foreign_server.get_file_details(change.affected_file)?;
+                let file_details = foreign_server.get_file_details(change.affected_file)
+                    .chain_err(|| "Failed to get fille details")?;
 
-                let file = ByteSource::Memory(foreign_server.get_file(change.affected_file)?);
-                let thumbnail = match foreign_server.get_thumbnail(change.affected_file)? {
-                    Some(data) =>
-                        ThumbnailStrategy::FromByteSource(ByteSource::Memory(data)),
-                    None => ThumbnailStrategy::None
+                let file = ByteSource::Memory(
+                    foreign_server.get_file(change.affected_file)
+                        .chain_err(|| "Failed to get file")?
+                );
+                let thumbnail = {
+                    let from_server = foreign_server.get_thumbnail(change.affected_file)
+                        .chain_err(|| "Failed to get thumbnail")?;
+                    match from_server {
+                        Some(data) =>
+                            ThumbnailStrategy::FromByteSource(ByteSource::Memory(data)),
+                        None => ThumbnailStrategy::None
+                    }
                 };
 
                 let file_timestamp = file_details.timestamp;
@@ -101,7 +115,7 @@ fn apply_changes(
                             ChangeCreationPolicy::No,
                             &file_details.extension,
                             file_timestamp.timestamp() as u64
-                        )?;
+                        ).chain_err(|| "Failed to save file")?;
             }
             ChangeType::FileRemoved => {
                 file_handler::remove_file(change.affected_file, fdb, ChangeCreationPolicy::No)?;

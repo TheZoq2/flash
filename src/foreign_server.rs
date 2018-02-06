@@ -161,13 +161,14 @@ impl ForeignServer for HttpForeignServer {
     fn get_changes(&self, starting_syncpoint: &Option<SyncPoint>) -> Result<Vec<Change>> {
         let change_path = vec!(String::from("sync"), String::from("changes"));
 
-        let query = match *starting_syncpoint {
-            Some(SyncPoint{last_change}) => vec!((
-                String::from("timestamp"),
-                format!("{}", last_change.timestamp())
-            )),
-            None => vec!()
+        let starting_timestamp = match *starting_syncpoint {
+            Some(SyncPoint{last_change}) => last_change.timestamp(),
+            None => 0
         };
+
+        let query = vec!(
+            (String::from("starting_timestamp"), format!("{}", starting_timestamp))
+        );
 
         let url = construct_url(FOREIGN_SCHEME, &self.url, &change_path, &query);
 
@@ -179,7 +180,9 @@ impl ForeignServer for HttpForeignServer {
         send_request::<FileDetails>(url)
     }
     fn send_changes(&self, changes: &[Change], new_syncpoint: &SyncPoint) -> Result<()> {
-        unimplemented!()
+        //unimplemented!()
+        // TODO: impement
+        Ok(())
     }
     fn get_file(&self, id: i32) -> Result<Vec<u8>> {
         let url = self.get_file_sync_url(id, "file");
@@ -363,6 +366,14 @@ mod sync_integration {
             )
         )).expect("Second Save request failed");
 
-        ::sync::sync_with_foreign(fdb, &foreign_server);
+        ::sync::sync_with_foreign(fdb, &foreign_server)
+            .expect("Foregin sync failed");
+
+        let files = fdb.search_files(::search::SavedSearchQuery::empty());
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].tags, mapvec!(String::from: "test", "things"));
+
+        let changes = fdb.get_all_changes().expect("Failed to get changes");
+        assert_eq!(changes.len(), 5);
     }
 }
