@@ -1,6 +1,8 @@
 #!/bin/bash
 
-export DATABASE_URL=postgres://flash:123456@localhost/flash_sync
+source .env
+
+export DATABASE_URL=$DATABASE_FOREIGN_URL
 export FILE_STORAGE_PATH=/tmp/flash_sync
 export FILE_READ_PATH=test/media/foreign
 export FLASH_PORT=3001
