@@ -22,6 +22,7 @@ test:cargo:
         - ls -l $CI_PROJECT_DIR/cargo/bin/diesel | grep diesel || cargo install diesel_cli
         # Setup database
         - DATABASE_URL=$DATABASE_TEST_URL $DIESEL_EXE database setup
+        - cargo build --color=always
         - cargo test --color=always
     cache:
         paths:

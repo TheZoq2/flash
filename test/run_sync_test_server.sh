@@ -9,7 +9,6 @@ export FLASH_PORT=3001
 export LOG_FILE=/tmp/flash_sync/log
 export DIESEL_EXE=${DIESEL_EXE:=diesel}
 
-
 # Create storage dir
 if ! mkdir -p ${FILE_STORAGE_PATH} > /dev/null; then
     echo "Folder creation failed"
@@ -24,9 +23,11 @@ if [ -z "$(ls ${FILE_STORAGE_PATH})" ]; then : ; else
     fi
 fi
 
+echo "Database: $DATABASE_URL" >> $LOG_FILE
 
-#e Set up database
-if ! diesel database reset > $LOG_FILE; then
+
+# Set up database
+if ! diesel database reset >> $LOG_FILE; then
     echo "Database setup failed"
     cat $LOG_FILE
     exit -1
@@ -37,9 +38,15 @@ fi
 FIFO_NAME=/tmp/flash_sync/fifo
 mkfifo $FIFO_NAME
 # Run flash itself
-target/debug/flash < /dev/null &> $FIFO_NAME &
-# Get the pid of the program so we can kill it later
-FLASH_PID=$!
+if [ -e target/debug/flash ] ; then
+    target/debug/flash < /dev/null &> $FIFO_NAME &
+    # Get the pid of the program so we can kill it later
+    FLASH_PID=$!
+else
+    echo "Flash executable does not exist, did you forget to build it"
+    exit -1
+fi
+
 
 # Wait for the child process to get ready
 until grep -m 1 "ready" $FIFO_NAME > /dev/null; do sleep 0.1; done
