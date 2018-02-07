@@ -13,7 +13,7 @@ use chrono::NaiveDateTime;
 use std::fs::File;
 use std::io::prelude::*;
 
-use foreign_server::FileDetails;
+use foreign_server::{FileDetails, ChangeData};
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -71,14 +71,27 @@ pub fn thumbnail_request_handler(request: &mut Request) -> IronResult<Response> 
 }
 
 pub fn file_detail_handler(request: &mut Request) -> IronResult<Response> {
-    let mutex = request.get::<Write<FileDatabase>>().unwrap();
-    let fdb = mutex.lock().unwrap();
 
     let file_id = get_get_i64(request, "file_id")?;
 
+    let mutex = request.get::<Write<FileDatabase>>().unwrap();
+    let fdb = mutex.lock().unwrap();
     let file_details = handle_file_detail_request(&fdb, file_id as i32)?;
 
     Ok(Response::with((status::Ok, to_json_with_result(&file_details)?)))
+}
+
+pub fn sync_handler(request: &mut Request) -> IronResult<Response> {
+    let remote_url = request.remote_addr;
+
+    let mut body = String::new();
+    request.body.read_to_string(&mut body);
+
+    let change_data = serde_json::from_str(&body);
+
+    let mutex = request.get::<Write<FileDatabase>>().unwrap();
+    let fdb = mutex.lock().unwrap();
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////

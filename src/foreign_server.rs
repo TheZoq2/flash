@@ -43,13 +43,24 @@ impl<'a> From<&'a ::file_database::File> for FileDetails {
 }
 
 /**
+  Data about changes that should be applied on a foreign server
+
+  `syncpoint` is the new syncpoint that should be created
+*/
+#[derive(Serialize, Deserialize)]
+pub struct ChangeData {
+    changes: Vec<Change>,
+    syncpoint: SyncPoint,
+}
+
+/**
   Trait for communicating with another flash server
 */
 pub trait ForeignServer {
     fn get_syncpoints(&self) -> Result<Vec<SyncPoint>>;
     fn get_changes(&self, starting_timestamp: &Option<SyncPoint>) -> Result<Vec<Change>>;
     fn get_file_details(&self, id: i32) -> Result<FileDetails>;
-    fn send_changes(&self, changes: &[Change], new_syncpoint: &SyncPoint) -> Result<()>;
+    fn send_changes(&self, change: &ChangeData) -> Result<()>;
     fn get_file(&self, id: i32) -> Result<Vec<u8>>;
     fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>>;
 }
@@ -179,10 +190,8 @@ impl ForeignServer for HttpForeignServer {
 
         send_request::<FileDetails>(url)
     }
-    fn send_changes(&self, changes: &[Change], new_syncpoint: &SyncPoint) -> Result<()> {
-        //unimplemented!()
-        // TODO: impement
-        Ok(())
+    fn send_changes(&self, changes: &ChangeData) -> Result<()> {
+        unimplemented!()
     }
     fn get_file(&self, id: i32) -> Result<Vec<u8>> {
         let url = self.get_file_sync_url(id, "file");

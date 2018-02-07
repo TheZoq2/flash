@@ -9,7 +9,7 @@ use file_handler::ThumbnailStrategy;
 
 use chrono::prelude::*;
 
-use foreign_server::{ForeignServer, FileDetails};
+use foreign_server::{ForeignServer, FileDetails, ChangeData};
 
 
 
@@ -43,13 +43,6 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
         None => fdb.get_all_changes()
     }.chain_err(|| "Failed to get local changes")?;
 
-    // Find all files that have been removed localy
-    let local_removed_files: Vec<_> = local_changes.iter()
-        .filter_map(|change| match change.change_type {
-            ChangeType::FileRemoved => Some(change.affected_file),
-            _ => None
-        })
-        .collect();
 
     // Fetch all remote changes that have been made on the remote server
     let remote_changes = foreign_server.get_changes(&sync_merge_start)
@@ -61,7 +54,7 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
         };
 
     // Send the changes to the remote server to apply
-    foreign_server.send_changes(&local_changes, &new_syncpoint)
+    foreign_server.send_changes(&ChangeData{changes: local_changes, syncpoint: new_syncpoint})
         .chain_err(|| "Failed to send changes")?;
 
     // Apply changes locally
@@ -70,7 +63,7 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
 }
 
 
-fn apply_changes(
+pub fn apply_changes(
         fdb: &FileDatabase,
         foreign_server: &ForeignServer,
         changes: &[Change],
@@ -80,6 +73,14 @@ fn apply_changes(
     let changes_to_be_applied = changes.iter().filter(|change| {
         !local_removed_files.contains(&change.affected_file)
     });
+
+    // Find all files that have been removed localy
+    let local_removed_files: Vec<_> = local_changes.iter()
+        .filter_map(|change| match change.change_type {
+            ChangeType::FileRemoved => Some(change.affected_file),
+            _ => None
+        })
+        .collect();
 
     for change in changes_to_be_applied {
         match change.change_type {
