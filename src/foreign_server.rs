@@ -366,6 +366,8 @@ mod sync_integration {
             )
         )).expect("Second Save request failed");
 
+        // Wait for the foreign server to generate a thumbnail. TODO: Report this somehow
+        ::std::thread::sleep(::std::time::Duration::from_secs(2));
         ::sync::sync_with_foreign(fdb, &foreign_server)
             .expect("Foregin sync failed");
 
