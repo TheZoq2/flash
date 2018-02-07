@@ -1,4 +1,11 @@
-use changelog::{Change, SyncPoint, ChangeType, UpdateType, ChangeCreationPolicy};
+use changelog::{
+    Change,
+    SyncPoint,
+    ChangeType,
+    UpdateType,
+    ChangeCreationPolicy,
+    sorted_changes
+};
 
 use byte_source::{ByteSource};
 
@@ -27,6 +34,7 @@ pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
         })
 }
 
+
 pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> Result<()> {
     // Get the syncpoints from the local and remote servers
     let local_syncpoints = fdb.get_syncpoints()
@@ -42,11 +50,25 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
         Some(ref syncpoint) => fdb.get_changes_after_timestamp(&syncpoint.last_change),
         None => fdb.get_all_changes()
     }.chain_err(|| "Failed to get local changes")?;
-
-
     // Fetch all remote changes that have been made on the remote server
     let remote_changes = foreign_server.get_changes(&sync_merge_start)
         .chain_err(|| "Failed to get remote changes")?;
+
+    // Merge the change vectors
+    let changes = vec!();
+    changes.extend_from_slice(&local_changes);
+    changes.extend_from_slice(&remote_changes);
+    // Sort the changes chronologically
+    let changes = sorted_changes(&changes);
+
+    // Find all files that have been removed
+    let removed_files: Vec<_> = changes.iter()
+        .filter_map(|change| match change.change_type {
+            ChangeType::FileRemoved => Some(change.affected_file),
+            _ => None
+        })
+        .collect();
+
 
     // Create a new syncpoint
     let new_syncpoint = SyncPoint{
@@ -58,7 +80,7 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
         .chain_err(|| "Failed to send changes")?;
 
     // Apply changes locally
-    apply_changes(fdb, foreign_server, &remote_changes, &local_removed_files)
+    apply_changes(fdb, foreign_server, &remote_changes, &removed_files)
         .chain_err(|| "Failed to apply changes")
 }
 
@@ -67,20 +89,12 @@ pub fn apply_changes(
         fdb: &FileDatabase,
         foreign_server: &ForeignServer,
         changes: &[Change],
-        local_removed_files: &[i32],
+        removed_files: &[i32],
     ) -> Result<()>
 {
     let changes_to_be_applied = changes.iter().filter(|change| {
-        !local_removed_files.contains(&change.affected_file)
+        !removed_files.contains(&change.affected_file)
     });
-
-    // Find all files that have been removed localy
-    let local_removed_files: Vec<_> = local_changes.iter()
-        .filter_map(|change| match change.change_type {
-            ChangeType::FileRemoved => Some(change.affected_file),
-            _ => None
-        })
-        .collect();
 
     for change in changes_to_be_applied {
         match change.change_type {
@@ -125,8 +139,11 @@ pub fn apply_changes(
     }
 
     for change in changes {
+        compile_error!("Only add changes that are not in the db already");
         fdb.add_change(change)?;
     }
+
+    compile_error!("Remove files from removed_files if they were not removed locally");
 
     Ok(())
 }
