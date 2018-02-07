@@ -21,7 +21,7 @@ test:cargo:
         # Install diesel if a cached version is not present
         - ls -l $CI_PROJECT_DIR/cargo/bin/diesel | grep diesel || cargo install diesel_cli
         # Setup database
-        - DATABASE_URL=$DATABASE_TEST_URL $CI_PROJECT_DIR/cargo/bin/diesel database setup
+        - DATABASE_URL=$DATABASE_TEST_URL $DIESEL_EXE database setup
         - cargo test --color=always
     cache:
         paths:
@@ -38,5 +38,6 @@ variables:
     POSTGRES_DB: flash_test
     POSTGRES_USER: flash
     POSTGRES_PASSWORD: ""
+    DIESEL_EXE: $CI_PROJECT_DIR/cargo/bin/diesel
 
 

@@ -7,6 +7,7 @@ export FILE_STORAGE_PATH=/tmp/flash_sync
 export FILE_READ_PATH=test/media/foreign
 export FLASH_PORT=3001
 export LOG_FILE=/tmp/flash_sync/log
+export DIESEL_EXE=${DIESEL_EXE:=diesel}
 
 
 # Create storage dir
