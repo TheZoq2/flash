@@ -1,6 +1,7 @@
 use error::{Result, ErrorKind};
 
-use serde::Serialize;
+use serde::{Serialize};
+use serde::de::DeserializeOwned;
 use serde_json;
 
 use iron::*;
@@ -45,3 +46,12 @@ pub fn get_get_i64(request: &mut Request, name: &str) -> Result<i64> {
 pub fn to_json_with_result<T: Serialize>(data: T) -> Result<String> {
     Ok(serde_json::to_string(&data)?)
 }
+
+/**
+  Runs serde_json::from_str and converts the result to error::Result instead of
+  `serde_json::Result`
+*/
+pub fn from_json_with_result<'a, T: DeserializeOwned>(data: &str) -> Result<T> {
+    Ok(serde_json::from_str(data)?)
+}
+

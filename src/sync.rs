@@ -4,7 +4,6 @@ use changelog::{
     ChangeType,
     UpdateType,
     ChangeCreationPolicy,
-    sorted_changes
 };
 
 use byte_source::{ByteSource};
@@ -12,7 +11,7 @@ use byte_source::{ByteSource};
 use file_database::{FileDatabase};
 use error::{Result, ErrorKind, ResultExt};
 use file_handler;
-use file_handler::ThumbnailStrategy;
+use file_handler::{remove_file, ThumbnailStrategy};
 
 use chrono::prelude::*;
 
@@ -34,6 +33,14 @@ pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
         })
 }
 
+fn get_removed_files(changes: &[Change]) -> Vec<i32> {
+    changes.iter()
+        .filter_map(|change| match change.change_type {
+            ChangeType::FileRemoved => Some(change.affected_file),
+            _ => None
+        })
+        .collect()
+}
 
 pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> Result<()> {
     // Get the syncpoints from the local and remote servers
@@ -54,21 +61,10 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
     let remote_changes = foreign_server.get_changes(&sync_merge_start)
         .chain_err(|| "Failed to get remote changes")?;
 
-    // Merge the change vectors
-    let changes = vec!();
-    changes.extend_from_slice(&local_changes);
-    changes.extend_from_slice(&remote_changes);
-    // Sort the changes chronologically
-    let changes = sorted_changes(&changes);
-
     // Find all files that have been removed
-    let removed_files: Vec<_> = changes.iter()
-        .filter_map(|change| match change.change_type {
-            ChangeType::FileRemoved => Some(change.affected_file),
-            _ => None
-        })
-        .collect();
-
+    let mut removed_files = vec!();
+    removed_files.extend_from_slice(&get_removed_files(&local_changes));
+    removed_files.extend_from_slice(&get_removed_files(&remote_changes));
 
     // Create a new syncpoint
     let new_syncpoint = SyncPoint{
@@ -76,7 +72,13 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
         };
 
     // Send the changes to the remote server to apply
-    foreign_server.send_changes(&ChangeData{changes: local_changes, syncpoint: new_syncpoint})
+    foreign_server.send_changes(
+        &ChangeData{
+            changes: local_changes,
+            syncpoint: new_syncpoint,
+            removed_files: removed_files.clone()
+        }
+    )
         .chain_err(|| "Failed to send changes")?;
 
     // Apply changes locally
@@ -85,6 +87,13 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
 }
 
 
+/**
+  Applies the specified changes to the database. Any changes affecting files in 
+  the `removed_files` vec are ignored and the files are removed
+
+  The function does not check for changes that are already in the database which
+  means that such changes would be duplicated.
+*/
 pub fn apply_changes(
         fdb: &FileDatabase,
         foreign_server: &ForeignServer,
@@ -139,11 +148,14 @@ pub fn apply_changes(
     }
 
     for change in changes {
-        compile_error!("Only add changes that are not in the db already");
         fdb.add_change(change)?;
     }
 
-    compile_error!("Remove files from removed_files if they were not removed locally");
+    for id in removed_files {
+        if fdb.get_file_with_id(*id) != None {
+            remove_file(*id, &fdb, ChangeCreationPolicy::No)?;
+        }
+    }
 
     Ok(())
 }
@@ -234,7 +246,7 @@ mod sync_tests {
             Ok(self.file_data[&id].0.clone())
         }
 
-        fn send_changes(&self, _: &[Change], _: &SyncPoint) -> Result<()> {
+        fn send_changes(&self, _: &ChangeData) -> Result<()> {
             Ok(())
         }
         fn get_file(&self, id: i32) -> Result<Vec<u8>> {

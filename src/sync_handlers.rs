@@ -5,15 +5,17 @@ use file_database::FileDatabase;
 
 use changelog::{Change, SyncPoint};
 use error::{Result};
-use request_helpers::{get_get_i64, to_json_with_result};
+use request_helpers::{get_get_i64, to_json_with_result, from_json_with_result};
 
 use serde_json;
 use chrono::NaiveDateTime;
 
 use std::fs::File;
 use std::io::prelude::*;
+use std::thread;
 
 use foreign_server::{FileDetails, ChangeData};
+use sync::apply_changes;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -82,16 +84,20 @@ pub fn file_detail_handler(request: &mut Request) -> IronResult<Response> {
 }
 
 pub fn sync_handler(request: &mut Request) -> IronResult<Response> {
-    let remote_url = request.remote_addr;
+    let remote_addr = request.remote_addr;
 
     let mut body = String::new();
     request.body.read_to_string(&mut body);
 
-    let change_data = serde_json::from_str(&body);
+    let change_data = from_json_with_result::<ChangeData>(&body)?;
 
+    let foreign_server = unimplemented!();
     let mutex = request.get::<Write<FileDatabase>>().unwrap();
     let fdb = mutex.lock().unwrap();
 
+    apply_changes(&fdb, foreign_server, &change_data.changes, &change_data.removed_files);
+
+    Ok(Response::with((status::Ok, "")))
 }
 
 ////////////////////////////////////////////////////////////////////////////////

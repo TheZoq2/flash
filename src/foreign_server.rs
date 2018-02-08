@@ -49,8 +49,9 @@ impl<'a> From<&'a ::file_database::File> for FileDetails {
 */
 #[derive(Serialize, Deserialize)]
 pub struct ChangeData {
-    changes: Vec<Change>,
-    syncpoint: SyncPoint,
+    pub changes: Vec<Change>,
+    pub syncpoint: SyncPoint,
+    pub removed_files: Vec<i32>
 }
 
 /**
