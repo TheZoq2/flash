@@ -8,7 +8,14 @@ use serde_json;
 use serde;
 
 use futures::{Future, Stream, future};
-use hyper::{Client, StatusCode};
+use hyper::{
+    self,
+    Client,
+    StatusCode,
+    Request,
+    Method,
+    header,
+};
 use tokio_core::reactor::Core;
 
 use std::str::from_utf8;
@@ -101,15 +108,17 @@ fn construct_url(scheme: &str, dns: &str, path: &[String], query: &[(String, Str
 /**
   Sends a request to the foreign server and parses the result as json for `T`
 */
-fn send_request<'a, T: serde::de::DeserializeOwned>(full_url: String) -> Result<T> {
-    let bytes = send_request_for_bytes(full_url)?;
+fn send_request<'a, T: serde::de::DeserializeOwned>(full_url: &str, body: &str) -> Result<T> {
+    let bytes = send_request_for_bytes(full_url, body)?;
 
     Ok(serde_json::from_str::<T>(from_utf8(&bytes)?)?)
 }
 
-fn send_request_for_bytes(full_url: String) -> Result<Vec<u8>> {
+fn send_request_for_bytes(full_url: &str, body: &str) -> Result<Vec<u8>> {
     // Parse the url into a hyper uri
-    let uri = full_url.parse().chain_err(|| ErrorKind::ForeignHttpError(full_url.clone()))?;
+    let uri = full_url.parse().chain_err(
+        || ErrorKind::ForeignHttpError(full_url.clone().to_string())
+    )?;
 
     // Create a tokio core to exectue the request
     let mut core = Core::new()?;
@@ -117,8 +126,12 @@ fn send_request_for_bytes(full_url: String) -> Result<Vec<u8>> {
     //Set up a hyper client client
     let client = Client::new(&core.handle());
 
+    let mut request: Request<hyper::Body> = Request::new(Method::Get, uri);
+    request.set_body(body.to_string());
+    request.headers_mut().set(header::ContentLength(body.len() as u64));
+
     // Create the future
-    let work = client.get(uri)
+    let work = client.request(request)
         .and_then(|res| {
             // Parse the chunks
             let status = res.status();
@@ -168,7 +181,7 @@ impl ForeignServer for HttpForeignServer {
         let syncpoint_path = vec!(String::from("sync"), String::from("syncpoints"));
         let url = construct_url(FOREIGN_SCHEME, &self.url, &syncpoint_path, &[]);
 
-        Ok(send_request(url)?)
+        Ok(send_request(&url, "")?)
     }
     fn get_changes(&self, starting_syncpoint: &Option<SyncPoint>) -> Result<Vec<Change>> {
         let change_path = vec!(String::from("sync"), String::from("changes"));
@@ -184,20 +197,27 @@ impl ForeignServer for HttpForeignServer {
 
         let url = construct_url(FOREIGN_SCHEME, &self.url, &change_path, &query);
 
-        Ok(send_request(url)?)
+        Ok(send_request(&url, "")?)
     }
     fn get_file_details(&self, id: i32) -> Result<FileDetails> {
         let url = self.get_file_sync_url(id, "file_details");
 
-        send_request::<FileDetails>(url)
+        send_request::<FileDetails>(&url, "")
     }
     fn send_changes(&self, changes: &ChangeData) -> Result<()> {
-        unimplemented!()
+        let path = vec!(String::from("sync"), String::from("apply_changes"));
+        let query = vec!();
+        let url = construct_url(FOREIGN_SCHEME, &self.url, &path, &query);
+
+        let body = serde_json::to_string(changes)?;
+
+        send_request_for_bytes(&url, &body)?;
+        Ok(())
     }
     fn get_file(&self, id: i32) -> Result<Vec<u8>> {
         let url = self.get_file_sync_url(id, "file");
 
-        Ok(send_request_for_bytes(url)?)
+        Ok(send_request_for_bytes(&url, "")?)
     }
     /**
       Gets the thumbnail of the file with the specified ID. If the content returned
@@ -206,7 +226,7 @@ impl ForeignServer for HttpForeignServer {
     fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>> {
         let url = self.get_file_sync_url(id, "thumbnail");
 
-        let content = send_request_for_bytes(url)?;
+        let content = send_request_for_bytes(&url, "")?;
         match content.len() {
             0 => Ok(None),
             _ => Ok(Some(content))
@@ -226,7 +246,7 @@ mod http_tests {
 
     #[test]
     fn simple_request_test() {
-        let response = send_request::<Response>("http://httpbin.org/get?test=true".to_string());
+        let response = send_request::<Response>("http://httpbin.org/get?test=true", "");
 
         let expected = Response{url: "http://httpbin.org/get?test=true".to_string()};
         assert_matches!(response, Ok(_));
@@ -236,15 +256,15 @@ mod http_tests {
     #[test]
     fn statuscode_errors() {
         assert_matches!(
-            send_request_for_bytes("http://httpbin.org/status/404".to_string()),
+            send_request_for_bytes("http://httpbin.org/status/404", ""),
             Err(_)
         );
         assert_matches!(
-            send_request_for_bytes("http://httpbin.org/status/500".to_string()),
+            send_request_for_bytes("http://httpbin.org/status/500", ""),
             Err(_)
         );
         assert_matches!(
-            send_request_for_bytes("http://httpbin.org/status/200".to_string()),
+            send_request_for_bytes("http://httpbin.org/status/200", ""),
             Ok(_)
         );
     }
@@ -270,7 +290,7 @@ mod http_tests {
             &vec!(("test".to_string(), "true".to_string()))
         );
         assert_eq!(url, "http://httpbin.org/get?test=true");
-        let response = send_request::<Response>(url.clone());
+        let response = send_request::<Response>(&url, "");
 
         let expected = Response{url: url.to_string()};
         assert_matches!(response, Ok(_));
@@ -294,7 +314,12 @@ mod sync_integration {
         pid: String
     }
     impl ForeignServerRunner {
-        pub fn run() -> Self {
+        pub fn run() -> Option<Self> {
+            #[derive(Deserialize)]
+            struct TestStarterOutput {
+                pub pid: String
+            }
+
             // Start the foreign server
             let mut command = ::std::process::Command::new("test/run_sync_test_server.sh");
 
@@ -309,13 +334,11 @@ mod sync_integration {
             // Get the pid of the test server to kill it later
             let test_script_output = String::from_utf8(output.stdout)
                 .expect("Output was not valid utf-8");
-            let pid = test_script_output
-                .lines()
-                .next()
-                .expect("test script output did not have any lines")
-                .to_string();
 
-            Self{pid}
+            let as_object: Option<TestStarterOutput>= serde_json::from_str(&test_script_output)
+                .expect(&format!("Test script outputed {} which is not valid json", test_script_output));
+
+            as_object.map(|output| Self{pid: output.pid})
         }
     }
     impl ::std::ops::Drop for ForeignServerRunner {
@@ -343,15 +366,15 @@ mod sync_integration {
 
         // Set up some files on the foreign server
         // Create a file list
-        send_request_for_bytes(construct_url(
+        send_request_for_bytes(&construct_url(
             "http",
             foreign_url,
             &vec!("search".into()),
             &vec!(("query".into(), "/".into()))
-        )).expect("Search request failed");
+        ), "").expect("Search request failed");
 
         // Save the first file in the list
-        send_request_for_bytes(construct_url(
+        send_request_for_bytes(&construct_url(
             "http",
             foreign_url,
             &vec!("list".into()),
@@ -361,10 +384,10 @@ mod sync_integration {
                 ("index".into(), "0".into()),
                 ("tags".into(), "[\"test\",\"stuff\"]".into())
             )
-        )).expect("First save request failed");
+        ), "").expect("First save request failed");
 
         // Update the tags
-        send_request_for_bytes(construct_url(
+        send_request_for_bytes(&construct_url(
             "http",
             foreign_url,
             &vec!("list".into()),
@@ -374,7 +397,7 @@ mod sync_integration {
                 ("index".into(), "0".into()),
                 ("tags".into(), "[\"test\",\"things\"]".into())
             )
-        )).expect("Second Save request failed");
+        ), "").expect("Second Save request failed");
 
         // Wait for the foreign server to generate a thumbnail. TODO: Report this somehow
         ::std::thread::sleep(::std::time::Duration::from_secs(2));

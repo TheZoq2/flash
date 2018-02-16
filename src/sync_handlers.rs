@@ -12,9 +12,8 @@ use chrono::NaiveDateTime;
 
 use std::fs::File;
 use std::io::prelude::*;
-use std::thread;
 
-use foreign_server::{FileDetails, ChangeData};
+use foreign_server::{FileDetails, ChangeData, HttpForeignServer};
 use sync::apply_changes;
 
 
@@ -83,20 +82,25 @@ pub fn file_detail_handler(request: &mut Request) -> IronResult<Response> {
     Ok(Response::with((status::Ok, to_json_with_result(&file_details)?)))
 }
 
-pub fn sync_handler(request: &mut Request) -> IronResult<Response> {
-    let remote_addr = request.remote_addr;
-
-    let mut body = String::new();
-    request.body.read_to_string(&mut body);
-
-    let change_data = from_json_with_result::<ChangeData>(&body)?;
-
-    let foreign_server = unimplemented!();
+pub fn change_application_handler(request: &mut Request) -> IronResult<Response> {
     let mutex = request.get::<Write<FileDatabase>>().unwrap();
     let fdb = mutex.lock().unwrap();
 
-    apply_changes(&fdb, foreign_server, &change_data.changes, &change_data.removed_files);
+    let remote_addr = request.remote_addr;
+    let remote_str = format!("{}", remote_addr);
 
+    let mut body = String::new();
+    match request.body.read_to_string(&mut body) {
+        Ok(_) => {},
+        Err(e) => {
+            return Ok(Response::with((
+                status::PreconditionFailed,
+                format!("Failed to read body {:?}", e)
+            )));
+        }
+    }
+
+    handle_chage_application(body, &fdb, &HttpForeignServer::new(remote_str))?;
     Ok(Response::with((status::Ok, "")))
 }
 
@@ -152,3 +156,10 @@ fn handle_file_detail_request(fdb: &FileDatabase, id: i32) -> Result<FileDetails
 }
 
 
+fn handle_chage_application(body: String, fdb: &FileDatabase, foreign: &HttpForeignServer) -> Result<()> {
+    let change_data = from_json_with_result::<ChangeData>(&body)?;
+
+    apply_changes(&fdb, foreign, &change_data.changes, &change_data.removed_files)?;
+    Ok(())
+
+}

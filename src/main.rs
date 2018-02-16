@@ -131,6 +131,7 @@ fn main() {
     mount.mount("sync/file", sync_handlers::file_request_handler);
     mount.mount("sync/thumbnail", sync_handlers::thumbnail_request_handler);
     mount.mount("sync/changes", sync_handlers::change_request_handler);
+    mount.mount("sync/apply_changes", sync_handlers::change_application_handler);
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list_list));

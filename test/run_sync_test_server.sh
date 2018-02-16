@@ -2,12 +2,19 @@
 
 source .env
 
+
 export DATABASE_URL=$DATABASE_FOREIGN_URL
 export FILE_STORAGE_PATH=/tmp/flash_sync
 export FILE_READ_PATH=test/media/foreign
 export FLASH_PORT=3001
 export LOG_FILE=/tmp/flash_sync/log
 export DIESEL_EXE=${DIESEL_EXE:=diesel}
+
+# If flash is already running, try to communcate with that instance
+if pidof flash > /dev/null; then
+    echo "null"
+    exit
+fi
 
 # Create storage dir
 if ! mkdir -p ${FILE_STORAGE_PATH} > /dev/null; then
@@ -33,23 +40,27 @@ if ! diesel database reset >> $LOG_FILE; then
     exit -1
 fi
 
+if [ "$1" == "" ]; then
+    # Create a fifo file for writing the output of flash
+    FIFO_NAME=/tmp/flash_sync/fifo
+    mkfifo $FIFO_NAME
+    # Run flash itself
+    if [ -e target/debug/flash ] ; then
+        target/debug/flash < /dev/null &> $FIFO_NAME &
+        # Get the pid of the program so we can kill it later
+        FLASH_PID=$!
+    else
+        echo "Flash executable does not exist, did you forget to build it"
+        exit -1
+    fi
 
-# Create a fifo file for writing the output of flash
-FIFO_NAME=/tmp/flash_sync/fifo
-mkfifo $FIFO_NAME
-# Run flash itself
-if [ -e target/debug/flash ] ; then
-    target/debug/flash < /dev/null &> $FIFO_NAME &
-    # Get the pid of the program so we can kill it later
-    FLASH_PID=$!
+
+    # Wait for the child process to get ready
+    until grep -m 1 "ready" $FIFO_NAME > /dev/null; do sleep 0.1; done
+
+    echo "{\"pid\": \"$FLASH_PID\"}"
+elif [ "$1" == "gdb" ]; then
+    gdb target/debug/flash
 else
-    echo "Flash executable does not exist, did you forget to build it"
-    exit -1
+    echo "Unrecognised subcommand: $1, expected '' or gdb"
 fi
-
-
-# Wait for the child process to get ready
-until grep -m 1 "ready" $FIFO_NAME > /dev/null; do sleep 0.1; done
-
-echo "$FLASH_PID"
-
