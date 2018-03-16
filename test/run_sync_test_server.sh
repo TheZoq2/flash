@@ -10,10 +10,20 @@ export FLASH_PORT=3001
 export LOG_FILE=/tmp/flash_sync/log
 export DIESEL_EXE=${DIESEL_EXE:=diesel}
 
-# If flash is already running, try to communcate with that instance
-if pidof flash > /dev/null; then
-    echo "null"
-    exit
+# Check if any processes are using the port. Fuser output is weird which is why 2>devnull and sed are needed
+port_pid=$(fuser "${FLASH_PORT}/tcp" 2>/dev/null | sed -e 's/ //g')
+if [ "$port_pid" != "" ] ; then
+    # Check if the pid using the port is a flash instance
+    while read -r pid; do
+        if [ "$port_pid" == "$pid" ]; then
+            echo "null"
+            exit
+        fi
+    done <<< "$(pidof flash | sed -e 's/ /\n/g')"
+
+    # None of the flash pids are the same as the user of 3001. Some other program is using it
+    echo "Port 3001 is already in used and it is not used by a flash instance"
+    exit -1
 fi
 
 # Create storage dir
@@ -63,4 +73,5 @@ elif [ "$1" == "gdb" ]; then
     gdb target/debug/flash
 else
     echo "Unrecognised subcommand: $1, expected '' or gdb"
+    exit -1
 fi
