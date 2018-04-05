@@ -305,6 +305,8 @@ mod sync_integration {
     use foreign_server::HttpForeignServer;
     use file_database::{db_test_helpers, FileDatabase};
 
+    use file_list_response::ListResponse;
+
     /**
       Runs the foreign server by launching the test script and kills it when
       it goes out of scope. This ensures that the server does not keep running
@@ -314,7 +316,7 @@ mod sync_integration {
         pid: String
     }
     impl ForeignServerRunner {
-        pub fn run() -> Option<Self> {
+        pub fn run(port: &str) -> Option<Self> {
             #[derive(Deserialize)]
             struct TestStarterOutput {
                 pub pid: String
@@ -322,6 +324,8 @@ mod sync_integration {
 
             // Start the foreign server
             let mut command = ::std::process::Command::new("test/run_sync_test_server.sh");
+
+            let mut command = command.arg("-p").arg(port);
 
             // Read the output from the startup script
             let output = command.output().expect("Failed to read test server starter output");
@@ -351,64 +355,62 @@ mod sync_integration {
         }
     }
 
-    db_test!{sync_works(fdb) {
-        let _process = ForeignServerRunner::run();
+    #[test]
+    fn sync_works() {
+        let _process1 = ForeignServerRunner::run("3001");
+        let _process1 = ForeignServerRunner::run("3002");
 
-        let url = "localhost:3001";
+        let url1 = "localhost:3001";
+        let url2 = "localhost:3002";
 
-        // Actual tests
-        sync_test(url, fdb);
+        // Save some files in each database
+        save_file(url1, 0, vec!("test".into()));
+        save_file(url2, 1, vec!("test".into()));
 
-    }}
+        // Run sync
+        sync_with_foreign(url1, url2);
+        // Wait for sync to finnish
+        // Ensure that all files have been synced
+    }
 
-    fn sync_test(foreign_url: &str, fdb: &FileDatabase) {
-        let foreign_server = HttpForeignServer::new(foreign_url.to_string());
-
-        // Set up some files on the foreign server
-        // Create a file list
-        send_request_for_bytes(&construct_url(
+    fn save_file(url: &str, file_index: u32, tags: Vec<String>) {
+        // Create a new file list
+        let list_url = construct_url(
             "http",
-            foreign_url,
+            url,
             &vec!("search".into()),
             &vec!(("query".into(), "/".into()))
-        ), "").expect("Search request failed");
+        );
 
-        // Save the first file in the list
-        send_request_for_bytes(&construct_url(
-            "http",
-            foreign_url,
-            &vec!("list".into()),
-            &vec!(
-                ("action".into(), "save".into()),
-                ("list_id".into(), "0".into()),
-                ("index".into(), "0".into()),
-                ("tags".into(), "[\"test\",\"stuff\"]".into())
-            )
-        ), "").expect("First save request failed");
+        let list_id = send_request::<ListResponse>(&list_url, "")
+            .unwrap()
+            .id;
 
-        // Update the tags
-        send_request_for_bytes(&construct_url(
-            "http",
-            foreign_url,
-            &vec!("list".into()),
-            &vec!(
-                ("action".into(), "save".into()),
-                ("list_id".into(), "0".into()),
-                ("index".into(), "0".into()),
-                ("tags".into(), "[\"test\",\"things\"]".into())
-            )
-        ), "").expect("Second Save request failed");
+        let save_url = construct_url(
+                "http",
+                url,
+                &vec!("list".into()),
+                &vec!(
+                    ("action".into(), "save".into()),
+                    ("list_id".into(), format!("{}", list_id)),
+                    ("index".into(), format!("{}", file_index)),
+                    ("tags".into(), serde_json::to_string(&tags).unwrap())
+                )
+            );
 
-        // Wait for the foreign server to generate a thumbnail. TODO: Report this somehow
-        ::std::thread::sleep(::std::time::Duration::from_secs(2));
-        ::sync::sync_with_foreign(fdb, &foreign_server)
-            .expect("Foregin sync failed");
+        send_request_for_bytes(&save_url, "").expect("failed to save image");
+    }
 
-        let files = fdb.search_files(::search::SavedSearchQuery::empty());
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].tags, mapvec!(String::from: "test", "things"));
+    fn sync_with_foreign(url: &str, foreign_url: &str) {
+        let request_url = construct_url(
+                "http",
+                url,
+                &vec!("sync".into(), "sync".into()),
+                &vec!(("foreign_url".into(), foreign_url.into()))
+            );
 
-        let changes = fdb.get_all_changes().expect("Failed to get changes");
-        assert_eq!(changes.len(), 5);
+        println!("{}", request_url);
+
+        send_request_for_bytes(&request_url, "").expect("Sync failed");
     }
 }

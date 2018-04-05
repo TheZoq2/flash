@@ -126,6 +126,7 @@ fn main() {
     mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())),);
     mount.mount("/search", search_handler::handle_file_search);
     mount.mount("file_list", file_request_handlers::file_list_request_handler);
+    mount.mount("sync/sync", sync_handlers::sync_handler);
     mount.mount("sync/syncpoints", sync_handlers::syncpoint_request_handler);
     mount.mount("sync/file_details", sync_handlers::file_detail_handler);
     mount.mount("sync/file", sync_handlers::file_request_handler);

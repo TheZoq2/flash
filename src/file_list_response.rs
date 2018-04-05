@@ -49,8 +49,8 @@ impl ListAction {
 /**
   Serializable list response that contains data about a file list
 */
-#[derive(Serialize)]
-struct ListResponse {
+#[derive(Serialize, Deserialize)]
+pub struct ListResponse {
     pub id: usize,
     pub length: usize,
     pub source: FileListSource

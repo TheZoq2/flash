@@ -5,7 +5,7 @@ use file_database::FileDatabase;
 
 use changelog::{Change, SyncPoint};
 use error::{Result};
-use request_helpers::{get_get_i64, to_json_with_result, from_json_with_result};
+use request_helpers::{get_get_i64, to_json_with_result, from_json_with_result, get_get_variable};
 
 use serde_json;
 use chrono::NaiveDateTime;
@@ -14,12 +14,23 @@ use std::fs::File;
 use std::io::prelude::*;
 
 use foreign_server::{FileDetails, ChangeData, HttpForeignServer};
-use sync::apply_changes;
+use sync::{apply_changes, sync_with_foreign};
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //                  Request handlers
 ////////////////////////////////////////////////////////////////////////////////
+
+pub fn sync_handler(request: &mut Request) -> IronResult<Response>{
+    let mutex = request.get::<Write<FileDatabase>>().unwrap();
+    let fdb = mutex.lock().unwrap();
+
+    let foreign_url = get_get_variable(request, "foreign_url")?;
+
+    handle_sync_request(&fdb, &HttpForeignServer::new(foreign_url))?;
+
+    Ok(Response::with((status::Ok, "")))
+}
 
 pub fn syncpoint_request_handler(request: &mut Request) -> IronResult<Response> {
     let mutex = request.get::<Write<FileDatabase>>().unwrap();
@@ -161,5 +172,9 @@ fn handle_chage_application(body: String, fdb: &FileDatabase, foreign: &HttpFore
 
     apply_changes(&fdb, foreign, &change_data.changes, &change_data.removed_files)?;
     Ok(())
+}
 
+
+fn handle_sync_request(fdb: &FileDatabase, foreign: &HttpForeignServer) -> Result<()> {
+    sync_with_foreign(fdb, foreign)
 }
