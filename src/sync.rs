@@ -42,7 +42,7 @@ fn get_removed_files(changes: &[Change]) -> Vec<i32> {
         .collect()
 }
 
-pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> Result<()> {
+pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer, own_port: u16) -> Result<()> {
     // Get the syncpoints from the local and remote servers
     let local_syncpoints = fdb.get_syncpoints()
         .chain_err(|| "Failed to get local syncpoints")?;
@@ -77,7 +77,8 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer) -> 
             changes: local_changes,
             syncpoint: new_syncpoint,
             removed_files: removed_files.clone()
-        }
+        },
+        own_port
     )
         .chain_err(|| "Failed to send changes")?;
 
@@ -246,7 +247,7 @@ mod sync_tests {
             Ok(self.file_data[&id].0.clone())
         }
 
-        fn send_changes(&self, _: &ChangeData) -> Result<()> {
+        fn send_changes(&self, _: &ChangeData, _port: u16) -> Result<()> {
             Ok(())
         }
         fn get_file(&self, id: i32) -> Result<Vec<u8>> {
@@ -483,7 +484,7 @@ mod sync_tests {
             );
 
         // Apply the changes
-        sync_with_foreign(fdb, &foreign_server).expect("Foreign server sync failed");
+        sync_with_foreign(fdb, &foreign_server, 0).expect("Foreign server sync failed");
 
         // Assert that the local database now contains all changes
         assert_eq!(

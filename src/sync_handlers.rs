@@ -12,6 +12,7 @@ use chrono::NaiveDateTime;
 
 use std::fs::File;
 use std::io::prelude::*;
+use std::net::IpAddr;
 
 use foreign_server::{FileDetails, ChangeData, HttpForeignServer};
 use sync::{apply_changes, sync_with_foreign};
@@ -97,8 +98,10 @@ pub fn change_application_handler(request: &mut Request) -> IronResult<Response>
     let mutex = request.get::<Write<FileDatabase>>().unwrap();
     let fdb = mutex.lock().unwrap();
 
-    let remote_addr = request.remote_addr;
-    let remote_str = format!("{}", remote_addr);
+    let remote_ip = request.remote_addr.ip();
+    let remote_port = get_get_i64(request, "port")? as u16;
+
+    let foreign_server = HttpForeignServer::new(format!("{}:{}", remote_ip, remote_port));
 
     let mut body = String::new();
     match request.body.read_to_string(&mut body) {
@@ -111,7 +114,7 @@ pub fn change_application_handler(request: &mut Request) -> IronResult<Response>
         }
     }
 
-    handle_chage_application(body, &fdb, &HttpForeignServer::new(remote_str))?;
+    handle_chage_application(body, &fdb, &foreign_server)?;
     Ok(Response::with((status::Ok, "")))
 }
 
@@ -176,5 +179,5 @@ fn handle_chage_application(body: String, fdb: &FileDatabase, foreign: &HttpFore
 
 
 fn handle_sync_request(fdb: &FileDatabase, foreign: &HttpForeignServer, own_port: u16) -> Result<()> {
-    sync_with_foreign(fdb, foreign)
+    sync_with_foreign(fdb, foreign, own_port)
 }
