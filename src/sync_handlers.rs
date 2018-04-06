@@ -21,13 +21,13 @@ use sync::{apply_changes, sync_with_foreign};
 //                  Request handlers
 ////////////////////////////////////////////////////////////////////////////////
 
-pub fn sync_handler(request: &mut Request) -> IronResult<Response>{
+pub fn sync_handler(own_port: u16, request: &mut Request) -> IronResult<Response> {
     let mutex = request.get::<Write<FileDatabase>>().unwrap();
     let fdb = mutex.lock().unwrap();
 
     let foreign_url = get_get_variable(request, "foreign_url")?;
 
-    handle_sync_request(&fdb, &HttpForeignServer::new(foreign_url))?;
+    handle_sync_request(&fdb, &HttpForeignServer::new(foreign_url), own_port)?;
 
     Ok(Response::with((status::Ok, "")))
 }
@@ -175,6 +175,6 @@ fn handle_chage_application(body: String, fdb: &FileDatabase, foreign: &HttpFore
 }
 
 
-fn handle_sync_request(fdb: &FileDatabase, foreign: &HttpForeignServer) -> Result<()> {
+fn handle_sync_request(fdb: &FileDatabase, foreign: &HttpForeignServer, own_port: u16) -> Result<()> {
     sync_with_foreign(fdb, foreign)
 }
