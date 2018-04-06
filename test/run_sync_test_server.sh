@@ -34,7 +34,7 @@ export FILE_STORAGE_PATH="/tmp/flash_sync_${FLASH_PORT}"
 export FILE_READ_PATH=test/media/foreign
 
 # Log data to this file
-export LOG_FILE="/tmp/flash_sync/log_${FLASH_PORT}"
+export LOG_FILE="${FILE_STORAGE_PATH}/log_${FLASH_PORT}"
 # Use diesel as executable if an alternative is not specified
 export DIESEL_EXE=${DIESEL_EXE:=diesel}
 
@@ -81,7 +81,7 @@ fi
 
 if [[ $USE_GDB -ne 1 ]]; then
     # Create a fifo file for writing the output of flash
-    FIFO_NAME=/tmp/flash_sync/fifo
+    FIFO_NAME=${FILE_STORAGE_PATH}/fifo
     mkfifo $FIFO_NAME
     # Run flash itself
     if [ -e target/debug/flash ] ; then
