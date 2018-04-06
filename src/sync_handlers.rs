@@ -12,7 +12,6 @@ use chrono::NaiveDateTime;
 
 use std::fs::File;
 use std::io::prelude::*;
-use std::net::IpAddr;
 
 use foreign_server::{FileDetails, ChangeData, HttpForeignServer};
 use sync::{apply_changes, sync_with_foreign};
@@ -114,7 +113,7 @@ pub fn change_application_handler(request: &mut Request) -> IronResult<Response>
         }
     }
 
-    handle_chage_application(body, &fdb, &foreign_server)?;
+    handle_change_application(body, &fdb, &foreign_server)?;
     Ok(Response::with((status::Ok, "")))
 }
 
@@ -170,7 +169,7 @@ fn handle_file_detail_request(fdb: &FileDatabase, id: i32) -> Result<FileDetails
 }
 
 
-fn handle_chage_application(body: String, fdb: &FileDatabase, foreign: &HttpForeignServer) -> Result<()> {
+fn handle_change_application(body: String, fdb: &FileDatabase, foreign: &HttpForeignServer) -> Result<()> {
     let change_data = from_json_with_result::<ChangeData>(&body)?;
 
     apply_changes(&fdb, foreign, &change_data.changes, &change_data.removed_files)?;
