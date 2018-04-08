@@ -407,7 +407,7 @@ mod sync_integration {
             "http",
             url,
             &vec!("search".into()),
-            &vec!(("query".into(), query))
+            &vec!(("query".into(), query.into()))
         );
 
         send_request::<ListResponse>(&list_url, "")
