@@ -549,7 +549,7 @@ mod file_request_tests {
 
         let save_result = worker_results.file.recv().unwrap();
         assert_matches!(save_result, Ok(()));
-        let thumbnail_save_result = worker_results.thumbnail.unwrap().recv().unwrap();
+        let thumbnail_save_result = worker_results.thumbnail.unwrap().recv().expect("Thumbnail creator crashed");
         assert_matches!(thumbnail_save_result, Ok(()));
 
         let full_path = {

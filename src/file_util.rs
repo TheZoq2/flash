@@ -22,6 +22,8 @@ use byte_source::{ByteSource, vec_from_byte_source};
 
 use std::sync::mpsc;
 
+use image::GenericImage;
+
 const THUMBNAIL_SIZE: u32 = 200;
 
 /**
@@ -47,6 +49,7 @@ pub fn generate_thumbnail(
         let handler = || -> Result<()> {
             let file_content = vec_from_byte_source(source)?;
             let img = image::load_from_memory(&file_content)?;
+            println!("{:?}", img.dimensions());
 
             let thumb_data = generate_thumbnail_from_generic_image(&img, THUMBNAIL_SIZE);
 
