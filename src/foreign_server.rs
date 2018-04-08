@@ -369,7 +369,7 @@ mod sync_integration {
 
         // Run sync
         sync_with_foreign(url1, url2);
-        // Wait for sync to finnish
+        // TODO: Wait for sync to finnish
         // Ensure that all files have been synced
     }
 
@@ -399,6 +399,19 @@ mod sync_integration {
             );
 
         send_request_for_bytes(&save_url, "").expect("failed to save image");
+    }
+
+    fn file_list_request(url: &str, query: &str) -> ListResponse {
+        // Create a new file list
+        let list_url = construct_url(
+            "http",
+            url,
+            &vec!("search".into()),
+            &vec!(("query".into(), query))
+        );
+
+        send_request::<ListResponse>(&list_url, "")
+            .unwrap()
     }
 
     fn sync_with_foreign(url: &str, foreign_url: &str) {

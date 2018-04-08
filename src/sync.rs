@@ -13,6 +13,8 @@ use error::{Result, ErrorKind, ResultExt};
 use file_handler;
 use file_handler::{remove_file, ThumbnailStrategy};
 
+use std::sync::{Arc, Mutex};
+
 use chrono::prelude::*;
 
 use foreign_server::{ForeignServer, FileDetails, ChangeData};
@@ -42,34 +44,39 @@ fn get_removed_files(changes: &[Change]) -> Vec<i32> {
         .collect()
 }
 
-pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer, own_port: u16) -> Result<()> {
-    // Get the syncpoints from the local and remote servers
-    let local_syncpoints = fdb.get_syncpoints()
-        .chain_err(|| "Failed to get local syncpoints")?;
-    let remote_syncpoints = foreign_server.get_syncpoints()
-        .chain_err(|| "Failed to get remote syncpoints")?;
+pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &ForeignServer, own_port: u16) -> Result<()> {
+    let (local_changes, new_syncpoint, removed_files, remote_changes) = {
+        let fdb = fdb.lock().unwrap();
+        // Get the syncpoints from the local and remote servers
+        let local_syncpoints = fdb.get_syncpoints()
+            .chain_err(|| "Failed to get local syncpoints")?;
+        let remote_syncpoints = foreign_server.get_syncpoints()
+            .chain_err(|| "Failed to get remote syncpoints")?;
 
-    // Find the highest common syncpoint
-    let sync_merge_start = last_common_syncpoint(&local_syncpoints, &remote_syncpoints);
+        // Find the highest common syncpoint
+        let sync_merge_start = last_common_syncpoint(&local_syncpoints, &remote_syncpoints);
 
-    // Get the changes that have been made locally since that change
-    let local_changes = match sync_merge_start {
-        Some(ref syncpoint) => fdb.get_changes_after_timestamp(&syncpoint.last_change),
-        None => fdb.get_all_changes()
-    }.chain_err(|| "Failed to get local changes")?;
-    // Fetch all remote changes that have been made on the remote server
-    let remote_changes = foreign_server.get_changes(&sync_merge_start)
-        .chain_err(|| "Failed to get remote changes")?;
+        // Get the changes that have been made locally since that change
+        let local_changes = match sync_merge_start {
+            Some(ref syncpoint) => fdb.get_changes_after_timestamp(&syncpoint.last_change),
+            None => fdb.get_all_changes()
+        }.chain_err(|| "Failed to get local changes")?;
+        // Fetch all remote changes that have been made on the remote server
+        let remote_changes = foreign_server.get_changes(&sync_merge_start)
+            .chain_err(|| "Failed to get remote changes")?;
 
-    // Find all files that have been removed
-    let mut removed_files = vec!();
-    removed_files.extend_from_slice(&get_removed_files(&local_changes));
-    removed_files.extend_from_slice(&get_removed_files(&remote_changes));
+        // Find all files that have been removed
+        let mut removed_files = vec!();
+        removed_files.extend_from_slice(&get_removed_files(&local_changes));
+        removed_files.extend_from_slice(&get_removed_files(&remote_changes));
 
-    // Create a new syncpoint
-    let new_syncpoint = SyncPoint{
-            last_change: NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)
-        };
+        // Create a new syncpoint
+        let new_syncpoint = SyncPoint{
+                last_change: NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)
+            };
+
+        (local_changes, new_syncpoint, removed_files, remote_changes)
+    };
 
     // Send the changes to the remote server to apply
     foreign_server.send_changes(
@@ -83,7 +90,7 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer, own
         .chain_err(|| "Failed to send changes")?;
 
     // Apply changes locally
-    apply_changes(fdb, foreign_server, &remote_changes, &removed_files)
+    apply_changes(fdb.clone(), foreign_server, &remote_changes, &removed_files)
         .chain_err(|| "Failed to apply changes")
 }
 
@@ -96,7 +103,7 @@ pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &ForeignServer, own
   means that such changes would be duplicated.
 */
 pub fn apply_changes(
-        fdb: &FileDatabase,
+        fdb: Arc<Mutex<FileDatabase>>,
         foreign_server: &ForeignServer,
         changes: &[Change],
         removed_files: &[i32],
@@ -107,9 +114,10 @@ pub fn apply_changes(
     });
 
     for change in changes_to_be_applied {
+        let fdb = fdb.lock().unwrap();
         match change.change_type {
             ChangeType::Update(ref update_type) => {
-                apply_file_update(fdb, change.affected_file, update_type)?
+                apply_file_update(&fdb, change.affected_file, update_type)?
             }
             ChangeType::FileAdded => {
                 let file_details = foreign_server.get_file_details(change.affected_file)
@@ -136,23 +144,25 @@ pub fn apply_changes(
                             thumbnail,
                             change.affected_file,
                             &[],
-                            fdb,
+                            &fdb,
                             ChangeCreationPolicy::No,
                             &file_details.extension,
                             file_timestamp.timestamp() as u64
                         ).chain_err(|| "Failed to save file")?;
             }
             ChangeType::FileRemoved => {
-                file_handler::remove_file(change.affected_file, fdb, ChangeCreationPolicy::No)?;
+                file_handler::remove_file(change.affected_file, &fdb, ChangeCreationPolicy::No)?;
             }
         }
     }
 
     for change in changes {
+        let fdb = fdb.lock().unwrap();
         fdb.add_change(change)?;
     }
 
     for id in removed_files {
+        let fdb = fdb.lock().unwrap();
         if fdb.get_file_with_id(*id) != None {
             remove_file(*id, &fdb, ChangeCreationPolicy::No)?;
         }
@@ -260,16 +270,24 @@ mod sync_tests {
 
     #[test]
     fn db_tests() {
-        db_test_helpers::run_test(only_tag_additions);
-        db_test_helpers::run_test(only_tag_removals);
-        db_test_helpers::run_test(tag_removals_and_additions);
-        db_test_helpers::run_test(creation_date_updates);
-        db_test_helpers::run_test(file_system_changes_work);
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.lock().unwrap().reset();
+
+        only_tag_additions(fdb.clone());
+        fdb.lock().unwrap().reset();
+        only_tag_removals(fdb.clone());
+        fdb.lock().unwrap().reset();
+        tag_removals_and_additions(fdb.clone());
+        fdb.lock().unwrap().reset();
+        creation_date_updates(fdb.clone());
+        fdb.lock().unwrap().reset();
+        file_system_changes_work(fdb.clone());
     }
 
-    fn only_tag_additions(fdb: &mut FileDatabase) {
-        fdb.add_new_file(1, "yolo.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
-        fdb.add_new_file(2, "swag.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
+    fn only_tag_additions(fdb: Arc<Mutex<FileDatabase>>) {
+        fdb.lock().unwrap().add_new_file(1, "yolo.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
+        fdb.lock().unwrap().add_new_file(2, "swag.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
 
         let changes = vec!(
                 Change::new(
@@ -279,9 +297,9 @@ mod sync_tests {
                 ),
             );
 
-        apply_changes(fdb, &MockForeignServer::new(vec!(), vec!(), vec!()), &changes, &vec!()).unwrap();
+        apply_changes(fdb.clone(), &MockForeignServer::new(vec!(), vec!(), vec!()), &changes, &vec!()).unwrap();
 
-        let files_with_tag = get_files_with_tags(fdb, mapvec!(String::from: "things"), vec!());
+        let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
 
         let matched_ids: Vec<_> = files_with_tag.iter()
             .map(|file| file.id)
@@ -290,9 +308,9 @@ mod sync_tests {
         assert_eq!(matched_ids, vec!(1))
     }
 
-    fn only_tag_removals(fdb: &mut FileDatabase) {
-        fdb.add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
-        fdb.add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
+    fn only_tag_removals(fdb: Arc<Mutex<FileDatabase>>) {
+        fdb.lock().unwrap().add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
+        fdb.lock().unwrap().add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
 
         let changes = vec!(
                 Change::new(
@@ -303,13 +321,13 @@ mod sync_tests {
             );
 
         apply_changes(
-            fdb,
+            fdb.clone(),
             &MockForeignServer::new(vec!(), vec!(), vec!()),
             &changes,
             &vec!()
         ).unwrap();
 
-        let files_with_tag = get_files_with_tags(fdb, mapvec!(String::from: "things"), vec!());
+        let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
 
         let matched_ids: Vec<_> = files_with_tag.iter()
             .map(|file| file.id)
@@ -318,8 +336,8 @@ mod sync_tests {
         assert_eq!(matched_ids, vec!(2))
     }
 
-    fn tag_removals_and_additions(fdb: &mut FileDatabase) {
-        fdb.add_new_file(
+    fn tag_removals_and_additions(fdb: Arc<Mutex<FileDatabase>>) {
+        fdb.lock().unwrap().add_new_file(
             1,
             "yolo.jpg",
             None,
@@ -327,7 +345,7 @@ mod sync_tests {
             0,
             create_change("2017-02-02").unwrap()
         );
-        fdb.add_new_file(
+        fdb.lock().unwrap().add_new_file(
             2,
             "swag.jpg",
             None,
@@ -355,13 +373,13 @@ mod sync_tests {
             );
 
         apply_changes(
-            fdb,
+            fdb.clone(),
             &MockForeignServer::new(vec!(), vec!(), vec!()),
             &changes,
             &vec!()
         ).unwrap();
 
-        let files_with_tag = get_files_with_tags(fdb, mapvec!(String::from: "things"), vec!());
+        let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
 
         let matched_ids: Vec<_> = files_with_tag.iter()
             .map(|file| file.id)
@@ -370,10 +388,10 @@ mod sync_tests {
         assert_eq!(matched_ids, vec!(2))
     }
 
-    fn creation_date_updates(fdb: &mut FileDatabase) {
+    fn creation_date_updates(fdb: Arc<Mutex<FileDatabase>>) {
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
         let new_timestamp = naive_datetime_from_date("2017-01-02").unwrap();
-        fdb.add_new_file(1,
+        fdb.lock().unwrap().add_new_file(1,
                          "yolo.jpg",
                          Some("t_yolo.jpg"),
                          &mapvec!(String::from: "things"),
@@ -391,18 +409,18 @@ mod sync_tests {
             );
 
         apply_changes(
-            fdb,
+            fdb.clone(),
             &MockForeignServer::new(vec!(), vec!(), vec!()),
             &changes,
             &vec!()
         ).unwrap();
 
-        let file = fdb.get_file_with_id(1).unwrap();
+        let file = fdb.lock().unwrap().get_file_with_id(1).unwrap();
 
         assert_eq!(file.creation_date, new_timestamp);
     }
 
-    fn file_system_changes_work(fdb: &mut FileDatabase) {
+    fn file_system_changes_work(fdb: Arc<Mutex<FileDatabase>>) {
         // Set up the intial database
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
         let original_filename = "test/media/10x10.png";
@@ -412,7 +430,7 @@ mod sync_tests {
             ThumbnailStrategy::Generate,
             1,
             &mapvec!(String::from: "things"),
-            fdb,
+            &fdb.lock().unwrap(),
             create_change("2017-02-02").unwrap(),
             "jpg",
             original_timestamp.timestamp() as u64
@@ -462,7 +480,7 @@ mod sync_tests {
         for change in &remote_changes {
             all_changes.push(change.clone());
         }
-        for change in &fdb.get_all_changes().expect("Failed to get changes from db") {
+        for change in &fdb.lock().unwrap().get_all_changes().expect("Failed to get changes from db") {
             all_changes.push(change.clone());
         }
         all_changes.sort_by_key(|change| change.timestamp);
@@ -484,19 +502,19 @@ mod sync_tests {
             );
 
         // Apply the changes
-        sync_with_foreign(fdb, &foreign_server, 0).expect("Foreign server sync failed");
+        sync_with_foreign(fdb.clone(), &foreign_server, 0).expect("Foreign server sync failed");
 
         // Assert that the local database now contains all changes
         assert_eq!(
             all_changes,
-            fdb.get_all_changes().expect("Failed to get changes from database")
+            fdb.lock().unwrap().get_all_changes().expect("Failed to get changes from database")
         );
 
 
         // Ensure that the correct files are in the database
-        let file_1 = fdb.get_file_with_id(1);
-        let file_2 = fdb.get_file_with_id(2);
-        let file_3 = fdb.get_file_with_id(3);
+        let file_1 = fdb.lock().unwrap().get_file_with_id(1);
+        let file_2 = fdb.lock().unwrap().get_file_with_id(2);
+        let file_3 = fdb.lock().unwrap().get_file_with_id(3);
         assert_eq!(file_1, None);
         assert_matches!(file_2, Some(_));
         assert_matches!(file_3, Some(_));
@@ -515,13 +533,13 @@ mod sync_tests {
 
         // Ensure that the old file was deleted
         {
-            let path = fdb.get_file_save_path().join(PathBuf::from(initial_file.filename));
+            let path = fdb.lock().unwrap().get_file_save_path().join(PathBuf::from(initial_file.filename));
             assert!(!path.exists());
         }
 
         // Ensure that the old thumbnail was deleted
         {
-            let path = fdb.get_file_save_path()
+            let path = fdb.lock().unwrap().get_file_save_path()
                 .join(PathBuf::from(
                     initial_file.thumbnail_path.expect("Initial file had no thumbnail")
                 ));
@@ -530,17 +548,17 @@ mod sync_tests {
 
         // Ensure that the new are created
         {
-            let path = fdb.get_file_save_path().join(actual_file_2);
+            let path = fdb.lock().unwrap().get_file_save_path().join(actual_file_2);
             assert!(path.exists());
         }
         {
-            let path = fdb.get_file_save_path().join(actual_file_3);
+            let path = fdb.lock().unwrap().get_file_save_path().join(actual_file_3);
             assert!(path.exists());
         }
 
         // Ensure that the new thumbnail for file 2 was created
         {
-            let path = fdb.get_file_save_path()
+            let path = fdb.lock().unwrap().get_file_save_path()
                 .join(PathBuf::from(
                     actual_thumbnail_2.expect("File 2 should have a filename")
                 ));
@@ -548,7 +566,7 @@ mod sync_tests {
         }
         // Ensure that the no file for file 3 was created
         {
-            let path = fdb.get_file_save_path()
+            let path = fdb.lock().unwrap().get_file_save_path()
                 .join(PathBuf::from(
                     "thumb_3.jpg"
                 ));

@@ -12,6 +12,7 @@ use chrono::NaiveDateTime;
 
 use std::fs::File;
 use std::io::prelude::*;
+use std::sync::{Arc, Mutex};
 
 use foreign_server::{FileDetails, ChangeData, HttpForeignServer};
 use sync::{apply_changes, sync_with_foreign};
@@ -22,12 +23,11 @@ use sync::{apply_changes, sync_with_foreign};
 ////////////////////////////////////////////////////////////////////////////////
 
 pub fn sync_handler(own_port: u16, request: &mut Request) -> IronResult<Response> {
-    let mutex = request.get::<Write<FileDatabase>>().unwrap();
-    let fdb = mutex.lock().unwrap();
+    let fdb = request.get::<Write<FileDatabase>>().unwrap();
 
     let foreign_url = get_get_variable(request, "foreign_url")?;
 
-    handle_sync_request(&fdb, &HttpForeignServer::new(foreign_url), own_port)?;
+    handle_sync_request(fdb, &HttpForeignServer::new(foreign_url), own_port)?;
 
     Ok(Response::with((status::Ok, "")))
 }
@@ -94,8 +94,7 @@ pub fn file_detail_handler(request: &mut Request) -> IronResult<Response> {
 }
 
 pub fn change_application_handler(request: &mut Request) -> IronResult<Response> {
-    let mutex = request.get::<Write<FileDatabase>>().unwrap();
-    let fdb = mutex.lock().unwrap();
+    let fdb = request.get::<Write<FileDatabase>>().unwrap();
 
     let remote_ip = request.remote_addr.ip();
     let remote_port = get_get_i64(request, "port")? as u16;
@@ -113,7 +112,7 @@ pub fn change_application_handler(request: &mut Request) -> IronResult<Response>
         }
     }
 
-    handle_change_application(body, &fdb, &foreign_server)?;
+    handle_change_application(body, fdb, &foreign_server)?;
     Ok(Response::with((status::Ok, "")))
 }
 
@@ -169,14 +168,14 @@ fn handle_file_detail_request(fdb: &FileDatabase, id: i32) -> Result<FileDetails
 }
 
 
-fn handle_change_application(body: String, fdb: &FileDatabase, foreign: &HttpForeignServer) -> Result<()> {
+fn handle_change_application(body: String, fdb: Arc<Mutex<FileDatabase>>, foreign: &HttpForeignServer) -> Result<()> {
     let change_data = from_json_with_result::<ChangeData>(&body)?;
 
-    apply_changes(&fdb, foreign, &change_data.changes, &change_data.removed_files)?;
+    apply_changes(fdb, foreign, &change_data.changes, &change_data.removed_files)?;
     Ok(())
 }
 
 
-fn handle_sync_request(fdb: &FileDatabase, foreign: &HttpForeignServer, own_port: u16) -> Result<()> {
+fn handle_sync_request(fdb: Arc<Mutex<FileDatabase>>, foreign: &HttpForeignServer, own_port: u16) -> Result<()> {
     sync_with_foreign(fdb, foreign, own_port)
 }
