@@ -2,6 +2,18 @@
 
 source .env
 
+(>&2 echo "Building project")
+
+if ! cargo build 2> build_err.log > build.log ; then
+    echo "Cargo build failed"
+    cat build_err.log
+    cat build.log
+    exit -1
+fi
+(>&2 echo "Done")
+
+
+
 # Set to 1 if the script should use the enviroment variables for flash parameters
 # rather than the default ones for testing
 # Set to 1 if flash should be run in gdb rather than a orphaned child process. Set
