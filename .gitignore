@@ -2,3 +2,8 @@ target
 Cargo.lock
 .env
 
+# Log files from test runner script
+build.log
+build_err.log
+
+.gdbinit
