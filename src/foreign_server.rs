@@ -364,13 +364,15 @@ mod sync_integration {
         let url2 = "localhost:3002";
 
         // Save some files in each database
-        save_file(url1, 0, vec!("test".into()));
-        save_file(url2, 1, vec!("test".into()));
+        save_file(url1, 0, vec!("from1".into()));
+        save_file(url2, 1, vec!("from2".into()));
 
         // Run sync
         sync_with_foreign(url1, url2);
         // TODO: Wait for sync to finnish
         // Ensure that all files have been synced
+        assert_eq!(file_list_request(url2, "of+from2").length, 1);
+        assert_eq!(file_list_request(url2, "of+from1").length, 1);
     }
 
     fn save_file(url: &str, file_index: u32, tags: Vec<String>) {
@@ -409,6 +411,8 @@ mod sync_integration {
             &vec!("search".into()),
             &vec!(("query".into(), query.into()))
         );
+
+        println!("list_url: {}", list_url);
 
         send_request::<ListResponse>(&list_url, "")
             .unwrap()
