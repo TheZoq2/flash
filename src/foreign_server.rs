@@ -364,30 +364,21 @@ mod sync_integration {
         let url2 = "localhost:3002";
 
         // Save some files in each database
-        save_file(url1, 0, vec!("from1".into()));
-        save_file(url2, 1, vec!("from2".into()));
+        let listid1 = create_file_list_on_foreign(url1, "/");
+        let listid2 = create_file_list_on_foreign(url2, "/");
+        save_file(url1, listid1, 0, vec!("from1".into()));
+        save_file(url1, listid1, 1, vec!("from1".into()));
+        save_file(url2, listid2, 2, vec!("from2".into()));
+        save_file(url2, listid2, 3, vec!("from2".into()));
 
         // Run sync
         sync_with_foreign(url1, url2);
-        // TODO: Wait for sync to finnish
         // Ensure that all files have been synced
-        assert_eq!(file_list_request(url2, "of+from2").length, 1);
-        assert_eq!(file_list_request(url2, "of+from1").length, 1);
+        assert_eq!(file_list_request(url1, "of+from2").length, 2);
+        assert_eq!(file_list_request(url2, "of+from1").length, 2);
     }
 
-    fn save_file(url: &str, file_index: u32, tags: Vec<String>) {
-        // Create a new file list
-        let list_url = construct_url(
-            "http",
-            url,
-            &vec!("search".into()),
-            &vec!(("query".into(), "/".into()))
-        );
-
-        let list_id = send_request::<ListResponse>(&list_url, "")
-            .unwrap()
-            .id;
-
+    fn save_file(url: &str, list_id: usize, file_index: u32, tags: Vec<String>) {
         let save_url = construct_url(
                 "http",
                 url,
@@ -401,6 +392,20 @@ mod sync_integration {
             );
 
         send_request_for_bytes(&save_url, "").expect("failed to save image");
+    }
+
+    fn create_file_list_on_foreign(url: &str, path: &str) -> usize {
+        // Create a new file list
+        let list_url = construct_url(
+            "http",
+            url,
+            &vec!("search".into()),
+            &vec!(("query".into(), path.into()))
+        );
+
+        send_request::<ListResponse>(&list_url, "")
+            .unwrap()
+            .id
     }
 
     fn file_list_request(url: &str, query: &str) -> ListResponse {
