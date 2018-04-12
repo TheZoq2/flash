@@ -29,12 +29,19 @@ File exchange can probably be done using the normal file request functions used 
 API. However, I might need to keep track of the origin of all files that have not been synced yet in
 case the remote server disconnects.
 
+### Merge conflicts
+
+Merge conflicts will most likely arrise, but under the assumption that only a single user is in
+control of the photo library, a trivial solution to merge conflicts is to simply apply the latest
+change that was made.
+
 ### Change tracking
 
 The changes between each sync timestamp need to either be tracked or calculated. Calculation is
 simpler and more efficient but keeping track of 'remove' operations is tricky. If a tag is removed
 in one version and present in another, it might mean that it was added by the latter or removed by
 the former. It could also have been removed in both and later re-added in one.
+
 
 #### Possible solutions:
 
@@ -43,6 +50,30 @@ build a changeset on sync, but requires storage of more data, which can be desyn
 is just a matter of applying all changes made since the common timestamp in chronological order on
 both servers.
 
+Ignore the problem, files and tags are only removed if they are removed on both clients. This is a
+terrible solution as it requires all clients that have ever synced an addition to remove it
+independently which will most likely not happen.
+
+Another thing that needs to be tracked is things like `cration_date` and location. Here, a good
+system is probably to store a `last_update` field in each file entry which is then used to build the
+changelog. This is possible because data is never added or removed, just updated.
 
 
+## Changelog tracking
 
+Changes are one of the following:
+
+- FileAdded(i32, timestamp)
+- TagAdded(i32, String, timestamp)
+- TagRemoved(i32, String, timestamp)
+- FileRemoved(i32, timestamp)
+
+- CreationDateChanged(id, date, timestamp)
+- LocationChanged(id, ..., timestamp)
+
+If postgres enums are algebraic, they can be used for storage. Otherwise, since all the fields
+are either (id) or (id, name) a table that contains a `type`, an `id` and a `string` field might
+be sufficient.
+
+Another option is to store a JSON representation along with a timestamp. This is ugly but would
+work and be expandable.

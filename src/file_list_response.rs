@@ -7,7 +7,8 @@ use std::sync::{Arc, Mutex};
 
 use serde_json;
 
-use file_request_error::{FileRequestError, err_invalid_variable_type};
+//use file_request_error::{FileRequestError, err_invalid_variable_type};
+use error::{Result, ErrorKind, Error};
 
 use request_helpers::get_get_variable;
 
@@ -48,8 +49,8 @@ impl ListAction {
 /**
   Serializable list response that contains data about a file list
 */
-#[derive(Serialize)]
-struct ListResponse {
+#[derive(Serialize, Deserialize)]
+pub struct ListResponse {
     pub id: usize,
     pub length: usize,
     pub source: FileListSource
@@ -81,7 +82,7 @@ pub fn list_action_handler(request: &mut Request, action: &ListAction) -> IronRe
 
     let file_list = match file_list_list.get(id) {
         Some(list) => Ok(list),
-        None => Err(FileRequestError::NoSuchList(id))
+        None => Err(Error::from(ErrorKind::NoSuchList(id)))
     }?;
 
     match *action {
@@ -123,12 +124,12 @@ pub fn reply_to_list_listing_request(file_list_list: Arc<Mutex<FileListList>>) -
 //                      Private request parsers
 ////////////////////////////////////////////////////////////////////////////////
 
-pub fn read_request_list_id(request: &mut Request) -> Result<usize, FileRequestError> {
+pub fn read_request_list_id(request: &mut Request) -> Result<usize> {
     let list_id = get_get_variable(request, "list_id")?;
 
     match list_id.parse::<usize>() {
         Ok(val) => Ok(val),
-        Err(_) => Err(err_invalid_variable_type("list_id", "usize")),
+        Err(_) => Err(ErrorKind::InvalidVariableType("list_id".into(), "usize".into()).into()),
     }
 }
 
@@ -146,7 +147,7 @@ pub fn list_info_request_handler(
 
     match file_list_list.get(id) {
         Some(file_list) => Ok(create_list_info_response(id, file_list)),
-        None => Err(FileRequestError::NoSuchList(id))
+        None => Err(Error::from(ErrorKind::NoSuchList(id)))
     }?
 }
 

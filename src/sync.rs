@@ -1,0 +1,589 @@
+use changelog::{
+    Change,
+    SyncPoint,
+    ChangeType,
+    UpdateType,
+    ChangeCreationPolicy,
+};
+
+use byte_source::{ByteSource};
+
+use file_database::{FileDatabase};
+use error::{Result, ErrorKind, ResultExt};
+use file_handler;
+use file_handler::{remove_file, ThumbnailStrategy};
+
+use std::sync::{Arc, Mutex};
+
+use chrono::prelude::*;
+
+use foreign_server::{ForeignServer, FileDetails, ChangeData};
+
+
+
+pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
+    -> Option<SyncPoint>
+{
+    local.iter().zip(remote.iter())
+        .fold(None, |acc, (l, r)| {
+            if l == r {
+                Some(l.clone())
+            }
+            else {
+                acc
+            }
+        })
+}
+
+fn get_removed_files(changes: &[Change]) -> Vec<i32> {
+    changes.iter()
+        .filter_map(|change| match change.change_type {
+            ChangeType::FileRemoved => Some(change.affected_file),
+            _ => None
+        })
+        .collect()
+}
+
+pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &mut ForeignServer, own_port: u16) -> Result<()> {
+    let (local_changes, new_syncpoint, removed_files, remote_changes) = {
+        let fdb = fdb.lock().unwrap();
+        // Get the syncpoints from the local and remote servers
+        let local_syncpoints = fdb.get_syncpoints()
+            .chain_err(|| "Failed to get local syncpoints")?;
+        let remote_syncpoints = foreign_server.get_syncpoints()
+            .chain_err(|| "Failed to get remote syncpoints")?;
+
+        // Find the highest common syncpoint
+        let sync_merge_start = last_common_syncpoint(&local_syncpoints, &remote_syncpoints);
+
+        // Get the changes that have been made locally since that change
+        let local_changes = match sync_merge_start {
+            Some(ref syncpoint) => fdb.get_changes_after_timestamp(&syncpoint.last_change),
+            None => fdb.get_all_changes()
+        }.chain_err(|| "Failed to get local changes")?;
+        // Fetch all remote changes that have been made on the remote server
+        let remote_changes = foreign_server.get_changes(&sync_merge_start)
+            .chain_err(|| "Failed to get remote changes")?;
+
+        // Find all files that have been removed
+        let mut removed_files = vec!();
+        removed_files.extend_from_slice(&get_removed_files(&local_changes));
+        removed_files.extend_from_slice(&get_removed_files(&remote_changes));
+
+        // Create a new syncpoint
+        let new_syncpoint = SyncPoint{
+                last_change: NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)
+            };
+
+        (local_changes, new_syncpoint, removed_files, remote_changes)
+    };
+
+    // Send the changes to the remote server to apply
+    foreign_server.send_changes(
+        &ChangeData{
+            changes: local_changes,
+            syncpoint: new_syncpoint.clone(),
+            removed_files: removed_files.clone()
+        },
+        own_port
+    )
+        .chain_err(|| "Failed to send changes")?;
+
+    // Apply changes locally
+    apply_changes(fdb.clone(), foreign_server, &remote_changes, &removed_files)
+        .chain_err(|| "Failed to apply changes")?;
+
+    Ok(fdb.lock().unwrap().add_syncpoint(&new_syncpoint)?)
+}
+
+
+/**
+  Applies the specified changes to the database. Any changes affecting files in 
+  the `removed_files` vec are ignored and the files are removed
+
+  The function does not check for changes that are already in the database which
+  means that such changes would be duplicated.
+*/
+pub fn apply_changes(
+        fdb: Arc<Mutex<FileDatabase>>,
+        foreign_server: &ForeignServer,
+        changes: &[Change],
+        removed_files: &[i32],
+    ) -> Result<()>
+{
+    let changes_to_be_applied = changes.iter().filter(|change| {
+        !removed_files.contains(&change.affected_file)
+    });
+
+    for change in changes_to_be_applied {
+        let fdb = fdb.lock().unwrap();
+        match change.change_type {
+            ChangeType::Update(ref update_type) => {
+                apply_file_update(&fdb, change.affected_file, update_type)?
+            }
+            ChangeType::FileAdded => {
+                let file_details = foreign_server.get_file_details(change.affected_file)
+                    .chain_err(|| "Failed to get fille details")?;
+
+                let file = ByteSource::Memory(
+                    foreign_server.get_file(change.affected_file)
+                        .chain_err(|| "Failed to get file")?
+                );
+                let thumbnail = {
+                    let from_server = foreign_server.get_thumbnail(change.affected_file)
+                        .chain_err(|| "Failed to get thumbnail")?;
+                    match from_server {
+                        Some(data) =>
+                            ThumbnailStrategy::FromByteSource(ByteSource::Memory(data)),
+                        None => ThumbnailStrategy::None
+                    }
+                };
+
+                let file_timestamp = file_details.timestamp;
+
+                file_handler::save_file(
+                            file,
+                            thumbnail,
+                            change.affected_file,
+                            &[],
+                            &fdb,
+                            ChangeCreationPolicy::No,
+                            &file_details.extension,
+                            file_timestamp.timestamp() as u64
+                        ).chain_err(|| "Failed to save file")?;
+            }
+            ChangeType::FileRemoved => {
+                file_handler::remove_file(change.affected_file, &fdb, ChangeCreationPolicy::No)?;
+            }
+        }
+    }
+
+    for change in changes {
+        let fdb = fdb.lock().unwrap();
+        fdb.add_change(change)?;
+    }
+
+    for id in removed_files {
+        let fdb = fdb.lock().unwrap();
+        if fdb.get_file_with_id(*id) != None {
+            remove_file(*id, &fdb, ChangeCreationPolicy::No)?;
+        }
+    }
+
+    Ok(())
+}
+
+
+fn apply_file_update(fdb: &FileDatabase, affected_file: i32, file_update: &UpdateType)
+    -> Result<()>
+{
+    let mut file = match fdb.get_file_with_id(affected_file) {
+        Some(id) => id,
+        None => return Err(ErrorKind::NoSuchFileInDatabase(affected_file).into())
+    };
+
+    match *file_update {
+        UpdateType::TagAdded(ref tag) => file.tags.push(tag.clone()),
+        UpdateType::TagRemoved(ref tag) => {
+            file.tags = file.tags.into_iter().filter(|t| t != tag).collect()
+        }
+        UpdateType::CreationDateChanged(date) => file.creation_date = date
+    }
+
+    fdb.update_file_without_creating_change(&file)?;
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod sync_tests {
+    use super::*;
+
+    use std::collections::HashMap;
+
+    use file_database::db_test_helpers;
+
+    use test_macros::naive_datetime_from_date;
+
+    use file_database::db_test_helpers::get_files_with_tags;
+
+    use std::path::PathBuf;
+
+    use chrono;
+
+    fn create_change(date_string: &str) -> chrono::format::ParseResult<ChangeCreationPolicy> {
+        Ok(ChangeCreationPolicy::Yes(naive_datetime_from_date(date_string)?))
+    }
+
+    struct MockForeignServer {
+        file_data: HashMap<i32, (FileDetails, Vec<u8>, Option<Vec<u8>>)>,
+        syncpoints: Vec<SyncPoint>,
+        changes: Vec<Change>
+    }
+
+    impl MockForeignServer {
+        pub fn new(
+            files: Vec<(i32, (FileDetails, Vec<u8>, Option<Vec<u8>>))>,
+            syncpoints: Vec<SyncPoint>,
+            changes: Vec<Change>
+        ) -> Self {
+            let mut file_data = HashMap::new();
+            for (id, details) in files {
+                file_data.insert(id, details);
+            }
+            Self {
+                file_data,
+                syncpoints,
+                changes
+            }
+        }
+    }
+
+    impl ForeignServer for MockForeignServer {
+        fn get_syncpoints(&self) -> Result<Vec<SyncPoint>>{
+            Ok(self.syncpoints.clone())
+        }
+        fn get_changes(&self, starting_syncpoint: &Option<SyncPoint>) -> Result<Vec<Change>> {
+            match *starting_syncpoint {
+                Some(SyncPoint{last_change}) => {
+                    Ok(self.changes.iter()
+                        .filter(|change| change.timestamp >= last_change)
+                        .map(|change| change.clone())
+                        .collect()
+                    )
+                },
+                None => Ok(self.changes.iter().map(|change| change.clone()).collect())
+            }
+        }
+        fn get_file_details(&self, id: i32) -> Result<FileDetails> {
+            Ok(self.file_data[&id].0.clone())
+        }
+
+        fn send_changes(&mut self, data: &ChangeData, _port: u16) -> Result<()> {
+            self.syncpoints.push(data.syncpoint.clone());
+            Ok(())
+        }
+        fn get_file(&self, id: i32) -> Result<Vec<u8>> {
+            Ok(self.file_data[&id].1.clone())
+        }
+        fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>> {
+            Ok(self.file_data[&id].2.clone())
+        }
+    }
+
+    #[test]
+    fn db_tests() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.lock().unwrap().reset();
+
+        only_tag_additions(fdb.clone());
+        fdb.lock().unwrap().reset();
+        only_tag_removals(fdb.clone());
+        fdb.lock().unwrap().reset();
+        tag_removals_and_additions(fdb.clone());
+        fdb.lock().unwrap().reset();
+        creation_date_updates(fdb.clone());
+        fdb.lock().unwrap().reset();
+        file_system_changes_work(fdb.clone());
+    }
+
+    fn only_tag_additions(fdb: Arc<Mutex<FileDatabase>>) {
+        fdb.lock().unwrap().add_new_file(1, "yolo.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
+        fdb.lock().unwrap().add_new_file(2, "swag.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
+
+        let changes = vec!(
+                Change::new(
+                    naive_datetime_from_date("2017-01-01").unwrap(),
+                    1,
+                    ChangeType::Update(UpdateType::TagAdded("things".into()))
+                ),
+            );
+
+        apply_changes(fdb.clone(), &MockForeignServer::new(vec!(), vec!(), vec!()), &changes, &vec!()).unwrap();
+
+        let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
+
+        let matched_ids: Vec<_> = files_with_tag.iter()
+            .map(|file| file.id)
+            .collect();
+
+        assert_eq!(matched_ids, vec!(1))
+    }
+
+    fn only_tag_removals(fdb: Arc<Mutex<FileDatabase>>) {
+        fdb.lock().unwrap().add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
+        fdb.lock().unwrap().add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
+
+        let changes = vec!(
+                Change::new(
+                    naive_datetime_from_date("2017-01-01").unwrap(),
+                    1,
+                    ChangeType::Update(UpdateType::TagRemoved("things".into()))
+                ),
+            );
+
+        apply_changes(
+            fdb.clone(),
+            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &changes,
+            &vec!()
+        ).unwrap();
+
+        let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
+
+        let matched_ids: Vec<_> = files_with_tag.iter()
+            .map(|file| file.id)
+            .collect();
+
+        assert_eq!(matched_ids, vec!(2))
+    }
+
+    fn tag_removals_and_additions(fdb: Arc<Mutex<FileDatabase>>) {
+        fdb.lock().unwrap().add_new_file(
+            1,
+            "yolo.jpg",
+            None,
+            &mapvec!(String::from: "things"),
+            0,
+            create_change("2017-02-02").unwrap()
+        );
+        fdb.lock().unwrap().add_new_file(
+            2,
+            "swag.jpg",
+            None,
+            &vec!(),
+            0,
+            create_change("2017-02-02").unwrap()
+        );
+
+        let changes = vec!(
+                Change::new(
+                    naive_datetime_from_date("2017-01-01").unwrap(),
+                    1,
+                    ChangeType::Update(UpdateType::TagRemoved("things".into()))
+                ),
+                Change::new(
+                    naive_datetime_from_date("2017-01-02").unwrap(),
+                    2,
+                    ChangeType::Update(UpdateType::TagAdded("things".into()))
+                ),
+                Change::new(
+                    naive_datetime_from_date("2017-01-02").unwrap(),
+                    1,
+                    ChangeType::Update(UpdateType::TagRemoved("things".into()))
+                ),
+            );
+
+        apply_changes(
+            fdb.clone(),
+            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &changes,
+            &vec!()
+        ).unwrap();
+
+        let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
+
+        let matched_ids: Vec<_> = files_with_tag.iter()
+            .map(|file| file.id)
+            .collect();
+
+        assert_eq!(matched_ids, vec!(2))
+    }
+
+    fn creation_date_updates(fdb: Arc<Mutex<FileDatabase>>) {
+        let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
+        let new_timestamp = naive_datetime_from_date("2017-01-02").unwrap();
+        fdb.lock().unwrap().add_new_file(1,
+                         "yolo.jpg",
+                         Some("t_yolo.jpg"),
+                         &mapvec!(String::from: "things"),
+                         original_timestamp.timestamp() as u64,
+                         create_change("2017-02-02").unwrap()
+                    );
+
+
+        let changes = vec!(
+                Change::new(
+                    new_timestamp,
+                    1,
+                    ChangeType::Update(UpdateType::CreationDateChanged(new_timestamp))
+                ),
+            );
+
+        apply_changes(
+            fdb.clone(),
+            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &changes,
+            &vec!()
+        ).unwrap();
+
+        let file = fdb.lock().unwrap().get_file_with_id(1).unwrap();
+
+        assert_eq!(file.creation_date, new_timestamp);
+    }
+
+    fn file_system_changes_work(fdb: Arc<Mutex<FileDatabase>>) {
+        // Set up the intial database
+        let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
+        let original_filename = "test/media/10x10.png";
+
+        let (initial_file, worker_receiver) = file_handler::save_file(
+            ByteSource::File(PathBuf::from(original_filename)),
+            ThumbnailStrategy::Generate,
+            1,
+            &mapvec!(String::from: "things"),
+            &fdb.lock().unwrap(),
+            create_change("2017-02-02").unwrap(),
+            "jpg",
+            original_timestamp.timestamp() as u64
+        ).expect("Failed to save initial file");
+
+        //Wait for the file to be saved and ensure that no error was thrown
+        let save_result = worker_receiver.file.recv()
+            .expect("File saving worker did not send result");
+        save_result.expect("File saving failed");
+        // Wait for the thumbnail to be generatad and ensure that no error was thrown
+        let thumbnail_result = worker_receiver
+            .thumbnail
+            .expect("Thumbnail generator channel not created")
+            .recv()
+            .expect("Thumbnail worker did not send result");
+        thumbnail_result.expect("Thumbnail generation failed");
+
+        // Set up the foreign server
+        let added_bytes = include_bytes!("../test/media/DSC_0001.JPG").into_iter()
+            .map(|a| *a)
+            .collect::<Vec<_>>();
+        let added_thumbnail_bytes = include_bytes!("../test/media/512x512.png").into_iter()
+            .map(|a| *a)
+            .collect::<Vec<_>>();
+
+
+        // Set up foreign changes
+        let remote_changes = vec!(
+                Change::new(
+                    original_timestamp,
+                    3,
+                    ChangeType::FileAdded
+                ),
+                Change::new(
+                    original_timestamp,
+                    2,
+                    ChangeType::FileAdded
+                ),
+                Change::new(
+                    original_timestamp,
+                    1,
+                    ChangeType::FileRemoved
+                ),
+            );
+
+        let mut all_changes = vec!();
+        for change in &remote_changes {
+            all_changes.push(change.clone());
+        }
+        for change in &fdb.lock().unwrap().get_all_changes().expect("Failed to get changes from db") {
+            all_changes.push(change.clone());
+        }
+        all_changes.sort_by_key(|change| change.timestamp);
+
+        // Set up the foreign server
+        let mut foreign_server = MockForeignServer::new(
+                vec!(
+                    (2, (FileDetails::new(
+                        "jpg".into(),
+                        NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+                    ), added_bytes, Some(added_thumbnail_bytes))),
+                    (3, (FileDetails::new(
+                        "jpg".into(),
+                        NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+                    ), vec!(), None)),
+                ),
+                vec!(),
+                remote_changes
+            );
+
+        // Apply the changes
+        sync_with_foreign(fdb.clone(), &mut foreign_server, 0)
+            .expect("Foreign server sync failed");
+
+        // Assert that the local database now contains all changes
+        assert_eq!(
+            all_changes,
+            fdb.lock().unwrap().get_all_changes().expect("Failed to get changes from database")
+        );
+
+
+        // Ensure that the correct files are in the database
+        let file_1 = fdb.lock().unwrap().get_file_with_id(1);
+        let file_2 = fdb.lock().unwrap().get_file_with_id(2);
+        let file_3 = fdb.lock().unwrap().get_file_with_id(3);
+        assert_eq!(file_1, None);
+        assert_matches!(file_2, Some(_));
+        assert_matches!(file_3, Some(_));
+
+        let (file_2, file_3) = (
+            file_2.expect("File 2 was added"),
+            file_3.expect("File 3 was added")
+        );
+
+        // Open the file and compare the bytes to the expected values
+        let actual_file_2 = PathBuf::from(file_2.filename);
+        let actual_thumbnail_2 = file_2.thumbnail_path.map(|tp| PathBuf::from(tp));
+
+        let actual_file_3 = PathBuf::from(file_3.filename);
+        assert_matches!(file_3.thumbnail_path, None);
+
+        // Ensure that the old file was deleted
+        {
+            let path = fdb.lock().unwrap().get_file_save_path().join(PathBuf::from(initial_file.filename));
+            assert!(!path.exists());
+        }
+
+        // Ensure that the old thumbnail was deleted
+        {
+            let path = fdb.lock().unwrap().get_file_save_path()
+                .join(PathBuf::from(
+                    initial_file.thumbnail_path.expect("Initial file had no thumbnail")
+                ));
+            assert!(!path.exists());
+        }
+
+        // Ensure that the new are created
+        {
+            let path = fdb.lock().unwrap().get_file_save_path().join(actual_file_2);
+            assert!(path.exists());
+        }
+        {
+            let path = fdb.lock().unwrap().get_file_save_path().join(actual_file_3);
+            assert!(path.exists());
+        }
+
+        // Ensure that the new thumbnail for file 2 was created
+        {
+            let path = fdb.lock().unwrap().get_file_save_path()
+                .join(PathBuf::from(
+                    actual_thumbnail_2.expect("File 2 should have a filename")
+                ));
+            assert!(path.exists());
+        }
+        // Ensure that the no file for file 3 was created
+        {
+            let path = fdb.lock().unwrap().get_file_save_path()
+                .join(PathBuf::from(
+                    "thumb_3.jpg"
+                ));
+            assert!(!path.exists());
+        }
+
+        // Ensure that syncpoints were created
+        let syncpoints = fdb.lock().unwrap()
+            .get_syncpoints()
+            .expect("failed to read syncpoints from database");
+        assert_eq!(syncpoints.len(), 1);
+
+        let foreign_syncpoints = foreign_server.get_syncpoints();
+        assert_eq!(foreign_syncpoints.expect("Failed to get syncpoints from foreign").len(), 1);
+    }
+}

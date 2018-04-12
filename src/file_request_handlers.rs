@@ -1,21 +1,15 @@
-use std::path::PathBuf;
 
 use serde_json;
 
 use iron::*;
-
 use persistent::Write;
-use std::fs;
+
+use std::path::{Path, PathBuf};
 
 use std::sync::Mutex;
 use std::sync::Arc;
 
-use std::path::Path;
-
-use std::thread;
-
-use std::io;
-use std::sync::mpsc::{channel, Receiver};
+use chrono::{NaiveDateTime, Utc};
 
 use file_database;
 use file_database::FileDatabase;
@@ -23,12 +17,16 @@ use file_list::{FileListList, FileLocation};
 use file_list_worker;
 use persistent_file_list;
 use file_util::sanitize_tag_names;
-use file_util::{generate_thumbnail, get_semi_unique_identifier, get_file_timestamp};
+use file_util::{get_semi_unique_identifier};
 use request_helpers::get_get_variable;
-
-use file_request_error::{FileRequestError, err_invalid_variable_type};
+use file_handler::{save_file, FileSavingWorkerResults, ThumbnailStrategy};
+use byte_source::ByteSource;
+use changelog;
+use changelog::ChangeCreationPolicy;
 
 use file_list_response;
+
+use error::{Result, ErrorKind, Error};
 
 enum FileAction {
     GetData,
@@ -68,7 +66,7 @@ impl FileData {
     fn from_database(source: file_database::File) -> FileData {
         FileData {
             file_path: source.filename,
-            thumbnail_path: source.thumbnail_path,
+            thumbnail_path: source.thumbnail_path.unwrap_or_else(|| String::from("")),
             tags: source.tags,
         }
     }
@@ -82,18 +80,12 @@ impl FileData {
     }
 }
 
-
-#[derive(Debug)]
-enum FileSavingResult {
-    Success,
-    Failure(io::Error),
-}
-
 #[derive(Debug)]
 enum FileSaveRequestResult {
-    NewDatabaseEntry(FileLocation, Receiver<FileSavingResult>),
+    NewDatabaseEntry(FileLocation, FileSavingWorkerResults),
     UpdatedDatabaseEntry(FileLocation),
 }
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //                      Public request handlers
@@ -115,7 +107,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response> 
         file_request_handler(request, &action)
     }
     else {
-        Err(FileRequestError::UnknownAction(action_str))?
+        Err(Error::from(ErrorKind::UnknownAction(action_str)))?
     }
 }
 
@@ -164,8 +156,8 @@ fn file_request_handler(request: &mut Request, action: &FileAction) -> IronResul
         FileAction::Save => {
             let db = request.get::<Write<FileDatabase>>().unwrap();
             let tags = get_tags_from_request(request)?;
-
-            match handle_save_request(db, &file_location, &tags)? {
+            let current_time = NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0);
+            match handle_save_request(db, &file_location, &tags, current_time)? {
                 FileSaveRequestResult::NewDatabaseEntry(new_location, _) |
                 FileSaveRequestResult::UpdatedDatabaseEntry(new_location) => {
                     let mut file_list_list = request.get::<Write<FileListList>>().unwrap();
@@ -187,7 +179,7 @@ fn file_request_handler(request: &mut Request, action: &FileAction) -> IronResul
 ///                     out of iron requests
 ////////////////////////////////////////////////////////////////////////////////
 
-fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), FileRequestError> {
+fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize)> {
     let list_id = file_list_response::read_request_list_id(request)?;
 
     let file_index = get_get_variable(request, "index")?;
@@ -195,7 +187,7 @@ fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), F
     let file_index = match file_index.parse::<usize>() {
         Ok(val) => val,
         Err(_) => {
-            return Err(err_invalid_variable_type("index", "usize"));
+            return Err(ErrorKind::InvalidVariableType("index".into(), "usize".into()).into());
         }
     };
 
@@ -204,13 +196,13 @@ fn read_request_list_id_index(request: &mut Request) -> Result<(usize, usize), F
 
 
 
-fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>, FileRequestError> {
+fn get_tags_from_request(request: &mut Request) -> Result<Vec<String>> {
     //Get the important information from the request.
     let tag_string = get_get_variable(request, "tags")?;
 
     match serde_json::from_str::<Vec<String>>(&tag_string) {
         Ok(result) => Ok(sanitize_tag_names(&result)),
-        Err(e) => Err(err_invalid_variable_type("tags", &format!("{:?}", e))),
+        Err(e) => Err(ErrorKind::InvalidVariableType("tags".into(), format!("{:?}", e)).into()),
     }
 }
 
@@ -260,10 +252,11 @@ fn handle_save_request(
     db: Arc<Mutex<FileDatabase>>,
     file_location: &FileLocation,
     tags: &[String],
-) -> Result<FileSaveRequestResult, FileRequestError> {
+    change_timestamp: NaiveDateTime
+) -> Result<FileSaveRequestResult> {
     match *file_location {
         FileLocation::Unsaved(ref path) => {
-            match save_new_file(db, path, tags) {
+            match save_new_file(db, path, tags, change_timestamp) {
                 Ok((db_entry, save_result_rx)) => {
                     Ok(FileSaveRequestResult::NewDatabaseEntry(
                         FileLocation::Database(db_entry),
@@ -274,7 +267,7 @@ fn handle_save_request(
             }
         }
         FileLocation::Database(ref old_file) => {
-            match update_stored_file(db, old_file, tags) {
+            match update_stored_file_tags(db, old_file, tags, change_timestamp) {
                 Ok(db_entry) => {
                     Ok(FileSaveRequestResult::UpdatedDatabaseEntry(
                         FileLocation::Database(db_entry),
@@ -291,95 +284,46 @@ fn handle_save_request(
 */
 fn save_new_file(
     db: Arc<Mutex<FileDatabase>>,
-    original_path: &PathBuf,
+    original_path: &Path,
     tags: &[String],
-) -> Result<(file_database::File, Receiver<FileSavingResult>), FileRequestError> {
-    let file_extension = match (*original_path).extension() {
-        Some(val) => val,
-        None => return Err(FileRequestError::NoFileExtension(original_path.clone())),
-    };
-
-    //Get the folder where we want to place the stored file
-    let destination_dir = {
-        let db = db.lock().unwrap();
-
-        PathBuf::from(db.get_file_save_path())
-    };
-
+    current_time: NaiveDateTime
+) -> Result<(file_database::File, FileSavingWorkerResults)> {
     let file_identifier = get_semi_unique_identifier();
 
-    let filename = format!("thumb_{}.jpg", file_identifier);
+    let file = ByteSource::File(original_path.into());
 
-    let thumbnail_path = destination_dir.join(&PathBuf::from(filename));
+    let fdb = db.lock().unwrap();
 
-
-    //Generate the thumbnail
-    //TODO: Use this result
-    generate_thumbnail(original_path, &thumbnail_path, 300);
-
-    //Copy the file to the destination
-    //Get the name and path of the new file
-    let filename = format!("{}.{}", file_identifier, file_extension.to_string_lossy());
-    let new_file_path = destination_dir.join(PathBuf::from(filename.clone()));
+    let extension = match original_path.extension() {
+        Some(val) => Ok(val),
+        None => Err(ErrorKind::NoFileExtension(original_path.to_owned().into()))
+    }?;
 
 
-    let thumbnail_filename = thumbnail_path.file_name().unwrap().to_string_lossy();
-
-
-    let timestamp = get_file_timestamp(&PathBuf::from((*original_path).clone()));
-
-    //Store the file in the database
-    let saved_id = {
-        let mut db = db.lock().unwrap();
-
-        db.add_new_file(
-            &filename.to_owned(),
-            &thumbnail_filename.to_string(),
-            tags,
-            timestamp,
-        )
-    };
-
-    let save_result_rx = {
-        let original_path = original_path.clone();
-        let new_file_path = new_file_path.clone();
-
-        let (tx, rx) = channel();
-
-        thread::spawn(move || {
-            let save_result = match fs::copy(original_path, new_file_path) {
-                Ok(_) => FileSavingResult::Success,
-                Err(e) => FileSavingResult::Failure(e),
-            };
-
-            // We ignore any failures to send the file save result since
-            // it most likely means that the caller of the save function
-            // does not care about the result
-            match tx.send(save_result) {
-                _ => {}
-            }
-        });
-
-        rx
-    };
-
-    Ok((saved_id, save_result_rx))
+    save_file(
+        file,
+        ThumbnailStrategy::Generate,
+        file_identifier,
+        tags,
+        &fdb,
+        changelog::ChangeCreationPolicy::Yes(current_time),
+        &extension.to_string_lossy(),
+        current_time.timestamp() as u64
+    )
 }
 
 
 /**
   Updates a specified file in the database with new tags
 */
-fn update_stored_file(
+fn update_stored_file_tags(
     db: Arc<Mutex<FileDatabase>>,
     old_entry: &file_database::File,
     tags: &[String],
-) -> Result<file_database::File, FileRequestError> {
+    change_timestamp: NaiveDateTime
+) -> Result<file_database::File> {
     let db = db.lock().unwrap();
-    match db.change_file_tags(old_entry, tags) {
-        Ok(result) => Ok(result),
-        Err(e) => Err(FileRequestError::DatabaseSaveError(e)),
-    }
+    db.change_file_tags(old_entry, tags, ChangeCreationPolicy::Yes(change_timestamp))
 }
 
 
@@ -413,7 +357,9 @@ fn get_file_list_thumbnail(storage_folder: &Path, file: &FileLocation) -> PathBu
     match *file {
         FileLocation::Unsaved(ref path) => path.clone(),
         FileLocation::Database(ref db_entry) => {
-            PathBuf::from(storage_folder.join(db_entry.thumbnail_path.clone()))
+            PathBuf::from(storage_folder.join(
+                    db_entry.thumbnail_path.clone().unwrap_or_else(|| String::from(""))
+                ))
         }
     }
 }
@@ -425,17 +371,17 @@ fn get_file_list_object(
     file_list_list: &FileListList,
     list_id: usize,
     file_index: usize,
-) -> Result<FileLocation, FileRequestError> {
+) -> Result<FileLocation> {
     let file_list = match file_list_list.get(list_id) {
         Some(list) => list,
         None => {
-            return Err(FileRequestError::NoSuchList(list_id));
+            return Err(ErrorKind::NoSuchList(list_id).into());
         }
     };
 
     match file_list.get(file_index) {
         Some(file) => Ok(file.clone()),
-        None => Err(FileRequestError::NoSuchFile(list_id, file_index)),
+        None => Err(ErrorKind::NoSuchFileInList(list_id, file_index).into()),
     }
 }
 
@@ -467,13 +413,16 @@ mod file_request_tests {
 
     use file_list::{FileList, FileListSource};
 
+    use chrono::NaiveDate;
+
+    use changelog::ChangeCreationPolicy;
 
     fn dummy_database_entry(file_path: &str, thumbnail_path: &str) -> file_database::File {
         file_database::File {
             id: 0,
             filename: file_path.to_owned(),
-            thumbnail_path: thumbnail_path.to_owned(),
-            creation_date: None,
+            thumbnail_path: Some(thumbnail_path.to_owned()),
+            creation_date: NaiveDate::from_ymd(2016,1,1).and_hms(0,0,0),
             is_uploaded: true,
             tags: vec![],
         }
@@ -575,20 +524,33 @@ mod file_request_tests {
     fn saving_a_file_without_extension_fails(fdb: Arc<Mutex<FileDatabase>>) {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
         assert_matches!(
-                save_new_file(fdb.clone(), &PathBuf::from("test"), &tags),
-                Err(FileRequestError::NoFileExtension(_))
+                save_new_file(
+                    fdb.clone(),
+                    &PathBuf::from("test"),
+                    &tags,
+                    NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0)
+                ),
+                Err(Error(ErrorKind::NoFileExtension(_), _))
             );
     }
 
     fn file_list_saving_works(fdb: Arc<Mutex<FileDatabase>>) {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
 
-        let src_path = PathBuf::from("test/media/DSC_0001.JPG");
-        let (result, save_result_rx) = save_new_file(fdb.clone(), &src_path, &tags).unwrap();
+        let src_path = PathBuf::from("test/media/10x10.png");
+        let (result, worker_results) = save_new_file(
+                fdb.clone(),
+                &src_path,
+                &tags,
+                NaiveDate::from_ymd(2017, 1, 1).and_hms(0,0,0)
+            )
+            .unwrap();
 
 
-        let save_result = save_result_rx.recv().unwrap();
-        assert_matches!(save_result, FileSavingResult::Success);
+        let save_result = worker_results.file.recv().unwrap();
+        assert_matches!(save_result, Ok(()));
+        let thumbnail_save_result = worker_results.thumbnail.unwrap().recv().expect("Thumbnail creator crashed");
+        assert_matches!(thumbnail_save_result, Ok(()));
 
         let full_path = {
             let fdb = fdb.lock().unwrap();
@@ -612,20 +574,32 @@ mod file_request_tests {
     }
 
     fn file_list_save_requests_work(fdb: Arc<Mutex<FileDatabase>>) {
-        let old_path = PathBuf::from("test/media/DSC_0001.JPG");
+        let old_path = PathBuf::from("test/media/10x10.png");
 
         let tags = vec!("new1".to_owned());
 
         let saved_entry = {
-            let result = handle_save_request(fdb.clone(), &FileLocation::Unsaved(old_path), &tags);
+            let timestamp = NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0);
+            let result = handle_save_request(
+                fdb.clone(),
+                &FileLocation::Unsaved(old_path),
+                &tags,
+                timestamp
+            );
 
             assert_matches!(result, Ok(_));
             let result = result.unwrap();
 
             assert_matches!(result, FileSaveRequestResult::NewDatabaseEntry(FileLocation::Database(_), _));
             match result {
-                FileSaveRequestResult::NewDatabaseEntry(file_entry, receiver) => {
-                    assert_matches!(receiver.recv().unwrap(), FileSavingResult::Success);
+                FileSaveRequestResult::NewDatabaseEntry(file_entry, worker_receivers) => {
+                    assert_matches!(worker_receivers.file.recv().unwrap(), Ok(()));
+                    assert_matches!(worker_receivers
+                            .thumbnail
+                            .expect("Thumbnail generator channel not created")
+                            .recv()
+                            .expect("Thumbnail saving failed"), Ok(())
+                        );
 
                     match file_entry {
                         FileLocation::Database(result) => {
@@ -653,14 +627,28 @@ mod file_request_tests {
         let old_tags = vec!(String::from("old"));
         let old_location = {
             let mut fdb = fdb.lock().unwrap();
-            fdb.add_new_file("test", "thumb", &old_tags, 0)
+            fdb.add_new_file(
+                1,
+                "test",
+                Some("thumb"),
+                &old_tags,
+                0,
+                ChangeCreationPolicy::No
+            )
         };
 
         let tags = vec!("new1".to_owned());
 
         let saved_entry = {
+            let timestamp = NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0);
+
             let result =
-                handle_save_request(fdb.clone(), &FileLocation::Database(old_location), &tags);
+                handle_save_request(
+                    fdb.clone(),
+                    &FileLocation::Database(old_location),
+                    &tags,
+                    timestamp
+                );
 
             assert_matches!(result, Ok(_));
             let result = result.unwrap();

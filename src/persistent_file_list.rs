@@ -135,6 +135,8 @@ pub fn read_file_list_list(file: &Path, db: &file_database::FileDatabase) -> Res
 mod file_list_persistence_tests {
     use super::*;
 
+    use changelog::ChangeCreationPolicy;
+
     // Helpers
     fn assert_lists_are_equal(list1: &FileList, list2: &FileList) {
         for (original, read) in list1.get_files().iter().zip(list2.get_files().iter()) {
@@ -147,8 +149,22 @@ mod file_list_persistence_tests {
     fn dummy_database_list(db: &mut file_database::FileDatabase) -> FileList {
         FileList::from_locations(
             vec![
-                FileLocation::Database(db.add_new_file("filename", "thumbname", &vec![], 0)),
-                FileLocation::Database(db.add_new_file("filename", "thumbname", &vec![], 0)),
+                FileLocation::Database(db.add_new_file(
+                    1,
+                    "filename",
+                    Some("thumbname"),
+                    &vec![],
+                    0,
+                    ChangeCreationPolicy::No
+                )),
+                FileLocation::Database(db.add_new_file(
+                    2,
+                    "filename",
+                    Some("thumbname"),
+                    &vec![],
+                    0,
+                    ChangeCreationPolicy::No
+                )),
                 FileLocation::Unsaved(PathBuf::from("path")),
             ],
             FileListSource::Folder(PathBuf::from("test/media")),

@@ -12,13 +12,19 @@ use std::thread;
 
 use glob::glob;
 
-use error::Result;
+use error::{Result, ResultExt, ErrorKind};
 
 use chrono::NaiveDateTime;
 
 use exiftool;
 use exiftool::{ExifData};
+use byte_source::{ByteSource, vec_from_byte_source};
 
+use std::sync::mpsc;
+
+use image::GenericImage;
+
+const THUMBNAIL_SIZE: u32 = 200;
 
 /**
   Generates a thumbnail for the given source file and stores that file in a unique location which
@@ -31,29 +37,35 @@ use exiftool::{ExifData};
   landscape mode will be at most `max_width` tall
  */
 
-//TODO: Send errors back to caller over a channel instead of ignoring them
 pub fn generate_thumbnail(
-    source_path: &Path,
+    source: ByteSource,
     destination_path: &Path,
-    max_size: u32,
-) -> Result<()> {
-    {
-        let destination_path = destination_path.to_owned();
-        let source_path_clone = source_path.to_owned();
-        thread::spawn(move || {
-            let img = match image::open(source_path_clone) {
-                Ok(val) => val,
-                Err(_) => return,
-            };
+) -> mpsc::Receiver<Result<()>> {
+    let destination_path = destination_path.to_owned();
 
-            let thumb_data = generate_thumbnail_from_generic_image(&img, max_size);
+    let (tx, rx) = mpsc::channel();
 
-            let fout = &mut File::create(&destination_path).unwrap();
-            thumb_data.save(fout, image::PNG).unwrap();
-        });
-    }
+    thread::spawn(move || {
+        let handler = || -> Result<()> {
+            let file_content = vec_from_byte_source(source)?;
+            let img = image::load_from_memory(&file_content)?;
 
-    Ok(())
+            let thumb_data = generate_thumbnail_from_generic_image(&img, THUMBNAIL_SIZE);
+
+            let fout = &mut File::create(&destination_path)?;
+            thumb_data.save(fout, image::PNG)?;
+            Ok(())
+        };
+
+        let generation_result = handler()
+            .chain_err(|| ErrorKind::ThumbnailGenerationFailed);
+
+        /// We don't care if the result could not be sent because it probably means
+        /// that the receiver does not care
+        let _result = tx.send(generation_result);
+    });
+
+    rx
 }
 
 
@@ -77,10 +89,9 @@ fn generate_thumbnail_from_generic_image(
 /**
   Returns a really big random number as a string
  */
-pub fn get_semi_unique_identifier() -> String {
-    format!("{}", rand::random::<u64>())
+pub fn get_semi_unique_identifier() -> i32 {
+    rand::random::<i32>()
 }
-
 
 pub fn system_time_as_unix_timestamp(time: SystemTime) -> u64 {
     let duration = time.duration_since(UNIX_EPOCH).unwrap();

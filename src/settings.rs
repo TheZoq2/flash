@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 pub struct Settings {
     file_storage_path: PathBuf,
-    port: u32,
+    port: u16,
     file_read_path: PathBuf,
 }
 
@@ -24,7 +24,7 @@ impl Settings {
 
         let port = env::var("FLASH_PORT")
             .unwrap_or_else(|_| "3000".to_owned())
-            .parse::<u32>()
+            .parse::<u16>()
             .expect("FLASH_PORT must be a positive integer");
 
         let file_read_path = {
@@ -45,7 +45,7 @@ impl Settings {
         self.file_storage_path.clone()
     }
 
-    pub fn get_port(&self) -> u32 {
+    pub fn get_port(&self) -> u16 {
         self.port
     }
 
