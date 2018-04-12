@@ -68,7 +68,7 @@ pub trait ForeignServer {
     fn get_syncpoints(&self) -> Result<Vec<SyncPoint>>;
     fn get_changes(&self, starting_timestamp: &Option<SyncPoint>) -> Result<Vec<Change>>;
     fn get_file_details(&self, id: i32) -> Result<FileDetails>;
-    fn send_changes(&self, change: &ChangeData, own_port: u16) -> Result<()>;
+    fn send_changes(&mut self, change: &ChangeData, own_port: u16) -> Result<()>;
     fn get_file(&self, id: i32) -> Result<Vec<u8>>;
     fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>>;
 }
@@ -204,7 +204,7 @@ impl ForeignServer for HttpForeignServer {
 
         send_request::<FileDetails>(&url, "")
     }
-    fn send_changes(&self, changes: &ChangeData, own_port: u16) -> Result<()> {
+    fn send_changes(&mut self, changes: &ChangeData, own_port: u16) -> Result<()> {
         let path = vec!(String::from("sync"), String::from("apply_changes"));
         let query = vec!((String::from("port"), format!("{}", own_port)));
         let url = construct_url(FOREIGN_SCHEME, &self.url, &path, &query);

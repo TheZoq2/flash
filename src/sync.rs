@@ -44,7 +44,7 @@ fn get_removed_files(changes: &[Change]) -> Vec<i32> {
         .collect()
 }
 
-pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &ForeignServer, own_port: u16) -> Result<()> {
+pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &mut ForeignServer, own_port: u16) -> Result<()> {
     let (local_changes, new_syncpoint, removed_files, remote_changes) = {
         let fdb = fdb.lock().unwrap();
         // Get the syncpoints from the local and remote servers
@@ -82,7 +82,7 @@ pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &Foreign
     foreign_server.send_changes(
         &ChangeData{
             changes: local_changes,
-            syncpoint: new_syncpoint,
+            syncpoint: new_syncpoint.clone(),
             removed_files: removed_files.clone()
         },
         own_port
@@ -91,7 +91,9 @@ pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &Foreign
 
     // Apply changes locally
     apply_changes(fdb.clone(), foreign_server, &remote_changes, &removed_files)
-        .chain_err(|| "Failed to apply changes")
+        .chain_err(|| "Failed to apply changes")?;
+
+    Ok(fdb.lock().unwrap().add_syncpoint(&new_syncpoint)?)
 }
 
 
@@ -257,7 +259,8 @@ mod sync_tests {
             Ok(self.file_data[&id].0.clone())
         }
 
-        fn send_changes(&self, _: &ChangeData, _port: u16) -> Result<()> {
+        fn send_changes(&mut self, data: &ChangeData, _port: u16) -> Result<()> {
+            self.syncpoints.push(data.syncpoint.clone());
             Ok(())
         }
         fn get_file(&self, id: i32) -> Result<Vec<u8>> {
@@ -486,7 +489,7 @@ mod sync_tests {
         all_changes.sort_by_key(|change| change.timestamp);
 
         // Set up the foreign server
-        let foreign_server = MockForeignServer::new(
+        let mut foreign_server = MockForeignServer::new(
                 vec!(
                     (2, (FileDetails::new(
                         "jpg".into(),
@@ -502,7 +505,8 @@ mod sync_tests {
             );
 
         // Apply the changes
-        sync_with_foreign(fdb.clone(), &foreign_server, 0).expect("Foreign server sync failed");
+        sync_with_foreign(fdb.clone(), &mut foreign_server, 0)
+            .expect("Foreign server sync failed");
 
         // Assert that the local database now contains all changes
         assert_eq!(
@@ -572,5 +576,14 @@ mod sync_tests {
                 ));
             assert!(!path.exists());
         }
+
+        // Ensure that syncpoints were created
+        let syncpoints = fdb.lock().unwrap()
+            .get_syncpoints()
+            .expect("failed to read syncpoints from database");
+        assert_eq!(syncpoints.len(), 1);
+
+        let foreign_syncpoints = foreign_server.get_syncpoints();
+        assert_eq!(foreign_syncpoints.expect("Failed to get syncpoints from foreign").len(), 1);
     }
 }

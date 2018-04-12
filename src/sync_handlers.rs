@@ -27,9 +27,9 @@ pub fn sync_handler(own_port: u16, request: &mut Request) -> IronResult<Response
 
     let foreign_url = get_get_variable(request, "foreign_url")?;
 
-    handle_sync_request(fdb, &HttpForeignServer::new(foreign_url), own_port)?;
+    handle_sync_request(fdb, &mut HttpForeignServer::new(foreign_url), own_port)?;
 
-    Ok(Response::with((status::Ok, "")))
+    Ok(Response::with((status::Ok, "Sync done")))
 }
 
 pub fn syncpoint_request_handler(request: &mut Request) -> IronResult<Response> {
@@ -176,6 +176,6 @@ fn handle_change_application(body: String, fdb: Arc<Mutex<FileDatabase>>, foreig
 }
 
 
-fn handle_sync_request(fdb: Arc<Mutex<FileDatabase>>, foreign: &HttpForeignServer, own_port: u16) -> Result<()> {
+fn handle_sync_request(fdb: Arc<Mutex<FileDatabase>>, foreign: &mut HttpForeignServer, own_port: u16) -> Result<()> {
     sync_with_foreign(fdb, foreign, own_port)
 }
