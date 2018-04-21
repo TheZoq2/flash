@@ -1,4 +1,0 @@
-function album_main()
-{
-	
-}
