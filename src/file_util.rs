@@ -168,6 +168,27 @@ pub fn get_files_in_dir(dir: &PathBuf) -> Vec<PathBuf> {
     result
 }
 
+/**
+  Returns a list of all subdirectories of a dir
+*/
+pub fn subdirs_in_directory(dir: &Path) -> Result<Vec<PathBuf>> {
+    let files = fs::read_dir(dir)?;
+
+    Ok(files.map(|file| {
+            let file = file?;
+            match file.metadata() {
+                Ok(ref metadata) if metadata.is_dir() => Ok(Some(file.path())),
+                Ok(_) => Ok(None),
+                Err(e) => Err(e)?
+            }
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .filter_map(|a| a)
+        .collect()
+    )
+}
+
 
 #[cfg(test)]
 mod thumbnail_tests {
@@ -244,5 +265,18 @@ mod util_tests {
 
             assert_eq!(sanitize_tag_names(&vec), expected);
         }
+    }
+
+    #[test]
+    fn subdir_test() {
+        let subdirs = subdirs_in_directory(&PathBuf::from(".")).expect("Failed to read files in dir");
+
+        assert_eq!(subdirs.len(), 6);
+        assert!(subdirs.contains(&PathBuf::from("./target")));
+        assert!(subdirs.contains(&PathBuf::from("./src")));
+        assert!(subdirs.contains(&PathBuf::from("./migrations")));
+        assert!(subdirs.contains(&PathBuf::from("./.git")));
+        assert!(subdirs.contains(&PathBuf::from("./frontend")));
+        assert!(subdirs.contains(&PathBuf::from("./test")));
     }
 }

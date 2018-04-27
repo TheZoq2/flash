@@ -66,6 +66,7 @@ mod util;
 mod file_handler;
 mod byte_source;
 mod foreign_server;
+mod misc_handlers;
 
 mod fix_timestamps;
 
