@@ -118,6 +118,8 @@ fn main() {
 
     let file_list_worker_commander = file_list_worker::start_worker(file_list_save_path);
 
+    let file_read_path = settings.get_file_read_path();
+
     let port = settings.get_port();
 
     let mut mount = Mount::new();
@@ -134,6 +136,9 @@ fn main() {
     mount.mount("sync/thumbnail", sync_handlers::thumbnail_request_handler);
     mount.mount("sync/changes", sync_handlers::change_request_handler);
     mount.mount("sync/apply_changes", sync_handlers::change_application_handler);
+    mount.mount("subdirectories", move |request: &mut Request| {
+        misc_handlers::subdirectory_request_handler(request, &file_read_path)}
+    );
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list_list));

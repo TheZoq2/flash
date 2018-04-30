@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 use chrono::prelude::*;
 
-use foreign_server::{ForeignServer, FileDetails, ChangeData};
+use foreign_server::{ForeignServer, ChangeData};
 
 
 
@@ -208,6 +208,8 @@ mod sync_tests {
     use file_database::db_test_helpers::get_files_with_tags;
 
     use std::path::PathBuf;
+
+    use foreign_server::{FileDetails};
 
     use chrono;
 
