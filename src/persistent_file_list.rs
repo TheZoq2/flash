@@ -175,7 +175,7 @@ mod file_list_persistence_tests {
     // Tests
     #[test]
     fn path_only_jsonification_test() {
-        let file_list = FileList::from_directory(PathBuf::from("test/media"));
+        let file_list = FileList::from_directory(PathBuf::from("test/media"), &PathBuf::from(""));
 
 
         file_database::db_test_helpers::run_test(|db| {
@@ -209,7 +209,7 @@ mod file_list_persistence_tests {
         file_database::db_test_helpers::run_test(|db| {
             let file_lists = vec![
                 dummy_database_list(db),
-                FileList::from_directory(PathBuf::from("test/media")),
+                FileList::from_directory(PathBuf::from("test/media"), &PathBuf::from("")),
             ];
 
             let file_list_list = FileListList::from_lists(file_lists);
@@ -232,7 +232,7 @@ mod file_list_persistence_tests {
         file_database::db_test_helpers::run_test(|db| {
             let file_lists = vec![
                 dummy_database_list(db),
-                FileList::from_directory(PathBuf::from("test/media")),
+                FileList::from_directory(PathBuf::from("test/media"), &PathBuf::from("")),
             ];
 
             let file_list_list = FileListList::from_lists(file_lists);

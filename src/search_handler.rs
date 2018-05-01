@@ -57,13 +57,13 @@ fn handle_search_for_saved_files(
 fn handle_directory_search(request: &mut Request, path_str: &str) -> IronResult<Response> {
     let file_list_list = request.get::<Write<FileListList>>().unwrap();
 
-    let starting_dir = {
+    let file_read_path = {
         let settings = request.get::<Read<Settings>>().unwrap();
 
         settings.get_file_read_path()
     };
 
-    let path = starting_dir.join(PathBuf::from(&path_str));
+    let path = PathBuf::from(&path_str);
 
     // Lock the file list and insert a new list
     let file_list_id = {
@@ -71,7 +71,7 @@ fn handle_directory_search(request: &mut Request, path_str: &str) -> IronResult<
 
         match file_list_list.get_id_with_source(FileListSource::Folder(path.clone())) {
             Some(id) => id,
-            None => file_list_list.add(FileList::from_directory(path)),
+            None => file_list_list.add(FileList::from_directory(path, &file_read_path)),
         }
     };
 

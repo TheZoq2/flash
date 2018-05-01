@@ -185,6 +185,7 @@ pub fn subdirs_in_directory(dir: &Path) -> Result<Vec<PathBuf>> {
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .filter_map(|a| a)
+        .map(|path| path.strip_prefix(dir).unwrap().to_path_buf())
         .collect()
     )
 }
@@ -272,11 +273,17 @@ mod util_tests {
         let subdirs = subdirs_in_directory(&PathBuf::from(".")).expect("Failed to read files in dir");
 
         assert_eq!(subdirs.len(), 6);
-        assert!(subdirs.contains(&PathBuf::from("./target")));
-        assert!(subdirs.contains(&PathBuf::from("./src")));
-        assert!(subdirs.contains(&PathBuf::from("./migrations")));
-        assert!(subdirs.contains(&PathBuf::from("./.git")));
-        assert!(subdirs.contains(&PathBuf::from("./frontend")));
-        assert!(subdirs.contains(&PathBuf::from("./test")));
+        assert_eq!(
+            subdirs,
+            mapvec!(PathBuf::from: "target", "src", "migrations", ".git", "frontend", "test")
+        );
+    }
+
+    #[test]
+    fn subdir_with_path_test() {
+        let subdirs = subdirs_in_directory(&PathBuf::from("target"))
+            .expect("Failed to read folders in dir");
+
+        assert!(subdirs.contains(&PathBuf::from("debug")));
     }
 }

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use iron::typemap::Key;
 use std::option::Option;
@@ -12,9 +12,9 @@ use file_database;
 */
 #[derive(Clone, PartialEq, Debug)]
 pub enum FileLocation {
-    ///Not yet stored in the database.
+    /// Not yet stored in the database.
     Unsaved(PathBuf),
-    ///Stored in the database as the specified file entry
+    /// Stored in the database as the specified file entry
     Database(file_database::File),
 }
 
@@ -44,8 +44,9 @@ impl FileList {
         FileList { files, source }
     }
 
-    pub fn from_directory(path: PathBuf) -> FileList {
-        let file_paths = get_files_in_dir(&path);
+    pub fn from_directory(path: PathBuf, file_read_path: &Path) -> FileList {
+        let full_dir_path = file_read_path.join(&path);
+        let file_paths = get_files_in_dir(&full_dir_path);
 
         let files = file_paths
             .into_iter()
