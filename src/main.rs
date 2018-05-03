@@ -69,6 +69,7 @@ mod foreign_server;
 mod misc_handlers;
 
 mod fix_timestamps;
+mod add_changes;
 
 #[macro_use]
 extern crate serde_derive;

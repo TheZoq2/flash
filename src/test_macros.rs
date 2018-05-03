@@ -24,7 +24,7 @@ macro_rules! db_test {
                 pub fn testfun($fdbname: &mut FileDatabase)
                     $function
             }
-            db_test_helpers::run_test(internal::testfun);
+            ::file_database::db_test_helpers::run_test(internal::testfun);
         }
     }
 }
