@@ -10,7 +10,7 @@ pub fn create_changes_for_files(fdb: &FileDatabase, timestamp: &NaiveDateTime) -
     let files = fdb.search_files(::search::SavedSearchQuery::empty());
 
     for file in files {
-        fdb.add_change(&Change::new(*timestamp, file.id, ChangeType::FileAdded));
+        fdb.add_change(&Change::new(*timestamp, file.id, ChangeType::FileAdded))?;
 
         for tag in file.tags {
             fdb.add_change(&Change::new(

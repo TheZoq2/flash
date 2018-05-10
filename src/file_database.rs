@@ -866,7 +866,7 @@ mod chage_tests {
 
     use changelog::ChangeCreationPolicy;
 
-    use chrono::{NaiveDate, Datelike};
+    use chrono::{NaiveDate};
 
     use changelog::{ChangeType, Change, UpdateType};
 

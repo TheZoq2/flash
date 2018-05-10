@@ -303,7 +303,6 @@ mod http_tests {
 mod sync_integration {
     use super::*;
     use foreign_server::HttpForeignServer;
-    use file_database::{db_test_helpers, FileDatabase};
 
     use file_list_response::ListResponse;
 
@@ -325,7 +324,7 @@ mod sync_integration {
             // Start the foreign server
             let mut command = ::std::process::Command::new("test/run_sync_test_server.sh");
 
-            let mut command = command.arg("-p").arg(port);
+            let command = command.arg("-p").arg(port);
 
             // Read the output from the startup script
             let output = command.output().expect("Failed to read test server starter output");
@@ -348,7 +347,7 @@ mod sync_integration {
     impl ::std::ops::Drop for ForeignServerRunner {
         fn drop(&mut self) {
             // Kill the test server as it is no longer needed
-            let kill_output = ::std::process::Command::new("kill")
+            ::std::process::Command::new("kill")
                 .arg(self.pid.clone())
                 .output()
                 .expect("Failed to kill test server");

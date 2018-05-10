@@ -22,8 +22,6 @@ use byte_source::{ByteSource, vec_from_byte_source};
 
 use std::sync::mpsc;
 
-use image::GenericImage;
-
 const THUMBNAIL_SIZE: u32 = 200;
 
 /**
