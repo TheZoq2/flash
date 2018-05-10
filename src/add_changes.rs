@@ -61,9 +61,19 @@ mod add_change_tests {
 
 
         // Ensure that changes were created
-        let expected_changes = vec!( Change::new(timestamp, 1, ChangeType::FileAdded),
-            Change::new(timestamp, 1, ChangeType::Update(UpdateType::TagAdded("image1".to_owned()))),
-            Change::new(timestamp, 1, ChangeType::FileAdded)
+        let expected_changes = ::changelog::sorted_changes(
+            &vec!(
+                Change::new(timestamp, 1, ChangeType::FileAdded),
+                Change::new(timestamp, 1, ChangeType::Update(UpdateType::TagAdded("image1".to_owned()))),
+                Change::new(timestamp, 1, ChangeType::Update(UpdateType::TagAdded("shared".to_owned()))),
+                Change::new(timestamp, 2, ChangeType::FileAdded),
+                Change::new(timestamp, 2, ChangeType::Update(UpdateType::TagAdded("image2".to_owned()))),
+                Change::new(timestamp, 2, ChangeType::Update(UpdateType::TagAdded("shared".to_owned()))),
+            )
         );
+
+        let changes =fdb.get_all_changes().expect("Failed to get all changes");
+
+        assert_eq!(changes, expected_changes);
     });
 }
