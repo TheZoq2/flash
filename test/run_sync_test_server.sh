@@ -93,11 +93,11 @@ fi
 
 if [[ $USE_GDB -ne 1 ]]; then
     # Create a fifo file for writing the output of flash
-    FIFO_NAME=${FILE_STORAGE_PATH}/fifo
-    mkfifo $FIFO_NAME
+    FLASH_LOG=${FILE_STORAGE_PATH}/flash_log
+
     # Run flash itself
     if [ -e target/debug/flash ] ; then
-        target/debug/flash < /dev/null &> $FIFO_NAME &
+        target/debug/flash < /dev/null &> "$FLASH_LOG" &
         # Get the pid of the program so we can kill it later
         FLASH_PID=$!
     else
@@ -107,7 +107,7 @@ if [[ $USE_GDB -ne 1 ]]; then
 
 
     # Wait for the child process to get ready
-    until grep -m 1 "ready" $FIFO_NAME > /dev/null; do sleep 0.1; done
+    until curl "localhost:${FLASH_PORT}/ping" > /dev/null 2> /dev/null ; do sleep 0.1; done
 
     echo "{\"pid\": \"$FLASH_PID\"}"
 else

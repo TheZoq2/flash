@@ -145,6 +145,7 @@ fn main() {
     mount.mount("subdirectories", move |request: &mut Request| {
         misc_handlers::subdirectory_request_handler(request, &file_read_path)}
     );
+    mount.mount("ping", misc_handlers::ping_handler);
 
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list_list));
@@ -155,7 +156,6 @@ fn main() {
     let url = format!("0.0.0.0:{}", port);
     match Iron::new(chain).http(url) {
         Ok(_) => {
-            println!("ready");
             println!("Server running on port {}", port);
             println!("Open http://localhost:{}/album.html", port);
         }

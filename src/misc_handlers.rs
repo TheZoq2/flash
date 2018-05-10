@@ -16,3 +16,10 @@ pub fn subdirectory_request_handler(_request: &mut Request, dir: &Path) -> IronR
         (status::Ok, serde_json::to_string(&result).unwrap()),
     ))
 }
+
+
+pub fn ping_handler(_request: &mut Request) -> IronResult<Response> {
+    Ok(Response::with(
+        (status::Ok, "pong"),
+    ))
+}
