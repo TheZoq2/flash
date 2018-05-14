@@ -18,6 +18,9 @@ test:cargo:
         - apt-get update -yqq
         # Install programs that get called by rust
         - apt-get install -y libimage-exiftool-perl
+        # Pull submodules
+        - git submodule init
+        - git submodule update
         # Install diesel if a cached version is not present
         - ls -l $CI_PROJECT_DIR/cargo/bin/diesel | grep diesel || cargo install diesel_cli
         # Setup database
