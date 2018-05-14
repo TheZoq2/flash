@@ -268,20 +268,12 @@ mod util_tests {
 
     #[test]
     fn subdir_test() {
-        let subdirs = subdirs_in_directory(&PathBuf::from(".")).expect("Failed to read files in dir");
+        let subdirs = subdirs_in_directory(&PathBuf::from("test")).expect("Failed to read files in dir");
 
-        assert_eq!(subdirs.len(), 6);
+        assert_eq!(subdirs.len(), 2);
         assert_eq!(
             subdirs,
-            mapvec!(PathBuf::from: "target", "src", "migrations", ".git", "frontend", "test")
+            mapvec!(PathBuf::from: "media", "files")
         );
-    }
-
-    #[test]
-    fn subdir_with_path_test() {
-        let subdirs = subdirs_in_directory(&PathBuf::from("target"))
-            .expect("Failed to read folders in dir");
-
-        assert!(subdirs.contains(&PathBuf::from("debug")));
     }
 }
