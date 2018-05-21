@@ -1,0 +1,11 @@
+#!/bin/bash
+
+git pull
+git submodule update --recursive
+
+cd frontend
+elm-install
+make
+
+cd ..
+cargo build --release
