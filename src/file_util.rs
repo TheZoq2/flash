@@ -268,12 +268,17 @@ mod util_tests {
 
     #[test]
     fn subdir_test() {
-        let subdirs = subdirs_in_directory(&PathBuf::from("test")).expect("Failed to read files in dir");
+        let mut subdirs = subdirs_in_directory(&PathBuf::from("test")).expect("Failed to read files in dir");
+
+        let mut expected = mapvec!(PathBuf::from: "media", "files");
+
+        expected.sort();
+        subdirs.sort();
 
         assert_eq!(subdirs.len(), 2);
         assert_eq!(
             subdirs,
-            mapvec!(PathBuf::from: "media", "files")
+            expected
         );
     }
 }
