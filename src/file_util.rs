@@ -22,8 +22,6 @@ use byte_source::{ByteSource, vec_from_byte_source};
 
 use std::sync::mpsc;
 
-use image::GenericImage;
-
 const THUMBNAIL_SIZE: u32 = 200;
 
 /**
@@ -270,20 +268,17 @@ mod util_tests {
 
     #[test]
     fn subdir_test() {
-        let subdirs = subdirs_in_directory(&PathBuf::from(".")).expect("Failed to read files in dir");
+        let mut subdirs = subdirs_in_directory(&PathBuf::from("test")).expect("Failed to read files in dir");
 
-        assert_eq!(subdirs.len(), 6);
+        let mut expected = mapvec!(PathBuf::from: "media", "files");
+
+        expected.sort();
+        subdirs.sort();
+
+        assert_eq!(subdirs.len(), 2);
         assert_eq!(
             subdirs,
-            mapvec!(PathBuf::from: "target", "src", "migrations", ".git", "frontend", "test")
+            expected
         );
-    }
-
-    #[test]
-    fn subdir_with_path_test() {
-        let subdirs = subdirs_in_directory(&PathBuf::from("target"))
-            .expect("Failed to read folders in dir");
-
-        assert!(subdirs.contains(&PathBuf::from("debug")));
     }
 }

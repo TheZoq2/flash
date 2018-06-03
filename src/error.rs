@@ -100,14 +100,28 @@ error_chain! {
     }
 }
 
+impl ErrorKind {
+    fn iron_status(&self) -> status::Status {
+        match *self {
+            ErrorKind::NoSuchVariable(_) |
+            ErrorKind::InvalidVariableType(_, _) |
+            ErrorKind::NoUrlEncodedQuery => status::Status::BadRequest,
+            ErrorKind::UnknownAction(_) |
+            ErrorKind::NoSuchList(_) |
+            ErrorKind::NoSuchFileInList(_, _) |
+            ErrorKind::NoSuchFileInDatabase(_) => status::Status::NotFound,
+            _ => status::Status::InternalServerError
+        }
+    }
+}
+
 
 impl convert::From<Error> for IronError {
     fn from(source: Error) -> IronError {
-        let message = format!("{}", source);
+        let message = format!("{:#?}", source.backtrace());
 
         IronError {
             error: Box::new(source),
-            // TODO: Correct HTTP error codes
             response: Response::with((status::NotFound, message)),
         }
     }

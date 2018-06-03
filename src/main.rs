@@ -108,6 +108,11 @@ fn main() {
     //Loading or creating the database
     let db = FileDatabase::new(establish_connection(), settings.get_file_storage_path());
 
+    // println!("creating changes for existing files");
+    // let current_time = chrono::NaiveDateTime::from_timestamp(chrono::offset::Utc::now().timestamp(), 0);
+    // add_changes::create_changes_for_files(&db, &current_time).expect("Failed to create changes from files");
+    // println!("Done");
+
     //fix_timestamps::fix_timestamps(&db);
 
     // Read the persistent file list if it exists
