@@ -223,6 +223,9 @@ port
 *Params*
  - `port` The port where the foreign server that initialized the request can be reached
 
+*Body*
+The list of changes that should be applied
+
 *Returns*
 An empty string
 
