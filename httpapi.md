@@ -111,14 +111,6 @@ Responds with `"ok"`
 
 
 
-# /album/image
-
-Serves raw image files from the storage path.
-
-*Notes*
-Probably unused, use `get_file` and `get_thumbnail` instead
-
-
 # /search
 
 Performs a search for saved files. Replies with a `file_list_response::ListResponse`
@@ -133,15 +125,6 @@ Jsonified `file_list_response::ListResponse`
 
 *Notes*
 The format of the search query should probably be specified if it is not already
-
-
-# /file_list
-
-Duplicate of `/list`. 
-
-*Notes*
-Remove if confirmed unused
-
 
 
 # /sync
