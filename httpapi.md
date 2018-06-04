@@ -1,97 +1,251 @@
-# Endpoints
 
-- `/` Serves static files for the frontend
-- `/list` Handles any requests that deal with fille lists
-- `/album/image` Serves raw images
-- `/search` Handles search queries
-- `/file_list` *Duplicate of `/list`* Should be removed
-- `/sync`
+# /
 
-## List
+Serves static files for the fontend. File paths are relative to `frontend/output`
 
-### Actions:
+# /list
 
-#### Global
-Params:
+Handles requests that deal with file lists. The `action` parameter specifies
+what action to perform
+
+## action="lists"
+
+Returns a list of all current file lists
+
+*Parameters*
+ - None
+
+*Returns*
+Jsonified `file_list::FileListList`
+
+## action="list_info"
+
+Returns a `file_list_response::ListResponse` with information about the specified list
+
+*Parameters*
+ - `list_id`: ID of the target list
+
+*Returns*
+Jsonified `file_list_response::ListResponse`
+
+## action="list_last_saved_index"
+
+Returns the file ID of the last file that was saved to the database in the list.
+Returns 0 if no file has been saved before
+
+*Parameters*
+ - `list_id`: ID of the target list
+
+*Returns*
+Integer
+
+
+## action="get_data"
+
+Returns a `file_request_handlers::FileData` struct containing the file path,
+thumbnail_path and tags of the specified file
+
+*Parameters*
+ - `list_id`: ID of the target list
+ - `index`: Index of the file in the database
+
+*Returns*
+Raw bytes
+
+## action="get_file"
+
+Returns the raw file data of the specified file
+
+*Parameters*
+ - `list_id`: ID of the target list
+ - `index`: Index of the file in the database
+
+*Returns*
+String containing the path to the file
+
+## action="get_filename"
+
+Returns the filename of the specified file. If it is stored in the database,
+only the filename is returned while the full path of an unsaved path is returned
+
+*Parameters*
+ - `list_id`: ID of the target list
+ - `index`: Index of the file in the database
+
+*Returns*
+List string containing the file path or filename
+
+*Notes*
+This should probably be rewritten to return a path relative to `$FILE_READ_PATH`
+for unsaved files to avoid exposing internal folder structures
+
+## action="get_thumbnail"
+
+Returns the raw data for the thumbnail of the specified file
+
+*Parameters*
+ - `list_id`: ID of the target list
+ - `index`: Index of the file in the database
+
+*Returns*
+Raw bytes
+
+
+## action="save"
+
+Saves the specified file to the database. If the file was previously unsaved,
+the file is added to the database, otherwise the file entry is updated.
+
+The tags are set to whatever is specified in the query, and the `creation_time`
+of the file is set to the current time
+
+Responds with `"ok"`
+
+*Params*
+ - `list_id`: ID of the target list
+ - `index`: Index of the file in the database
+ - `tags`: JSON formated list of strings which should be the tags of the file
+
+*Returns*
+`"Ok"`
+
+
+
+# /album/image
+
+Serves raw image files from the storage path.
+
+*Notes*
+Probably unused, use `get_file` and `get_thumbnail` instead
+
+
+# /search
+
+Performs a search for saved files. Replies with a `file_list_response::ListResponse`
+with information about the list that is created from the search.
+
+*Parameters*
+
+- `query`: String containing the search query
+
+*Returns*
+Jsonified `file_list_response::ListResponse`
+
+*Notes*
+The format of the search query should probably be specified if it is not already
+
+
+# /file_list
+
+Duplicate of `/list`. 
+
+*Notes*
+Remove if confirmed unused
+
+
+
+# /sync
+
+Handles various requests relating to sync. Just `/sync` is unused
+
+## /sync/sync
+
+Starts a sync procedure with the specified foreign flash instance. Replies
+with `"Sync done"` once the files have been synced successfully
+
+*Params*
+ - `foreign_url`: Url of the foreign flash instance to sync with
+
+*Returns*
+`"Sync done"`
+
+## /sync/syncpoints
+
+Replies with a list of syncpoints present on this instance 
+
+*Params*
 - None
 
-Variants:
-- `lists`
+*Returns*
 
-#### Per list
-Params:
-- `list_id`: `usize`. Id of the queried list
-
-Variants:
-- `list_info`
-- `list_last_saved_index`
-
-#### Per file
-Params:
-- `list_id`: `usize`. Id of the queried list
-- `index`: `usize`. Index of the file in the list
-
-Variantst:
-- `get_data`
-- `get_file`
-- `get_filename`
-- `get_thumbnail`
-- `save`
+Jsonified list of `changelog::SyncPoint`
 
 
-#### `lists`
+## /sync/file_details
 
-Responds with a list of all `file_lists`
+Replies with details about the specified file
 
-#### `list_info`
+*Params*
+ - `file_id`: Integer ID of the file in the database
 
-Responds with information about a list. The response is the json encoding of
-`file_list_response::ListResponse`
+*Returns*
+Jsonified `foreign_server::FileDetails`
 
-#### `list_last_saved_index`
 
-Responds with the index of the last file in the `file_list` which was saved
-to the database
+## /sync/file
 
-#### `get_data`
+Returns the raw data of the specified file
 
-Responds with a `FileData` struct about the quereied file which contains the path
-of the file, the path of the thumbnail as well as the tags of the file
+*Params*
+ - `file_id`: Integer ID of the file in the database
 
-#### `get_file`
+*Returns*
+Raw byte content of the file
 
-Responds with the bytes of the actual file
+## /sync/thumbnail
 
-#### `get_filename`
+Returns the raw data of the specified file's thumbnail
 
-Responds with the filename of the file
+*Params*
+ - `file_id`: Integer ID of the file in the database
 
-#### `get_thumbnail`
+*Returns*
+Raw byte content of the file's thumbnail
 
-Responds with the raw bytes of the thumbnail
 
-#### `save`
+## /sync/changes
 
-Saves the specified file in the database with the sent tags. Creates a change
-at the current time. If the file already exists in the database, it will not
-be overwritten but the tags will be updated
+Returns all changes after the specified timestamp.
 
-Params:
-- `tags` List of strings to use as the tags for the saved file
+*Params*
+ - `starting_timestamp`: The timestamp which all changes returned should be later than
 
-## Sync
+*Returns*
+Jsonified `Vec<changelog::Change>`
 
-Subpaths:
-- `syncpoints`
-- `file_details`
-- `file`
-- `thumbnail`
-- `changes`
 
-### `changes`
+## /sync/apply_changes
 
-Returns all changes after a certain time
+Apply a list of changes to this instance by fetching file details from the foreign
+server from which this request arrived. The foreign server can be reached on the specified
+port
 
-Params:
-- `starting_timestamp`: `i64` Timestamp after which the returned changes should be made
+*Params*
+ - `port` The port where the foreign server that initialized the request can be reached
+
+*Returns*
+An empty string
+
+
+# /subdirectories
+Replies with a list of subdirectories of `$FILE_READ_PATH`
+
+*Params*
+- None
+
+*Returns*
+Jsonified list of filenames
+
+
+# /ping
+
+Replies with `"pong"`. Used to check if flash has started, specifically by test
+scripts
+
+*Params*
+- None
+
+*Returns*
+`"pong"`
+
 
