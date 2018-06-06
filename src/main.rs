@@ -62,6 +62,7 @@ mod error;
 mod changelog;
 mod sync;
 mod sync_handlers;
+mod sync_progress;
 mod util;
 mod file_handler;
 mod byte_source;
@@ -125,6 +126,8 @@ fn main() {
     let file_list_worker_commander = file_list_worker::start_worker(file_list_save_path);
 
     let file_read_path = settings.get_file_read_path();
+
+    let (sync_tx, sync_rx, sync_storage) = sync_progress::setup_progress_datastructures();
 
     let port = settings.get_port();
 

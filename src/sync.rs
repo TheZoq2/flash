@@ -20,7 +20,6 @@ use chrono::prelude::*;
 use foreign_server::{ForeignServer, ChangeData};
 
 
-
 pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
     -> Option<SyncPoint>
 {
