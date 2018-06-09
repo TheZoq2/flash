@@ -142,6 +142,8 @@ fn file_request_handler(request: &mut Request, action: &FileAction) -> IronResul
             let path = get_file_location_path(&file_storage_folder, &file_location);
             Ok(Response::with((status::Ok, path)))
         }
+        // TODO: Don't return an absolute path for unsaved files. Do we even need the path? (maybe
+        // in flash_cli)
         FileAction::GetFilename => {
             let path = match file_location {
                 FileLocation::Database(entry) => entry.filename,

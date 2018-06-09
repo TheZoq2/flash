@@ -130,11 +130,9 @@ fn main() {
 
     let mut mount = Mount::new();
 
-    mount.mount("/list", file_request_handlers::file_list_request_handler);
     mount.mount("/", Static::new(Path::new("frontend/output")));
-    mount.mount("/album/image", Static::new(Path::new(&settings.get_file_storage_path())),);
+    mount.mount("/list", file_request_handlers::file_list_request_handler);
     mount.mount("/search", search_handler::handle_file_search);
-    mount.mount("file_list", file_request_handlers::file_list_request_handler);
     mount.mount("sync/sync", move |request: &mut Request| sync_handlers::sync_handler(port, request));
     mount.mount("sync/syncpoints", sync_handlers::syncpoint_request_handler);
     mount.mount("sync/file_details", sync_handlers::file_detail_handler);

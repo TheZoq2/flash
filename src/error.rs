@@ -118,7 +118,7 @@ impl ErrorKind {
 
 impl convert::From<Error> for IronError {
     fn from(source: Error) -> IronError {
-        let message = format!("{:#?}", source.backtrace());
+        let message = format!("{:#?}\n", source);
 
         IronError {
             error: Box::new(source),
