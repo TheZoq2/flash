@@ -12,12 +12,13 @@ use file_database::{FileDatabase};
 use error::{Result, ErrorKind, ResultExt};
 use file_handler;
 use file_handler::{remove_file, ThumbnailStrategy};
+use foreign_server::{ForeignServer, ChangeData};
+use sync_progress as sp;
 
 use std::sync::{Arc, Mutex};
 
 use chrono::prelude::*;
 
-use foreign_server::{ForeignServer, ChangeData};
 
 
 pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
@@ -43,7 +44,14 @@ fn get_removed_files(changes: &[Change]) -> Vec<i32> {
         .collect()
 }
 
-pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &mut ForeignServer, own_port: u16) -> Result<()> {
+pub fn sync_with_foreign(
+    fdb: Arc<Mutex<FileDatabase>>,
+    foreign_server: &mut ForeignServer,
+    own_port: u16,
+    progress_reporter: &sp::LocalTxType
+) -> Result<()> {
+    let (job_id, progress_tx) = progress_reporter;
+
     let (local_changes, new_syncpoint, removed_files, remote_changes) = {
         let fdb = fdb.lock().unwrap();
         // Get the syncpoints from the local and remote servers
@@ -74,6 +82,9 @@ pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &mut For
                 last_change: NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)
             };
 
+        progress_tx.send((*job_id, sp::SyncUpdate::GatheredData))
+            .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
+
         (local_changes, new_syncpoint, removed_files, remote_changes)
     };
 
@@ -88,11 +99,19 @@ pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &mut For
     )
         .chain_err(|| "Failed to send changes")?;
 
+    // TODO: Report a job ID back to listener
+    progress_tx.send((*job_id, sp::SyncUpdate::SentToForeign(0)))
+        .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
+
     // Apply changes locally
-    apply_changes(fdb.clone(), foreign_server, &remote_changes, &removed_files)
+    apply_changes(fdb.clone(), foreign_server, &remote_changes, &removed_files, progress_reporter)
         .chain_err(|| "Failed to apply changes")?;
 
-    Ok(fdb.lock().unwrap().add_syncpoint(&new_syncpoint)?)
+    progress_tx.send((*job_id, sp::SyncUpdate::AddingSyncpoint));
+    fdb.lock().unwrap().add_syncpoint(&new_syncpoint)?;
+
+    progress_tx.send((*job_id, sp::SyncUpdate::Done));
+    Ok(())
 }
 
 
@@ -108,14 +127,19 @@ pub fn apply_changes(
         foreign_server: &ForeignServer,
         changes: &[Change],
         removed_files: &[i32],
+        (job_id, progress_tx): &sp::LocalTxType,
     ) -> Result<()>
 {
     let changes_to_be_applied = changes.iter().filter(|change| {
         !removed_files.contains(&change.affected_file)
-    });
+    }).collect::<Vec<_>>();
 
-    for change in changes_to_be_applied {
+    let mut changes_left = changes_to_be_applied.len();
+    for (n, change) in changes_to_be_applied.iter().enumerate() {
         let fdb = fdb.lock().unwrap();
+
+        changes_left -= 1;
+        progress_tx.send((*job_id, sp::SyncUpdate::StartingToApplyChange(changes_left)));
         match change.change_type {
             ChangeType::Update(ref update_type) => {
                 apply_file_update(&fdb, change.affected_file, update_type)?
@@ -157,12 +181,19 @@ pub fn apply_changes(
         }
     }
 
+    let mut changes_to_be_added = changes.len();
     for change in changes {
+        changes_to_be_added -= 1;
+        progress_tx.send((*job_id, sp::SyncUpdate::AddingChangeToDb(changes_to_be_added)));
         let fdb = fdb.lock().unwrap();
         fdb.add_change(change)?;
     }
 
+    let mut files_to_remove = removed_files.len();
     for id in removed_files {
+        files_to_remove -= 1;
+        progress_tx.send((*job_id, sp::SyncUpdate::RemovingFile(files_to_remove)));
+
         let fdb = fdb.lock().unwrap();
         if fdb.get_file_with_id(*id) != None {
             remove_file(*id, &fdb, ChangeCreationPolicy::No)?;
@@ -207,6 +238,8 @@ mod sync_tests {
     use file_database::db_test_helpers::get_files_with_tags;
 
     use std::path::PathBuf;
+
+    use std::thread;
 
     use foreign_server::{FileDetails};
 
@@ -301,7 +334,14 @@ mod sync_tests {
                 ),
             );
 
-        apply_changes(fdb.clone(), &MockForeignServer::new(vec!(), vec!(), vec!()), &changes, &vec!()).unwrap();
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+        apply_changes(
+            fdb.clone(),
+            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &changes,
+            &vec!(),
+            &(0, tx)
+        ).unwrap();
 
         let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
 
@@ -324,11 +364,13 @@ mod sync_tests {
                 ),
             );
 
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
         apply_changes(
             fdb.clone(),
             &MockForeignServer::new(vec!(), vec!(), vec!()),
             &changes,
-            &vec!()
+            &vec!(),
+            &(0, tx)
         ).unwrap();
 
         let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
@@ -376,11 +418,13 @@ mod sync_tests {
                 ),
             );
 
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
         apply_changes(
             fdb.clone(),
             &MockForeignServer::new(vec!(), vec!(), vec!()),
             &changes,
-            &vec!()
+            &vec!(),
+            &(0, tx)
         ).unwrap();
 
         let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
@@ -412,11 +456,13 @@ mod sync_tests {
                 ),
             );
 
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
         apply_changes(
             fdb.clone(),
             &MockForeignServer::new(vec!(), vec!(), vec!()),
             &changes,
-            &vec!()
+            &vec!(),
+            &(0, tx)
         ).unwrap();
 
         let file = fdb.lock().unwrap().get_file_with_id(1).unwrap();
@@ -505,8 +551,12 @@ mod sync_tests {
                 remote_changes
             );
 
+
+        // Set up progress monitoring
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+
         // Apply the changes
-        sync_with_foreign(fdb.clone(), &mut foreign_server, 0)
+        sync_with_foreign(fdb.clone(), &mut foreign_server, 0, &(0, tx.clone()))
             .expect("Foreign server sync failed");
 
         // Assert that the local database now contains all changes

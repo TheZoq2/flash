@@ -17,6 +17,7 @@ extern crate regex;
 #[macro_use]
 extern crate error_chain;
 extern crate itertools;
+extern crate rand;
 
 extern crate futures;
 extern crate hyper;
@@ -128,21 +129,25 @@ fn main() {
     let file_read_path = settings.get_file_read_path();
 
     let (sync_tx, sync_rx, sync_storage) = sync_progress::setup_progress_datastructures();
+    sync_progress::run_sync_tracking_thread(sync_rx, sync_storage);
 
     let port = settings.get_port();
 
     let mut mount = Mount::new();
 
+    let sync_tx1 = sync_tx.clone();
+    let sync_handler = move |request: &mut Request| sync_handlers::sync_handler(port, request, &sync_tx1);
+
     mount.mount("/", Static::new(Path::new("frontend/output")));
     mount.mount("/list", file_request_handlers::file_list_request_handler);
     mount.mount("/search", search_handler::handle_file_search);
-    mount.mount("sync/sync", move |request: &mut Request| sync_handlers::sync_handler(port, request));
+    mount.mount("sync/sync", sync_handler);
     mount.mount("sync/syncpoints", sync_handlers::syncpoint_request_handler);
     mount.mount("sync/file_details", sync_handlers::file_detail_handler);
     mount.mount("sync/file", sync_handlers::file_request_handler);
     mount.mount("sync/thumbnail", sync_handlers::thumbnail_request_handler);
     mount.mount("sync/changes", sync_handlers::change_request_handler);
-    mount.mount("sync/apply_changes", sync_handlers::change_application_handler);
+    mount.mount("sync/apply_changes", move |r: &mut Request|sync_handlers::change_application_handler(r, &sync_tx));
     mount.mount("subdirectories", move |request: &mut Request| {
         misc_handlers::subdirectory_request_handler(request, &file_read_path)}
     );
