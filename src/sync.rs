@@ -274,23 +274,11 @@ mod sync_tests {
     }
 
     #[test]
-    fn db_tests() {
+    fn only_tag_additions() {
         let fdb = db_test_helpers::get_database();
         let fdb = fdb.lock().unwrap();
         fdb.lock().unwrap().reset();
 
-        only_tag_additions(fdb.clone());
-        fdb.lock().unwrap().reset();
-        only_tag_removals(fdb.clone());
-        fdb.lock().unwrap().reset();
-        tag_removals_and_additions(fdb.clone());
-        fdb.lock().unwrap().reset();
-        creation_date_updates(fdb.clone());
-        fdb.lock().unwrap().reset();
-        file_system_changes_work(fdb.clone());
-    }
-
-    fn only_tag_additions(fdb: Arc<Mutex<FileDatabase>>) {
         fdb.lock().unwrap().add_new_file(1, "yolo.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
         fdb.lock().unwrap().add_new_file(2, "swag.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
 
@@ -313,7 +301,12 @@ mod sync_tests {
         assert_eq!(matched_ids, vec!(1))
     }
 
-    fn only_tag_removals(fdb: Arc<Mutex<FileDatabase>>) {
+    #[test]
+    fn only_tag_removals() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.lock().unwrap().reset();
+
         fdb.lock().unwrap().add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
         fdb.lock().unwrap().add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
 
@@ -341,7 +334,12 @@ mod sync_tests {
         assert_eq!(matched_ids, vec!(2))
     }
 
-    fn tag_removals_and_additions(fdb: Arc<Mutex<FileDatabase>>) {
+    #[test]
+    fn tag_removals_and_additions() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.lock().unwrap().reset();
+
         fdb.lock().unwrap().add_new_file(
             1,
             "yolo.jpg",
@@ -393,7 +391,12 @@ mod sync_tests {
         assert_eq!(matched_ids, vec!(2))
     }
 
-    fn creation_date_updates(fdb: Arc<Mutex<FileDatabase>>) {
+    #[test]
+    fn creation_date_updates() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.lock().unwrap().reset();
+
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
         let new_timestamp = naive_datetime_from_date("2017-01-02").unwrap();
         fdb.lock().unwrap().add_new_file(1,
@@ -425,7 +428,12 @@ mod sync_tests {
         assert_eq!(file.creation_date, new_timestamp);
     }
 
-    fn file_system_changes_work(fdb: Arc<Mutex<FileDatabase>>) {
+    #[test]
+    fn file_system_changes_work() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.lock().unwrap().reset();
+
         // Set up the intial database
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
         let original_filename = "test/media/10x10.png";
