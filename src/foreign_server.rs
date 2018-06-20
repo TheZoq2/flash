@@ -351,6 +351,8 @@ mod sync_integration {
                 .arg(self.pid.clone())
                 .output()
                 .expect("Failed to kill test server");
+
+            println!("dropping foreignserverrunner");
         }
     }
 
@@ -370,10 +372,13 @@ mod sync_integration {
         save_file(url2, listid2, 2, vec!("from2".into()));
         save_file(url2, listid2, 3, vec!("from2".into()));
 
+
         // Run sync
         sync_with_foreign(url1, url2);
+
         // Ensure that all files have been synced
         assert_eq!(file_list_request(url1, "of+from2").length, 2);
+        assert!(false, "Filelistrequest received");
         assert_eq!(file_list_request(url2, "of+from1").length, 2);
     }
 

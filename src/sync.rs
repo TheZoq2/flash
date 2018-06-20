@@ -135,7 +135,7 @@ pub fn apply_changes(
     }).collect::<Vec<_>>();
 
     let mut changes_left = changes_to_be_applied.len();
-    for (n, change) in changes_to_be_applied.iter().enumerate() {
+    for change in changes_to_be_applied {
         let fdb = fdb.lock().unwrap();
 
         changes_left -= 1;
