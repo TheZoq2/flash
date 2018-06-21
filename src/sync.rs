@@ -44,9 +44,8 @@ fn get_removed_files(changes: &[Change]) -> Vec<i32> {
         .collect()
 }
 
-pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &mut ForeignServer, own_port: u16) -> Result<()> {
+pub fn sync_with_foreign(fdb: &FileDatabase, foreign_server: &mut ForeignServer, own_port: u16) -> Result<()> {
     let (local_changes, new_syncpoint, removed_files, remote_changes) = {
-        let fdb = fdb.lock().unwrap();
         // Get the syncpoints from the local and remote servers
         let local_syncpoints = fdb.get_syncpoints()
             .chain_err(|| "Failed to get local syncpoints")?;
@@ -93,7 +92,7 @@ pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &mut For
     apply_changes(fdb.clone(), foreign_server, &remote_changes, &removed_files)
         .chain_err(|| "Failed to apply changes")?;
 
-    Ok(fdb.lock().unwrap().add_syncpoint(&new_syncpoint)?)
+    Ok(fdb.add_syncpoint(&new_syncpoint)?)
 }
 
 
@@ -105,7 +104,7 @@ pub fn sync_with_foreign(fdb: Arc<Mutex<FileDatabase>>, foreign_server: &mut For
   means that such changes would be duplicated.
 */
 pub fn apply_changes(
-        fdb: Arc<Mutex<FileDatabase>>,
+        fdb: &FileDatabase,
         foreign_server: &ForeignServer,
         changes: &[Change],
         removed_files: &[i32],
@@ -116,7 +115,6 @@ pub fn apply_changes(
     });
 
     for change in changes_to_be_applied {
-        let fdb = fdb.lock().unwrap();
         match change.change_type {
             ChangeType::Update(ref update_type) => {
                 apply_file_update(&fdb, change.affected_file, update_type)?
@@ -159,12 +157,10 @@ pub fn apply_changes(
     }
 
     for change in changes {
-        let fdb = fdb.lock().unwrap();
         fdb.add_change(change)?;
     }
 
     for id in removed_files {
-        let fdb = fdb.lock().unwrap();
         if fdb.get_file_with_id(*id) != None {
             remove_file(*id, &fdb, ChangeCreationPolicy::No)?;
         }
@@ -277,10 +273,10 @@ mod sync_tests {
     fn only_tag_additions() {
         let fdb = db_test_helpers::get_database();
         let fdb = fdb.lock().unwrap();
-        fdb.lock().unwrap().reset();
+        fdb.reset();
 
-        fdb.lock().unwrap().add_new_file(1, "yolo.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
-        fdb.lock().unwrap().add_new_file(2, "swag.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
+        fdb.add_new_file(1, "yolo.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
+        fdb.add_new_file(2, "swag.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
 
         let changes = vec!(
                 Change::new(
@@ -290,9 +286,9 @@ mod sync_tests {
                 ),
             );
 
-        apply_changes(fdb.clone(), &MockForeignServer::new(vec!(), vec!(), vec!()), &changes, &vec!()).unwrap();
+        apply_changes(&fdb, &MockForeignServer::new(vec!(), vec!(), vec!()), &changes, &vec!()).unwrap();
 
-        let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
+        let files_with_tag = get_files_with_tags(&fdb, mapvec!(String::from: "things"), vec!());
 
         let matched_ids: Vec<_> = files_with_tag.iter()
             .map(|file| file.id)
@@ -305,10 +301,10 @@ mod sync_tests {
     fn only_tag_removals() {
         let fdb = db_test_helpers::get_database();
         let fdb = fdb.lock().unwrap();
-        fdb.lock().unwrap().reset();
+        fdb.reset();
 
-        fdb.lock().unwrap().add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
-        fdb.lock().unwrap().add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
+        fdb.add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
+        fdb.add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
 
         let changes = vec!(
                 Change::new(
@@ -319,13 +315,13 @@ mod sync_tests {
             );
 
         apply_changes(
-            fdb.clone(),
+            &fdb,
             &MockForeignServer::new(vec!(), vec!(), vec!()),
             &changes,
             &vec!()
         ).unwrap();
 
-        let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
+        let files_with_tag = get_files_with_tags(&fdb, mapvec!(String::from: "things"), vec!());
 
         let matched_ids: Vec<_> = files_with_tag.iter()
             .map(|file| file.id)
@@ -338,9 +334,9 @@ mod sync_tests {
     fn tag_removals_and_additions() {
         let fdb = db_test_helpers::get_database();
         let fdb = fdb.lock().unwrap();
-        fdb.lock().unwrap().reset();
+        fdb.reset();
 
-        fdb.lock().unwrap().add_new_file(
+        fdb.add_new_file(
             1,
             "yolo.jpg",
             None,
@@ -348,7 +344,7 @@ mod sync_tests {
             0,
             create_change("2017-02-02").unwrap()
         );
-        fdb.lock().unwrap().add_new_file(
+        fdb.add_new_file(
             2,
             "swag.jpg",
             None,
@@ -376,13 +372,13 @@ mod sync_tests {
             );
 
         apply_changes(
-            fdb.clone(),
+            &fdb,
             &MockForeignServer::new(vec!(), vec!(), vec!()),
             &changes,
             &vec!()
         ).unwrap();
 
-        let files_with_tag = get_files_with_tags(&fdb.lock().unwrap(), mapvec!(String::from: "things"), vec!());
+        let files_with_tag = get_files_with_tags(&fdb, mapvec!(String::from: "things"), vec!());
 
         let matched_ids: Vec<_> = files_with_tag.iter()
             .map(|file| file.id)
@@ -395,11 +391,11 @@ mod sync_tests {
     fn creation_date_updates() {
         let fdb = db_test_helpers::get_database();
         let fdb = fdb.lock().unwrap();
-        fdb.lock().unwrap().reset();
+        fdb.reset();
 
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
         let new_timestamp = naive_datetime_from_date("2017-01-02").unwrap();
-        fdb.lock().unwrap().add_new_file(1,
+        fdb.add_new_file(1,
                          "yolo.jpg",
                          Some("t_yolo.jpg"),
                          &mapvec!(String::from: "things"),
@@ -417,13 +413,13 @@ mod sync_tests {
             );
 
         apply_changes(
-            fdb.clone(),
+            &fdb,
             &MockForeignServer::new(vec!(), vec!(), vec!()),
             &changes,
             &vec!()
         ).unwrap();
 
-        let file = fdb.lock().unwrap().get_file_with_id(1).unwrap();
+        let file = fdb.get_file_with_id(1).unwrap();
 
         assert_eq!(file.creation_date, new_timestamp);
     }
@@ -432,7 +428,7 @@ mod sync_tests {
     fn file_system_changes_work() {
         let fdb = db_test_helpers::get_database();
         let fdb = fdb.lock().unwrap();
-        fdb.lock().unwrap().reset();
+        fdb.reset();
 
         // Set up the intial database
         let original_timestamp = naive_datetime_from_date("2017-01-01").unwrap();
@@ -443,7 +439,7 @@ mod sync_tests {
             ThumbnailStrategy::Generate,
             1,
             &mapvec!(String::from: "things"),
-            &fdb.lock().unwrap(),
+            &fdb,
             create_change("2017-02-02").unwrap(),
             "jpg",
             original_timestamp.timestamp() as u64
@@ -493,7 +489,7 @@ mod sync_tests {
         for change in &remote_changes {
             all_changes.push(change.clone());
         }
-        for change in &fdb.lock().unwrap().get_all_changes().expect("Failed to get changes from db") {
+        for change in &fdb.get_all_changes().expect("Failed to get changes from db") {
             all_changes.push(change.clone());
         }
         all_changes.sort_by_key(|change| change.timestamp);
@@ -515,20 +511,20 @@ mod sync_tests {
             );
 
         // Apply the changes
-        sync_with_foreign(fdb.clone(), &mut foreign_server, 0)
+        sync_with_foreign(&fdb, &mut foreign_server, 0)
             .expect("Foreign server sync failed");
 
         // Assert that the local database now contains all changes
         assert_eq!(
             all_changes,
-            fdb.lock().unwrap().get_all_changes().expect("Failed to get changes from database")
+            fdb.get_all_changes().expect("Failed to get changes from database")
         );
 
 
         // Ensure that the correct files are in the database
-        let file_1 = fdb.lock().unwrap().get_file_with_id(1);
-        let file_2 = fdb.lock().unwrap().get_file_with_id(2);
-        let file_3 = fdb.lock().unwrap().get_file_with_id(3);
+        let file_1 = fdb.get_file_with_id(1);
+        let file_2 = fdb.get_file_with_id(2);
+        let file_3 = fdb.get_file_with_id(3);
         assert_eq!(file_1, None);
         assert_matches!(file_2, Some(_));
         assert_matches!(file_3, Some(_));
@@ -547,13 +543,13 @@ mod sync_tests {
 
         // Ensure that the old file was deleted
         {
-            let path = fdb.lock().unwrap().get_file_save_path().join(PathBuf::from(initial_file.filename));
+            let path = fdb.get_file_save_path().join(PathBuf::from(initial_file.filename));
             assert!(!path.exists());
         }
 
         // Ensure that the old thumbnail was deleted
         {
-            let path = fdb.lock().unwrap().get_file_save_path()
+            let path = fdb.get_file_save_path()
                 .join(PathBuf::from(
                     initial_file.thumbnail_path.expect("Initial file had no thumbnail")
                 ));
@@ -562,17 +558,17 @@ mod sync_tests {
 
         // Ensure that the new are created
         {
-            let path = fdb.lock().unwrap().get_file_save_path().join(actual_file_2);
+            let path = fdb.get_file_save_path().join(actual_file_2);
             assert!(path.exists());
         }
         {
-            let path = fdb.lock().unwrap().get_file_save_path().join(actual_file_3);
+            let path = fdb.get_file_save_path().join(actual_file_3);
             assert!(path.exists());
         }
 
         // Ensure that the new thumbnail for file 2 was created
         {
-            let path = fdb.lock().unwrap().get_file_save_path()
+            let path = fdb.get_file_save_path()
                 .join(PathBuf::from(
                     actual_thumbnail_2.expect("File 2 should have a filename")
                 ));
@@ -580,7 +576,7 @@ mod sync_tests {
         }
         // Ensure that the no file for file 3 was created
         {
-            let path = fdb.lock().unwrap().get_file_save_path()
+            let path = fdb.get_file_save_path()
                 .join(PathBuf::from(
                     "thumb_3.jpg"
                 ));
@@ -588,7 +584,7 @@ mod sync_tests {
         }
 
         // Ensure that syncpoints were created
-        let syncpoints = fdb.lock().unwrap()
+        let syncpoints = fdb
             .get_syncpoints()
             .expect("failed to read syncpoints from database");
         assert_eq!(syncpoints.len(), 1);

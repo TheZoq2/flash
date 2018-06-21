@@ -18,7 +18,7 @@ use file_list_worker;
 use persistent_file_list;
 use file_util::sanitize_tag_names;
 use file_util::{get_semi_unique_identifier};
-use request_helpers::get_get_variable;
+use request_helpers::{get_get_variable, setup_db_connection};
 use file_handler::{save_file, FileSavingWorkerResults, ThumbnailStrategy};
 use byte_source::ByteSource;
 use changelog;
@@ -116,6 +116,7 @@ pub fn file_list_request_handler(request: &mut Request) -> IronResult<Response> 
 */
 fn file_request_handler(request: &mut Request, action: &FileAction) -> IronResult<Response> {
     let (list_id, file_index) = read_request_list_id_index(request)?;
+    let fdb = setup_db_connection(request)?;
 
     let file_location = {
         let mutex = request.get::<Write<FileListList>>().unwrap();
@@ -124,12 +125,7 @@ fn file_request_handler(request: &mut Request, action: &FileAction) -> IronResul
         get_file_list_object(&*file_list_list, list_id, file_index)?
     };
 
-    let file_storage_folder = {
-        let mutex = request.get::<Write<FileDatabase>>().unwrap();
-        let db = mutex.lock().unwrap();
-
-        db.get_file_save_path()
-    };
+    let file_storage_folder = fdb.get_file_save_path();
 
     match *action {
         FileAction::GetData => {
@@ -156,10 +152,9 @@ fn file_request_handler(request: &mut Request, action: &FileAction) -> IronResul
             Ok(Response::with((status::Ok, path)))
         }
         FileAction::Save => {
-            let db = request.get::<Write<FileDatabase>>().unwrap();
             let tags = get_tags_from_request(request)?;
             let current_time = NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0);
-            match handle_save_request(db, &file_location, &tags, current_time)? {
+            match handle_save_request(&fdb, &file_location, &tags, current_time)? {
                 FileSaveRequestResult::NewDatabaseEntry(new_location, _) |
                 FileSaveRequestResult::UpdatedDatabaseEntry(new_location) => {
                     let mut file_list_list = request.get::<Write<FileListList>>().unwrap();
@@ -251,7 +246,7 @@ fn update_file_list(
   it is returned. Otherwise None. If saving failed an error is returned
 */
 fn handle_save_request(
-    db: Arc<Mutex<FileDatabase>>,
+    db: &FileDatabase,
     file_location: &FileLocation,
     tags: &[String],
     change_timestamp: NaiveDateTime
@@ -285,7 +280,7 @@ fn handle_save_request(
   Saves a specified file in the `Filedatabase`
 */
 fn save_new_file(
-    db: Arc<Mutex<FileDatabase>>,
+    db: &FileDatabase,
     original_path: &Path,
     tags: &[String],
     current_time: NaiveDateTime
@@ -293,8 +288,6 @@ fn save_new_file(
     let file_identifier = get_semi_unique_identifier();
 
     let file = ByteSource::File(original_path.into());
-
-    let fdb = db.lock().unwrap();
 
     let extension = match original_path.extension() {
         Some(val) => Ok(val),
@@ -307,7 +300,7 @@ fn save_new_file(
         ThumbnailStrategy::Generate,
         file_identifier,
         tags,
-        &fdb,
+        db,
         changelog::ChangeCreationPolicy::Yes(current_time),
         &extension.to_string_lossy(),
         current_time.timestamp() as u64
@@ -319,12 +312,11 @@ fn save_new_file(
   Updates a specified file in the database with new tags
 */
 fn update_stored_file_tags(
-    db: Arc<Mutex<FileDatabase>>,
+    db: &FileDatabase,
     old_entry: &file_database::File,
     tags: &[String],
     change_timestamp: NaiveDateTime
 ) -> Result<file_database::File> {
-    let db = db.lock().unwrap();
     db.change_file_tags(old_entry, tags, ChangeCreationPolicy::Yes(change_timestamp))
 }
 
@@ -504,30 +496,30 @@ mod file_request_tests {
     }
 
 
+    // TODO: Use db_test! instead of this test runner
     #[test]
     fn database_related_tests() {
-        let outer_fdb = file_database::db_test_helpers::get_database();
+        let fdb = file_database::db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
 
-        let fdb = outer_fdb.lock().unwrap();
+        fdb.reset();
+        saving_a_file_without_extension_fails(&fdb);
 
-        fdb.lock().unwrap().reset();
-        saving_a_file_without_extension_fails(fdb.clone());
+        fdb.reset();
+        file_list_saving_works(&fdb);
 
-        fdb.lock().unwrap().reset();
-        file_list_saving_works(fdb.clone());
+        fdb.reset();
+        file_list_updates_work(&fdb);
 
-        fdb.lock().unwrap().reset();
-        file_list_updates_work(fdb.clone());
-
-        fdb.lock().unwrap().reset();
-        file_list_save_requests_work(fdb.clone());
+        fdb.reset();
+        file_list_save_requests_work(&fdb);
     }
 
-    fn saving_a_file_without_extension_fails(fdb: Arc<Mutex<FileDatabase>>) {
+    fn saving_a_file_without_extension_fails(fdb: &FileDatabase) {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
         assert_matches!(
                 save_new_file(
-                    fdb.clone(),
+                    fdb,
                     &PathBuf::from("test"),
                     &tags,
                     NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0)
@@ -536,12 +528,12 @@ mod file_request_tests {
             );
     }
 
-    fn file_list_saving_works(fdb: Arc<Mutex<FileDatabase>>) {
+    fn file_list_saving_works(fdb: &FileDatabase) {
         let tags = vec!("test1".to_owned(), "test2".to_owned());
 
         let src_path = PathBuf::from("test/media/10x10.png");
         let (result, worker_results) = save_new_file(
-                fdb.clone(),
+                &fdb,
                 &src_path,
                 &tags,
                 NaiveDate::from_ymd(2017, 1, 1).and_hms(0,0,0)
@@ -555,7 +547,6 @@ mod file_request_tests {
         assert_matches!(thumbnail_save_result, Ok(()));
 
         let full_path = {
-            let fdb = fdb.lock().unwrap();
             PathBuf::from(fdb.get_file_save_path()).join(PathBuf::from(&result.filename))
         };
 
@@ -563,19 +554,14 @@ mod file_request_tests {
         assert!(full_path.exists());
 
         //Make sure that the file was actually added to the database
-        match fdb.lock() {
-            Ok(fdb) => {
-                assert!(
-                    fdb.search_files(search::SavedSearchQuery::with_tags((tags, vec!())))
-                        .iter()
-                        .fold(false, |acc, file| { acc || file.id == result.id })
-                    )
-            }
-            Err(e) => panic!("{:?}", e),
-        }
+        assert!(
+            fdb.search_files(search::SavedSearchQuery::with_tags((tags, vec!())))
+                .iter()
+                .fold(false, |acc, file| { acc || file.id == result.id })
+            )
     }
 
-    fn file_list_save_requests_work(fdb: Arc<Mutex<FileDatabase>>) {
+    fn file_list_save_requests_work(fdb: &FileDatabase) {
         let old_path = PathBuf::from("test/media/10x10.png");
 
         let tags = vec!("new1".to_owned());
@@ -583,7 +569,7 @@ mod file_request_tests {
         let saved_entry = {
             let timestamp = NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0);
             let result = handle_save_request(
-                fdb.clone(),
+                fdb,
                 &FileLocation::Unsaved(old_path),
                 &tags,
                 timestamp
@@ -618,17 +604,16 @@ mod file_request_tests {
 
         //Make sure that the file was actually added to the database
         assert!(
-                fdb.lock().unwrap()
+                fdb
                     .search_files(search::SavedSearchQuery::with_tags((tags, vec!())))
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
             );
     }
 
-    fn file_list_updates_work(fdb: Arc<Mutex<FileDatabase>>) {
+    fn file_list_updates_work(fdb: &FileDatabase) {
         let old_tags = vec!(String::from("old"));
         let old_location = {
-            let mut fdb = fdb.lock().unwrap();
             fdb.add_new_file(
                 1,
                 "test",
@@ -646,7 +631,7 @@ mod file_request_tests {
 
             let result =
                 handle_save_request(
-                    fdb.clone(),
+                    &fdb,
                     &FileLocation::Database(old_location),
                     &tags,
                     timestamp
@@ -673,7 +658,7 @@ mod file_request_tests {
 
         // Make sure that the file was actually added to the database
         assert!(
-                fdb.lock().unwrap()
+                fdb
                     .search_files(search::SavedSearchQuery::with_tags((tags, vec!())))
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })
@@ -681,7 +666,7 @@ mod file_request_tests {
 
         // Make sure the old entry was removed
         assert!(
-                fdb.lock().unwrap()
+                fdb
                     .search_files(search::SavedSearchQuery::with_tags((old_tags, vec!())))
                     .iter()
                     .fold(false, |acc, file| { acc || file.id == saved_entry.id })

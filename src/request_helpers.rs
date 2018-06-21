@@ -1,10 +1,13 @@
 use error::{Result, ErrorKind};
+use file_database::FileDatabase;
+use settings::Settings;
+use persistent::{Read};
 
 use serde::{Serialize};
 use serde::de::DeserializeOwned;
 use serde_json;
 
-use iron::*;
+use iron::prelude::*;
 
 use urlencoded::UrlEncodedQuery;
 
@@ -55,3 +58,13 @@ pub fn from_json_with_result<'a, T: DeserializeOwned>(data: &str) -> Result<T> {
     Ok(serde_json::from_str(data)?)
 }
 
+
+
+/**
+  Reads the settings variable from a request and sets up a database connection
+*/
+pub fn setup_db_connection(request: &mut Request) -> Result<FileDatabase>{
+    let settings = request.get::<Read<Settings>>().unwrap();
+
+    FileDatabase::new(&settings.database_url, settings.get_file_storage_path())
+}
