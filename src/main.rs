@@ -100,7 +100,8 @@ pub fn establish_connection() -> PgConnection {
 
     let database_url =
         env::var("DATABASE_URL").expect("DATABASE_URL must be set. Perhaps .env is missing?");
-    PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
+    PgConnection::establish(&database_url)
+        .expect(&format!("Error connecting to {}", database_url))
 }
 
 
@@ -108,7 +109,6 @@ fn main() {
     let settings = settings::Settings::from_env();
 
     //Loading or creating the database
-    let db = FileDatabase::new(establish_connection(), settings.get_file_storage_path());
 
     // println!("creating changes for existing files");
     // let current_time = chrono::NaiveDateTime::from_timestamp(chrono::offset::Utc::now().timestamp(), 0);
@@ -121,8 +121,14 @@ fn main() {
     let file_list_save_path = settings
         .get_file_storage_path()
         .join(&PathBuf::from("file_list_lists.json"));
-    let file_list_list =
-        persistent_file_list::read_file_list_list(&file_list_save_path, &db).unwrap();
+
+    let file_list_list = {
+        let db = FileDatabase::new(
+            &settings.database_url,
+            settings.get_file_storage_path()
+        ).unwrap();
+        persistent_file_list::read_file_list_list(&file_list_save_path, &db).unwrap()
+    };
 
     let file_list_worker_commander = file_list_worker::start_worker(file_list_save_path);
 
@@ -156,7 +162,6 @@ fn main() {
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list_list));
     chain.link(Write::<file_list_worker::Commander>::both(file_list_worker_commander));
-    chain.link(Write::<FileDatabase>::both(db));
     chain.link(Read::<settings::Settings>::both(settings));
 
     let url = format!("0.0.0.0:{}", port);

@@ -21,7 +21,7 @@ macro_rules! db_test {
         fn $fn_name() {
             mod internal {
                 use super::*;
-                pub fn testfun($fdbname: &mut FileDatabase)
+                pub fn testfun($fdbname: &FileDatabase)
                     $function
             }
             ::file_database::db_test_helpers::run_test(internal::testfun);

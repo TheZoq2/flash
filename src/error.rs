@@ -12,6 +12,7 @@ error_chain! {
         Io(::std::io::Error);
         SerdeJson(::serde_json::Error);
         Diesel(::diesel::result::Error);
+        DieselConnection(::diesel::ConnectionError);
         ImageError(::image::ImageError);
         Utf8(::std::string::FromUtf8Error);
         StrUtf8(::std::str::Utf8Error);

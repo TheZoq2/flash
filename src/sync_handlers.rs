@@ -1,11 +1,18 @@
 use iron::*;
-use persistent::Write;
+use persistent;
 
 use file_database::FileDatabase;
 
 use changelog::{Change, SyncPoint};
 use error::{Result};
-use request_helpers::{get_get_i64, to_json_with_result, from_json_with_result, get_get_variable};
+use request_helpers::{
+    get_get_i64,
+    to_json_with_result,
+    from_json_with_result,
+    get_get_variable,
+    setup_db_connection
+};
+use settings::Settings;
 
 use rand;
 use serde_json;
@@ -27,19 +34,18 @@ use sync_progress as sp;
 ////////////////////////////////////////////////////////////////////////////////
 
 pub fn sync_handler(own_port: u16, request: &mut Request, progress_tx: &sp::TxType) -> IronResult<Response> {
-    let fdb = request.get::<Write<FileDatabase>>().unwrap();
+    let settings = request.get::<persistent::Read<Settings>>().unwrap();
 
     let foreign_url = get_get_variable(request, "foreign_url")?;
 
     let foreign_server = HttpForeignServer::new(foreign_url);
-    let job_id = handle_sync_request(fdb, foreign_server, own_port, progress_tx)?;
+    let job_id = handle_sync_request((*settings).clone(), foreign_server, own_port, progress_tx)?;
 
     Ok(Response::with((status::Ok, to_json_with_result(job_id)?)))
 }
 
 pub fn syncpoint_request_handler(request: &mut Request) -> IronResult<Response> {
-    let mutex = request.get::<Write<FileDatabase>>().unwrap();
-    let fdb = mutex.lock().unwrap();
+    let fdb = setup_db_connection(request)?;
 
     match handle_syncpoint_request(&fdb) {
         Ok(syncpoints) => Ok(Response::with(
@@ -52,8 +58,7 @@ pub fn syncpoint_request_handler(request: &mut Request) -> IronResult<Response> 
 }
 
 pub fn change_request_handler(request: &mut Request) -> IronResult<Response> {
-    let mutex = request.get::<Write<FileDatabase>>().unwrap();
-    let fdb = mutex.lock().unwrap();
+    let fdb = setup_db_connection(request)?;
 
     let timestamp = get_get_i64(request, "starting_timestamp")?;
 
@@ -63,8 +68,7 @@ pub fn change_request_handler(request: &mut Request) -> IronResult<Response> {
 }
 
 pub fn file_request_handler(request: &mut Request) -> IronResult<Response> {
-    let mutex = request.get::<Write<FileDatabase>>().unwrap();
-    let fdb = mutex.lock().unwrap();
+    let fdb = setup_db_connection(request)?;
 
     let file_id = get_get_i64(request, "file_id")?;
 
@@ -74,8 +78,7 @@ pub fn file_request_handler(request: &mut Request) -> IronResult<Response> {
 }
 
 pub fn thumbnail_request_handler(request: &mut Request) -> IronResult<Response> {
-    let mutex = request.get::<Write<FileDatabase>>().unwrap();
-    let fdb = mutex.lock().unwrap();
+    let fdb = setup_db_connection(request)?;
 
     let file_id = get_get_i64(request, "file_id")?;
 
@@ -91,15 +94,14 @@ pub fn file_detail_handler(request: &mut Request) -> IronResult<Response> {
 
     let file_id = get_get_i64(request, "file_id")?;
 
-    let mutex = request.get::<Write<FileDatabase>>().unwrap();
-    let fdb = mutex.lock().unwrap();
+    let fdb = setup_db_connection(request)?;
     let file_details = handle_file_detail_request(&fdb, file_id as i32)?;
 
     Ok(Response::with((status::Ok, to_json_with_result(&file_details)?)))
 }
 
 pub fn change_application_handler(request: &mut Request, progress_tx: &sp::TxType) -> IronResult<Response> {
-    let fdb = request.get::<Write<FileDatabase>>().unwrap();
+    let settings = request.get::<persistent::Read<Settings>>().unwrap();
 
     let remote_ip = request.remote_addr.ip();
     let remote_port = get_get_i64(request, "port")? as u16;
@@ -117,7 +119,7 @@ pub fn change_application_handler(request: &mut Request, progress_tx: &sp::TxTyp
         }
     }
 
-    handle_change_application(body, fdb, foreign_server, progress_tx)?;
+    handle_change_application(body, (*settings).clone(), foreign_server, progress_tx)?;
     Ok(Response::with((status::Ok, "")))
 }
 
@@ -175,7 +177,7 @@ fn handle_file_detail_request(fdb: &FileDatabase, id: i32) -> Result<FileDetails
 
 fn handle_change_application(
     body: String,
-    fdb: Arc<Mutex<FileDatabase>>,
+    settings: Settings,
     foreign: HttpForeignServer,
     progress_tx: &sp::TxType
 ) -> Result<usize> {
@@ -187,13 +189,17 @@ fn handle_change_application(
     let progress_tx = progress_tx.clone();
 
     thread::spawn(move || {
-        let result = apply_changes(
-            fdb,
-            &foreign,
-            &change_data.changes,
-            &change_data.removed_files,
-            &(job_id, progress_tx.clone())
-        );
+        let fdb = FileDatabase::new(&settings.database_url, settings.get_file_storage_path());
+
+        let result = fdb.and_then(|fdb| {
+            apply_changes(
+                &fdb,
+                &foreign,
+                &change_data.changes,
+                &change_data.removed_files,
+                &(job_id, progress_tx.clone())
+            )
+        });
 
         if let Err(e) = result {
             progress_tx.send((job_id, sp::SyncUpdate::Error(e)))
@@ -207,7 +213,7 @@ fn handle_change_application(
 
 
 fn handle_sync_request(
-    fdb: Arc<Mutex<FileDatabase>>,
+    settings: Settings,
     mut foreign: HttpForeignServer,
     own_port: u16,
     progress_tx: &sp::TxType
@@ -216,12 +222,16 @@ fn handle_sync_request(
 
     let progress_tx = progress_tx.clone();
     thread::spawn(move || {
-        let result = sync_with_foreign(
-            fdb,
-            &mut foreign,
-            own_port,
-            &(job_id, progress_tx.clone())
-        );
+        let fdb = FileDatabase::new(&settings.database_url, settings.get_file_storage_path());
+
+        let result = fdb.and_then(|fdb| {
+            sync_with_foreign(
+                    &fdb,
+                    &mut foreign,
+                    own_port,
+                    &(job_id, progress_tx.clone())
+                )
+        });
 
         if let Err(e) = result {
             progress_tx.send((job_id, sp::SyncUpdate::Error(e)))

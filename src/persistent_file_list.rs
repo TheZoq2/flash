@@ -146,7 +146,7 @@ mod file_list_persistence_tests {
         }
     }
 
-    fn dummy_database_list(db: &mut file_database::FileDatabase) -> FileList {
+    fn dummy_database_list(db: &file_database::FileDatabase) -> FileList {
         FileList::from_locations(
             vec![
                 FileLocation::Database(db.add_new_file(

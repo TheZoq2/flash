@@ -16,8 +16,10 @@ use chrono::NaiveDateTime;
 use iron::typemap::Key;
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use search;
+use settings;
 use error::{Result};
 use changelog::{
     Change,
@@ -89,17 +91,16 @@ pub struct FileDatabase {
     connection: PgConnection,
     file_save_path: PathBuf,
 }
-impl Key for FileDatabase {
-    type Value = FileDatabase;
-}
 
 impl FileDatabase {
-    pub fn new(connection: PgConnection, file_save_path: PathBuf) -> FileDatabase {
+    pub fn new(url: &str, file_save_path: PathBuf) -> Result<FileDatabase> {
+        let connection = PgConnection::establish(&url)?;
+
         // If the destination folder does not exist, it should be created
-        FileDatabase {
+        Ok(FileDatabase {
             connection,
             file_save_path,
-        }
+        })
     }
 
     /**
@@ -396,13 +397,11 @@ pub mod db_test_helpers {
     use std::io;
 
     //Establish a connection to the postgres database
-    fn establish_connection() -> PgConnection {
+    fn db_url() -> String {
         dotenv().ok();
 
-        let database_url = env::var("DATABASE_TEST_URL")
-            .expect("DATABASE_TEST_URL must be set. Perhaps .env is missing?");
-        PgConnection::establish(&database_url)
-            .expect(&format!("Error connecting to {}", database_url))
+        env::var("DATABASE_TEST_URL")
+            .expect("DATABASE_TEST_URL must be set. Perhaps .env is missing?")
     }
 
     pub fn get_test_storage_path() -> String {
@@ -425,31 +424,32 @@ pub mod db_test_helpers {
         };
 
         let fdb = FileDatabase::new(
-            establish_connection(),
+            &db_url(),
             PathBuf::from(test_file_storage_path),
         );
 
-        fdb
+        assert!(fdb.is_ok(), "Failed to create database");
+
+        fdb.unwrap()
     }
 
     lazy_static! {
         // Most functions that modify the database already want
         // `Arc<Mutex<fdb>>` so it has to have two layers of mutex
-        static ref FDB: Arc<Mutex<Arc<Mutex<FileDatabase>>>>
-                = Arc::new(Mutex::new(Arc::new(Mutex::new(create_db()))));
+        static ref FDB: Arc<Mutex<FileDatabase>>
+                = Arc::new(Mutex::new(create_db()));
     }
 
-    pub fn get_database() -> Arc<Mutex<Arc<Mutex<FileDatabase>>>> {
+    pub fn get_database() -> Arc<Mutex<FileDatabase>> {
         FDB.clone()
     }
 
-    pub fn run_test<F: Fn(&mut FileDatabase)>(test: F) {
+    pub fn run_test<F: Fn(&FileDatabase)>(test: F) {
         let fdb = FDB.lock().unwrap();
-        let mut fdb = fdb.lock().unwrap();
         fdb.reset();
         assert_eq!(fdb.get_file_amount(), 0);
 
-        test(&mut fdb);
+        test(&fdb);
     }
 
     //////////////////////////////////////////////////
