@@ -3,9 +3,14 @@ use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::thread;
 
-use error::Error;
+use request_helpers::{to_json_with_result, get_get_usize};
 
-#[derive(Debug)]
+use iron::prelude::*;
+use iron::status;
+
+use error::{Result, Error, ErrorKind};
+
+#[derive(Debug, Serialize, Clone)]
 pub enum SyncUpdate {
     /// Done gathering data
     GatheredData,
@@ -22,7 +27,7 @@ pub enum SyncUpdate {
     /// Changes have been applied
     Done,
     /// An error occured while performing sync
-    Error(Error)
+    Error(String)
 }
 
 pub type RxType = Receiver<(usize, SyncUpdate)>;
@@ -46,7 +51,7 @@ pub fn setup_progress_datastructures() -> (TxType, RxType, StorageType) {
 */
 pub fn run_sync_tracking_thread(
     update_rx: Receiver<(usize, SyncUpdate)>,
-    storage: Arc<Mutex<HashMap<usize, SyncUpdate>>>
+    storage: StorageType
 ) {
     thread::spawn(move || {
         loop {
@@ -60,4 +65,24 @@ pub fn run_sync_tracking_thread(
     });
 }
 
+
+
+pub fn progress_request_handler(request: &mut Request, storage: &StorageType)
+    -> IronResult<Response> 
+{
+    let job_id = get_get_usize(request, "job_id")?;
+
+    let result = handle_progress_request(job_id, storage)?;
+
+    Ok(Response::with((status::Ok, to_json_with_result(result)?)))
+}
+
+fn handle_progress_request(job_id: usize, storage: &StorageType) -> Result<SyncUpdate> {
+    let storage = storage.lock().unwrap();
+
+    match storage.get(&job_id) {
+        Some(val) => Ok((*val).clone()),
+        None => bail!(ErrorKind::NoSuchJobId(job_id))
+    }
+}
 

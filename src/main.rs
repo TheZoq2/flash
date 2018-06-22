@@ -153,7 +153,8 @@ fn main() {
     mount.mount("sync/file", sync_handlers::file_request_handler);
     mount.mount("sync/thumbnail", sync_handlers::thumbnail_request_handler);
     mount.mount("sync/changes", sync_handlers::change_request_handler);
-    mount.mount("sync/apply_changes", move |r: &mut Request|sync_handlers::change_application_handler(r, &sync_tx));
+    mount.mount("sync/apply_changes", move |r: &mut Request| sync_handlers::change_application_handler(r, &sync_tx));
+    // mount.monut("sync/progress")
     mount.mount("subdirectories", move |request: &mut Request| {
         misc_handlers::subdirectory_request_handler(request, &file_read_path)}
     );

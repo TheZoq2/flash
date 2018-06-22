@@ -98,6 +98,11 @@ error_chain! {
             description("Got an unexpected HTTP statuscode")
             display("HTTP request returned status {}. Response: {}", code.as_u16(), body)
         }
+
+        NoSuchJobId(id: usize) {
+            description("No such job ID")
+            display("No job with id {}", id)
+        }
     }
 }
 

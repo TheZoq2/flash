@@ -374,7 +374,7 @@ mod sync_integration {
 
 
         // Run sync
-        sync_with_foreign(url1, url2);
+        let job_id = sync_with_foreign(url1, url2);
 
         // Ensure that all files have been synced
         assert_eq!(file_list_request(url1, "of+from2").length, 2);
@@ -427,7 +427,7 @@ mod sync_integration {
             .unwrap()
     }
 
-    fn sync_with_foreign(url: &str, foreign_url: &str) {
+    fn sync_with_foreign(url: &str, foreign_url: &str) -> usize {
         let request_url = construct_url(
                 "http",
                 url,
@@ -437,6 +437,6 @@ mod sync_integration {
 
         println!("{}", request_url);
 
-        send_request_for_bytes(&request_url, "").expect("Sync failed");
+        send_request::<usize>(&request_url, "").expect("Sync failed")
     }
 }

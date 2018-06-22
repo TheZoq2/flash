@@ -40,6 +40,19 @@ pub fn get_get_i64(request: &mut Request, name: &str) -> Result<i64> {
     }
 }
 
+/**
+  Fetches a single number from the GET variables of the requests.
+*/
+pub fn get_get_usize(request: &mut Request, name: &str) -> Result<usize> {
+    let string = get_get_variable(request, name)?;
+    match string.parse::<usize>() {
+        Ok(val) => Ok(val),
+        Err(_) => {
+            bail!(ErrorKind::InvalidVariableType("index".into(), "usize".into()))
+        }
+    }
+}
+
 
 
 /**
