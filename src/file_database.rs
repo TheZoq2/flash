@@ -13,13 +13,10 @@ use schema::{files, syncpoints, changes};
 
 use chrono::NaiveDateTime;
 
-use iron::typemap::Key;
 
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 use search;
-use settings;
 use error::{Result};
 use changelog::{
     Change,
@@ -390,8 +387,6 @@ pub mod db_test_helpers {
 
     use dotenv::dotenv;
     use std::env;
-
-    use diesel::pg::PgConnection;
 
     use std::fs;
     use std::io;

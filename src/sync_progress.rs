@@ -8,9 +8,9 @@ use request_helpers::{to_json_with_result, get_get_usize};
 use iron::prelude::*;
 use iron::status;
 
-use error::{Result, Error, ErrorKind};
+use error::{Result, ErrorKind};
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum SyncUpdate {
     /// Done gathering data
     GatheredData,
@@ -30,10 +30,16 @@ pub enum SyncUpdate {
     Error(String)
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SyncStatus {
+    pub last_update: SyncUpdate,
+    pub foreign_job_id: Option<usize>
+}
+
 pub type RxType = Receiver<(usize, SyncUpdate)>;
 pub type TxType = SyncSender<(usize, SyncUpdate)>;
 pub type LocalTxType = (usize, TxType);
-pub type StorageType = Arc<Mutex<HashMap<usize, SyncUpdate>>>;
+pub type StorageType = Arc<Mutex<HashMap<usize, SyncStatus>>>;
 
 /**
   Creates a channel for sending updates and a hash map where they can be read from
@@ -60,12 +66,25 @@ pub fn run_sync_tracking_thread(
 
             let mut storage = storage.lock().unwrap();
 
-            storage.insert(id, update);
+            println!("got_update: {:?}", update);
+
+            // Fetch the old status from storage
+            let mut new_status = storage
+                .get(&id)
+                .map(|x| (*x).clone())
+                .unwrap_or(SyncStatus{last_update: update.clone(), foreign_job_id: None});
+
+
+            // Update it to reflect what has changed
+            if let SyncUpdate::SentToForeign(id) = update {
+                new_status.foreign_job_id = Some(id);
+            }
+            new_status.last_update = update;
+
+            storage.insert(id, new_status);
         }
     });
 }
-
-
 
 pub fn progress_request_handler(request: &mut Request, storage: &StorageType)
     -> IronResult<Response> 
@@ -77,7 +96,7 @@ pub fn progress_request_handler(request: &mut Request, storage: &StorageType)
     Ok(Response::with((status::Ok, to_json_with_result(result)?)))
 }
 
-fn handle_progress_request(job_id: usize, storage: &StorageType) -> Result<SyncUpdate> {
+fn handle_progress_request(job_id: usize, storage: &StorageType) -> Result<SyncStatus> {
     let storage = storage.lock().unwrap();
 
     match storage.get(&job_id) {

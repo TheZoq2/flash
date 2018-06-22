@@ -135,7 +135,7 @@ fn main() {
     let file_read_path = settings.get_file_read_path();
 
     let (sync_tx, sync_rx, sync_storage) = sync_progress::setup_progress_datastructures();
-    sync_progress::run_sync_tracking_thread(sync_rx, sync_storage);
+    sync_progress::run_sync_tracking_thread(sync_rx, sync_storage.clone());
 
     let port = settings.get_port();
 
@@ -154,7 +154,7 @@ fn main() {
     mount.mount("sync/thumbnail", sync_handlers::thumbnail_request_handler);
     mount.mount("sync/changes", sync_handlers::change_request_handler);
     mount.mount("sync/apply_changes", move |r: &mut Request| sync_handlers::change_application_handler(r, &sync_tx));
-    // mount.monut("sync/progress")
+    mount.mount("sync/progress", move |r: &mut Request| sync_progress::progress_request_handler(r, &sync_storage));
     mount.mount("subdirectories", move |request: &mut Request| {
         misc_handlers::subdirectory_request_handler(request, &file_read_path)}
     );

@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use iron::*;
 use persistent::{Write, Read};
 
-use file_database::FileDatabase;
 use request_helpers::get_get_variable;
 
 use file_list_response::list_info_request_handler;

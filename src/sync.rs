@@ -15,8 +15,6 @@ use file_handler::{remove_file, ThumbnailStrategy};
 use foreign_server::{ForeignServer, ChangeData};
 use sync_progress as sp;
 
-use std::sync::{Arc, Mutex};
-
 use chrono::prelude::*;
 
 
@@ -88,7 +86,7 @@ pub fn sync_with_foreign(
     };
 
     // Send the changes to the remote server to apply
-    foreign_server.send_changes(
+    let foreign_job_id = foreign_server.send_changes(
         &ChangeData{
             changes: local_changes,
             syncpoint: new_syncpoint.clone(),
@@ -99,17 +97,20 @@ pub fn sync_with_foreign(
         .chain_err(|| "Failed to send changes")?;
 
     // TODO: Report a job ID back to listener
-    progress_tx.send((*job_id, sp::SyncUpdate::SentToForeign(0)))
+    progress_tx.send((*job_id, sp::SyncUpdate::SentToForeign(foreign_job_id)))
         .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
     // Apply changes locally
     apply_changes(fdb.clone(), foreign_server, &remote_changes, &removed_files, progress_reporter)
         .chain_err(|| "Failed to apply changes")?;
 
-    progress_tx.send((*job_id, sp::SyncUpdate::AddingSyncpoint));
+    progress_tx.send((*job_id, sp::SyncUpdate::AddingSyncpoint))
+            .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
+;
     fdb.add_syncpoint(&new_syncpoint)?;
 
-    progress_tx.send((*job_id, sp::SyncUpdate::Done));
+    progress_tx.send((*job_id, sp::SyncUpdate::Done))
+        .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
     Ok(())
 }
 
@@ -136,7 +137,12 @@ pub fn apply_changes(
     let mut changes_left = changes_to_be_applied.len();
     for change in changes_to_be_applied {
         changes_left -= 1;
-        progress_tx.send((*job_id, sp::SyncUpdate::StartingToApplyChange(changes_left)));
+        progress_tx.send((
+            *job_id,
+            sp::SyncUpdate::StartingToApplyChange(changes_left)
+        ))
+        .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
+
 
         match change.change_type {
             ChangeType::Update(ref update_type) => {
@@ -182,7 +188,8 @@ pub fn apply_changes(
     let mut changes_to_be_added = changes.len();
     for change in changes {
         changes_to_be_added -= 1;
-        progress_tx.send((*job_id, sp::SyncUpdate::AddingChangeToDb(changes_to_be_added)));
+        progress_tx.send((*job_id, sp::SyncUpdate::AddingChangeToDb(changes_to_be_added)))
+            .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
         fdb.add_change(change)?;
     }
@@ -190,7 +197,8 @@ pub fn apply_changes(
     let mut files_to_remove = removed_files.len();
     for id in removed_files {
         files_to_remove -= 1;
-        progress_tx.send((*job_id, sp::SyncUpdate::RemovingFile(files_to_remove)));
+        progress_tx.send((*job_id, sp::SyncUpdate::RemovingFile(files_to_remove)))
+            .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
         if fdb.get_file_with_id(*id) != None {
             remove_file(*id, &fdb, ChangeCreationPolicy::No)?;
@@ -290,9 +298,9 @@ mod sync_tests {
             Ok(self.file_data[&id].0.clone())
         }
 
-        fn send_changes(&mut self, data: &ChangeData, _port: u16) -> Result<()> {
+        fn send_changes(&mut self, data: &ChangeData, _port: u16) -> Result<usize> {
             self.syncpoints.push(data.syncpoint.clone());
-            Ok(())
+            Ok(0)
         }
         fn get_file(&self, id: i32) -> Result<Vec<u8>> {
             Ok(self.file_data[&id].1.clone())

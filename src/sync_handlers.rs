@@ -20,7 +20,6 @@ use chrono::NaiveDateTime;
 
 use std::fs::File;
 use std::io::prelude::*;
-use std::sync::{Arc, Mutex};
 use std::thread;
 
 use foreign_server::{FileDetails, ChangeData, HttpForeignServer};
@@ -119,8 +118,8 @@ pub fn change_application_handler(request: &mut Request, progress_tx: &sp::TxTyp
         }
     }
 
-    handle_change_application(body, (*settings).clone(), foreign_server, progress_tx)?;
-    Ok(Response::with((status::Ok, "")))
+    let job_id = handle_change_application(body, (*settings).clone(), foreign_server, progress_tx)?;
+    Ok(Response::with((status::Ok, to_json_with_result(job_id)?)))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -199,6 +198,11 @@ fn handle_change_application(
                 &change_data.removed_files,
                 &(job_id, progress_tx.clone())
             )
+        })
+        .and_then(|_| {
+            progress_tx.send((job_id, sp::SyncUpdate::Done))
+                .unwrap_or_else(|_e| println!("Failed to send done for sync job {}", job_id));
+            Ok(())
         });
 
         if let Err(e) = result {
@@ -234,7 +238,7 @@ fn handle_sync_request(
         });
 
         if let Err(e) = result {
-            progress_tx.send((job_id, sp::SyncUpdate::Error(format!("{}", e))))
+            progress_tx.send((job_id, sp::SyncUpdate::Error(format!("{:#?}", e))))
                 .expect("Failed to send error from handle_sync_request worker
                         to sync progress manager. Did it crash?");
         }

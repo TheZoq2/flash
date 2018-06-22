@@ -17,7 +17,7 @@ pub fn create_changes_for_files(fdb: &FileDatabase, timestamp: &NaiveDateTime) -
                 *timestamp,
                 file.id,
                 ChangeType::Update(UpdateType::TagAdded(tag.to_string()))
-            ));
+            ))?;
         }
     }
 
