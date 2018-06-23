@@ -379,22 +379,6 @@ fn get_file_list_object(
     }
 }
 
-/**
-  Returns the index of the last file that was saved to the database in a specific file
-*/
-fn get_last_saved(file_list: &[FileLocation]) -> Option<usize>
-{
-    file_list.iter()
-        .enumerate()
-        .fold(None, |last, (id, file)| {
-            match *file {
-                FileLocation::Database(_) => Some(id),
-                _ => last
-            }
-        })
-}
-
-
 /*
   Database tests are not currently run because the database can't be shared
   between test threads

@@ -126,9 +126,10 @@ impl convert::From<Error> for IronError {
     fn from(source: Error) -> IronError {
         let message = format!("{:#?}\n", source);
 
+        let status = source.iron_status();
         IronError {
             error: Box::new(source),
-            response: Response::with((status::NotFound, message)),
+            response: Response::with((status, message)),
         }
     }
 }

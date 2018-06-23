@@ -29,12 +29,6 @@ pub struct FileDetails {
     pub timestamp: NaiveDateTime
 }
 
-impl FileDetails {
-    pub fn new(extension: String, timestamp: NaiveDateTime) -> Self {
-        Self { extension, timestamp }
-    }
-}
-
 impl<'a> From<&'a ::file_database::File> for FileDetails {
     fn from(file: &'a ::file_database::File) -> Self {
         let extension = ::std::path::PathBuf::from(file.filename.clone())

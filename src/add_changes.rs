@@ -6,6 +6,7 @@ use chrono::NaiveDateTime;
 use changelog::{ChangeType, Change, UpdateType};
 
 
+#[allow(dead_code)]
 pub fn create_changes_for_files(fdb: &FileDatabase, timestamp: &NaiveDateTime) -> Result<()> {
     let files = fdb.search_files(::search::SavedSearchQuery::empty());
 

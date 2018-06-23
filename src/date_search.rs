@@ -68,25 +68,6 @@ enum Month {
 }
 
 impl Month {
-    pub fn as_index(&self) -> u32 {
-        match *self {
-            Month::January => 0,
-            Month::February => 1,
-            Month::March => 2,
-            Month::April => 3,
-            Month::May => 4,
-            Month::June => 5,
-            Month::July => 6,
-            Month::August => 7,
-            Month::September => 8,
-            Month::October => 9,
-            Month::November => 10,
-            Month::December => 11,
-        }
-    }
-}
-
-impl Month {
     fn as_number0(&self) -> u32 {
         match *self {
             Month::January => 0,

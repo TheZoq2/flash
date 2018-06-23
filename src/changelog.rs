@@ -80,7 +80,7 @@ pub fn sorted_changes(changes: &[Change]) -> Vec<Change> {
 
 #[derive(Queryable)]
 pub struct ChangeDbEntry {
-    id: i32,
+    _id: i32,
     timestamp: NaiveDateTime,
     json_data: String,
     affected_file: i32,
@@ -89,7 +89,7 @@ pub struct ChangeDbEntry {
 impl<'a> From<&'a Change> for ChangeDbEntry {
     fn from(other: &Change) -> Self {
         Self {
-            id: 0,
+            _id: 0,
             json_data: serde_json::to_string(&other.change_type).unwrap(),
             affected_file: other.affected_file,
             timestamp: other.timestamp

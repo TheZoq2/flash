@@ -549,14 +549,14 @@ mod sync_tests {
         // Set up the foreign server
         let mut foreign_server = MockForeignServer::new(
                 vec!(
-                    (2, (FileDetails::new(
-                        "jpg".into(),
-                        NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
-                    ), added_bytes, Some(added_thumbnail_bytes))),
-                    (3, (FileDetails::new(
-                        "jpg".into(),
-                        NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
-                    ), vec!(), None)),
+                    (2, (FileDetails {
+                        extension: "jpg".into(),
+                        timestamp: NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+                    }, added_bytes, Some(added_thumbnail_bytes))),
+                    (3, (FileDetails {
+                        extension: "jpg".into(),
+                        timestamp: NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+                    }, vec!(), None)),
                 ),
                 vec!(),
                 remote_changes

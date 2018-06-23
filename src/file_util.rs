@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 
 use std::fs::File;
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use std::thread;
 
@@ -58,21 +57,14 @@ pub fn generate_thumbnail(
         let generation_result = handler()
             .chain_err(|| ErrorKind::ThumbnailGenerationFailed);
 
-        /// We don't care if the result could not be sent because it probably means
-        /// that the receiver does not care
+        // We don't care if the result could not be sent because it probably means
+        // that the receiver does not care
         let _result = tx.send(generation_result);
     });
 
     rx
 }
 
-
-pub fn get_file_extension(path: &Path) -> String {
-    match path.extension() {
-        Some(val) => ".".to_string() + val.to_str().unwrap(),
-        None => "".to_string(),
-    }
-}
 
 /**
   Takes a `image::GenericImage` and generates a thumbnail image from that
@@ -89,39 +81,6 @@ fn generate_thumbnail_from_generic_image(
  */
 pub fn get_semi_unique_identifier() -> i32 {
     rand::random::<i32>()
-}
-
-pub fn system_time_as_unix_timestamp(time: SystemTime) -> u64 {
-    let duration = time.duration_since(UNIX_EPOCH).unwrap();
-
-    duration.as_secs()
-}
-
-/**
-    Returns the unix timestamp of an image.
-
-    For now, this is the timestamp of the file
-    in the file system because there is no good library for reading EXIF data.
-
-    If the file doesn't exist, an error is printed and `SystemTime::now()` is returned
-*/
-//TODO: Rewrite to return an option
-pub fn get_file_timestamp(filename: &Path) -> u64 {
-    let metadata = match fs::metadata(&filename) {
-        Ok(val) => val,
-        Err(e) => {
-            println!(
-                "Failed to load image timestamp for file {:?}. {:?}",
-                filename,
-                e
-            );
-            return system_time_as_unix_timestamp(SystemTime::now());
-        }
-    };
-
-    let timestamp = metadata.modified().unwrap();
-
-    system_time_as_unix_timestamp(timestamp)
 }
 
 /**
