@@ -57,7 +57,7 @@ mod add_change_tests {
 
         // Add changes
         let timestamp = NaiveDate::from_ymd(1970, 1, 1).and_hms(0, 0, 0);
-        create_changes_for_files(fdb, &timestamp);
+        create_changes_for_files(fdb, &timestamp).unwrap();
 
 
         // Ensure that changes were created

@@ -244,8 +244,6 @@ mod sync_tests {
 
     use std::path::PathBuf;
 
-    use std::thread;
-
     use foreign_server::{FileDetails};
 
     use chrono;

@@ -301,7 +301,6 @@ mod http_tests {
 #[cfg(test)]
 mod sync_integration {
     use super::*;
-    use foreign_server::HttpForeignServer;
 
     use file_list_response::ListResponse;
 
