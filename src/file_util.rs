@@ -21,17 +21,17 @@ use byte_source::{ByteSource, vec_from_byte_source};
 
 use std::sync::mpsc;
 
+/**
+  Length or width, depending on which is the longest of a generated thumbnail
+*/
 const THUMBNAIL_SIZE: u32 = 200;
 
 /**
-  Generates a thumbnail for the given source file and stores that file in a unique location which
-  is returned by the function.
+  Starts a thread that generates a thumbnail from the specified source. It is
+  stored in `destination_path`
 
-  If the thumbnail generation fails for any reason it will return an error
-
-  The `max_size` variable is the biggest allowed size on either axis.
-  An image in portrait mode will be at most `max_size` tall and an image in
-  landscape mode will be at most `max_width` tall
+  Returns a channel which can be used to listen for errors that occured during
+  generation
  */
 
 pub fn generate_thumbnail(
