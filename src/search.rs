@@ -316,6 +316,7 @@ mod public_query_tests {
 mod private_query_tests {
     use super::*;
 
+    #[test]
     fn tag_from_list_string_tests() {
         //Simple tags, no whitespaces
         assert_eq!(get_tags_from_list_string("some,thing,yolo"),
@@ -326,6 +327,7 @@ mod private_query_tests {
                   mapvec!(Cow::from: "not some", "thing", "not yo lo"));
     }
 
+    #[test]
     fn tag_negation_tests() {
         assert_eq!(separate_negated_tags(&mapvec!(Cow::from: "yolo", "not swag")),
                 (mapvec!(String::from: "yolo"), mapvec!(String::from: "swag")));

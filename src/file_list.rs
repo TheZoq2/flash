@@ -63,16 +63,6 @@ impl FileList {
         self.files.get(index)
     }
 
-    pub fn set(&mut self, index: usize, new_location: FileLocation) -> Result<(), ()> {
-        if index < self.files.len() {
-            self.files[index] = new_location;
-            Ok(())
-        }
-        else {
-            Err(())
-        }
-    }
-
     pub fn edit_entry(&self, index: usize, new_location: &FileLocation) -> FileList {
         let new_list = self.files
             .iter()

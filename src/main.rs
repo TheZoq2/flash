@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_doc_comment)]
-
 //#![feature(associated_type_defaults)]
 
 #![recursion_limit="1024"]
@@ -17,6 +14,7 @@ extern crate regex;
 #[macro_use]
 extern crate error_chain;
 extern crate itertools;
+extern crate rand;
 
 extern crate futures;
 extern crate hyper;
@@ -62,6 +60,7 @@ mod error;
 mod changelog;
 mod sync;
 mod sync_handlers;
+mod sync_progress;
 mod util;
 mod file_handler;
 mod byte_source;
@@ -98,7 +97,8 @@ pub fn establish_connection() -> PgConnection {
 
     let database_url =
         env::var("DATABASE_URL").expect("DATABASE_URL must be set. Perhaps .env is missing?");
-    PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
+    PgConnection::establish(&database_url)
+        .expect(&format!("Error connecting to {}", database_url))
 }
 
 
@@ -106,7 +106,6 @@ fn main() {
     let settings = settings::Settings::from_env();
 
     //Loading or creating the database
-    let db = FileDatabase::new(establish_connection(), settings.get_file_storage_path());
 
     // println!("creating changes for existing files");
     // let current_time = chrono::NaiveDateTime::from_timestamp(chrono::offset::Utc::now().timestamp(), 0);
@@ -119,27 +118,40 @@ fn main() {
     let file_list_save_path = settings
         .get_file_storage_path()
         .join(&PathBuf::from("file_list_lists.json"));
-    let file_list_list =
-        persistent_file_list::read_file_list_list(&file_list_save_path, &db).unwrap();
+
+    let file_list_list = {
+        let db = FileDatabase::new(
+            &settings.database_url,
+            settings.get_file_storage_path()
+        ).unwrap();
+        persistent_file_list::read_file_list_list(&file_list_save_path, &db).unwrap()
+    };
 
     let file_list_worker_commander = file_list_worker::start_worker(file_list_save_path);
 
     let file_read_path = settings.get_file_read_path();
 
+    let (sync_tx, sync_rx, sync_storage) = sync_progress::setup_progress_datastructures();
+    sync_progress::run_sync_tracking_thread(sync_rx, sync_storage.clone());
+
     let port = settings.get_port();
 
     let mut mount = Mount::new();
 
+    let sync_tx1 = sync_tx.clone();
+    let sync_handler = move |request: &mut Request| sync_handlers::sync_handler(port, request, &sync_tx1);
+
     mount.mount("/", Static::new(Path::new("frontend/output")));
     mount.mount("/list", file_request_handlers::file_list_request_handler);
     mount.mount("/search", search_handler::handle_file_search);
-    mount.mount("sync/sync", move |request: &mut Request| sync_handlers::sync_handler(port, request));
+    mount.mount("sync/sync", sync_handler);
     mount.mount("sync/syncpoints", sync_handlers::syncpoint_request_handler);
     mount.mount("sync/file_details", sync_handlers::file_detail_handler);
     mount.mount("sync/file", sync_handlers::file_request_handler);
     mount.mount("sync/thumbnail", sync_handlers::thumbnail_request_handler);
     mount.mount("sync/changes", sync_handlers::change_request_handler);
-    mount.mount("sync/apply_changes", sync_handlers::change_application_handler);
+    mount.mount("sync/apply_changes", move |r: &mut Request| sync_handlers::change_application_handler(r, &sync_tx));
+    mount.mount("sync/progress", move |r: &mut Request| sync_progress::progress_request_handler(r, &sync_storage));
     mount.mount("subdirectories", move |request: &mut Request| {
         misc_handlers::subdirectory_request_handler(request, &file_read_path)}
     );
@@ -148,7 +160,6 @@ fn main() {
     let mut chain = Chain::new(mount);
     chain.link(Write::<file_list::FileListList>::both(file_list_list));
     chain.link(Write::<file_list_worker::Commander>::both(file_list_worker_commander));
-    chain.link(Write::<FileDatabase>::both(db));
     chain.link(Read::<settings::Settings>::both(settings));
 
     let url = format!("0.0.0.0:{}", port);

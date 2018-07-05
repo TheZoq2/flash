@@ -5,13 +5,13 @@ use std::path::PathBuf;
 use iron::*;
 use persistent::{Write, Read};
 
-use file_database::FileDatabase;
 use request_helpers::get_get_variable;
 
 use file_list_response::list_info_request_handler;
 use file_list::{FileLocation, FileList, FileListList, FileListSource};
 use settings::Settings;
 use search::{SearchType, parse_search_query, SavedSearchQuery};
+use request_helpers::setup_db_connection;
 
 
 pub fn handle_file_search(request: &mut Request) -> IronResult<Response> {
@@ -30,14 +30,10 @@ fn handle_search_for_saved_files(
     query: SavedSearchQuery,
 ) -> IronResult<Response> {
     let file_list_list = request.get::<Write<FileListList>>().unwrap();
+    let fdb = setup_db_connection(request)?;
 
     // Fetch the files in the database
-    let files = {
-        let mutex = request.get::<Write<FileDatabase>>().unwrap();
-        let db = mutex.lock().unwrap();
-
-        db.search_files(query)
-    };
+    let files = fdb.search_files(query);
 
     // Build a file_list from the tags
     let file_locations = files.into_iter().map(FileLocation::Database).collect();

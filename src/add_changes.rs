@@ -6,6 +6,7 @@ use chrono::NaiveDateTime;
 use changelog::{ChangeType, Change, UpdateType};
 
 
+#[allow(dead_code)]
 pub fn create_changes_for_files(fdb: &FileDatabase, timestamp: &NaiveDateTime) -> Result<()> {
     let files = fdb.search_files(::search::SavedSearchQuery::empty());
 
@@ -17,7 +18,7 @@ pub fn create_changes_for_files(fdb: &FileDatabase, timestamp: &NaiveDateTime) -
                 *timestamp,
                 file.id,
                 ChangeType::Update(UpdateType::TagAdded(tag.to_string()))
-            ));
+            ))?;
         }
     }
 
@@ -57,7 +58,7 @@ mod add_change_tests {
 
         // Add changes
         let timestamp = NaiveDate::from_ymd(1970, 1, 1).and_hms(0, 0, 0);
-        create_changes_for_files(fdb, &timestamp);
+        create_changes_for_files(fdb, &timestamp).unwrap();
 
 
         // Ensure that changes were created

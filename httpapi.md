@@ -133,14 +133,14 @@ Handles various requests relating to sync. Just `/sync` is unused
 
 ## /sync/sync
 
-Starts a sync procedure with the specified foreign flash instance. Replies
-with `"Sync done"` once the files have been synced successfully
+Starts a sync procedure with the specified foreign flash instance. Replies with
+a job id which can be used to monitor the progress of the sync job.
 
 *Params*
  - `foreign_url`: Url of the foreign flash instance to sync with
 
 *Returns*
-`"Sync done"`
+job id: `usize`
 
 ## /sync/syncpoints
 

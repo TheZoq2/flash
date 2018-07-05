@@ -12,6 +12,7 @@ error_chain! {
         Io(::std::io::Error);
         SerdeJson(::serde_json::Error);
         Diesel(::diesel::result::Error);
+        DieselConnection(::diesel::ConnectionError);
         ImageError(::image::ImageError);
         Utf8(::std::string::FromUtf8Error);
         StrUtf8(::std::str::Utf8Error);
@@ -97,6 +98,11 @@ error_chain! {
             description("Got an unexpected HTTP statuscode")
             display("HTTP request returned status {}. Response: {}", code.as_u16(), body)
         }
+
+        NoSuchJobId(id: usize) {
+            description("No such job ID")
+            display("No job with id {}", id)
+        }
     }
 }
 
@@ -120,9 +126,10 @@ impl convert::From<Error> for IronError {
     fn from(source: Error) -> IronError {
         let message = format!("{:#?}\n", source);
 
+        let status = source.iron_status();
         IronError {
             error: Box::new(source),
-            response: Response::with((status::NotFound, message)),
+            response: Response::with((status, message)),
         }
     }
 }

@@ -29,12 +29,6 @@ pub struct FileDetails {
     pub timestamp: NaiveDateTime
 }
 
-impl FileDetails {
-    pub fn new(extension: String, timestamp: NaiveDateTime) -> Self {
-        Self { extension, timestamp }
-    }
-}
-
 impl<'a> From<&'a ::file_database::File> for FileDetails {
     fn from(file: &'a ::file_database::File) -> Self {
         let extension = ::std::path::PathBuf::from(file.filename.clone())
@@ -68,7 +62,7 @@ pub trait ForeignServer {
     fn get_syncpoints(&self) -> Result<Vec<SyncPoint>>;
     fn get_changes(&self, starting_timestamp: &Option<SyncPoint>) -> Result<Vec<Change>>;
     fn get_file_details(&self, id: i32) -> Result<FileDetails>;
-    fn send_changes(&mut self, change: &ChangeData, own_port: u16) -> Result<()>;
+    fn send_changes(&mut self, change: &ChangeData, own_port: u16) -> Result<usize>;
     fn get_file(&self, id: i32) -> Result<Vec<u8>>;
     fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>>;
 }
@@ -204,15 +198,14 @@ impl ForeignServer for HttpForeignServer {
 
         send_request::<FileDetails>(&url, "")
     }
-    fn send_changes(&mut self, changes: &ChangeData, own_port: u16) -> Result<()> {
+    fn send_changes(&mut self, changes: &ChangeData, own_port: u16) -> Result<usize> {
         let path = vec!(String::from("sync"), String::from("apply_changes"));
         let query = vec!((String::from("port"), format!("{}", own_port)));
         let url = construct_url(FOREIGN_SCHEME, &self.url, &path, &query);
 
         let body = serde_json::to_string(changes)?;
 
-        send_request_for_bytes(&url, &body)?;
-        Ok(())
+        Ok(send_request::<usize>(&url, &body)?)
     }
     fn get_file(&self, id: i32) -> Result<Vec<u8>> {
         let url = self.get_file_sync_url(id, "file");
@@ -302,9 +295,13 @@ mod http_tests {
 #[cfg(test)]
 mod sync_integration {
     use super::*;
-    use foreign_server::HttpForeignServer;
 
     use file_list_response::ListResponse;
+
+    use std::time::Duration;
+    use std::thread;
+    use sync_progress::SyncStatus;
+    use sync_progress::SyncUpdate;
 
     /**
       Runs the foreign server by launching the test script and kills it when
@@ -351,6 +348,8 @@ mod sync_integration {
                 .arg(self.pid.clone())
                 .output()
                 .expect("Failed to kill test server");
+
+            println!("dropping foreignserverrunner");
         }
     }
 
@@ -370,8 +369,34 @@ mod sync_integration {
         save_file(url2, listid2, 2, vec!("from2".into()));
         save_file(url2, listid2, 3, vec!("from2".into()));
 
+
         // Run sync
-        sync_with_foreign(url1, url2);
+        let job_id = sync_with_foreign(url1, url2);
+
+        // Give the servers a second to finnish
+        let mut iterations = 0;
+        // We have to wait for the servers to add the new job to the
+        // list of jobs. Perhaps this should be done in a more robust way
+        thread::sleep(Duration::from_millis(100));
+        loop {
+            let (local_update, foreign_update) = check_job_status(url1, job_id, url2);
+            if let (&SyncUpdate::Done, &Some(SyncUpdate::Done))
+                = (&local_update, &foreign_update) {
+                break;
+            }
+
+            if iterations > 10 {
+                assert!(
+                    false,
+                    "Still waiting on sync jobs ({:?} {:?})",
+                    local_update,
+                    foreign_update
+                )
+            }
+            iterations += 1;
+            thread::sleep(Duration::from_millis(100));
+        }
+
         // Ensure that all files have been synced
         assert_eq!(file_list_request(url1, "of+from2").length, 2);
         assert_eq!(file_list_request(url2, "of+from1").length, 2);
@@ -422,7 +447,7 @@ mod sync_integration {
             .unwrap()
     }
 
-    fn sync_with_foreign(url: &str, foreign_url: &str) {
+    fn sync_with_foreign(url: &str, foreign_url: &str) -> usize {
         let request_url = construct_url(
                 "http",
                 url,
@@ -432,6 +457,37 @@ mod sync_integration {
 
         println!("{}", request_url);
 
-        send_request_for_bytes(&request_url, "").expect("Sync failed");
+        send_request::<usize>(&request_url, "").expect("Sync failed")
+    }
+
+    fn check_job_status(initiating_url: &str, initiating_job_id: usize, foreign_url: &str)
+        -> (SyncUpdate, Option<SyncUpdate>)
+    {
+        let request_url = construct_url(
+                "http",
+                initiating_url,
+                &vec!("sync".into(), "progress".into()),
+                &vec!(("job_id".into(), format!("{}", initiating_job_id).into()))
+            );
+
+        println!("Foreign job status url {}", request_url);
+
+        let initiating_status = send_request::<SyncStatus>(&request_url, "")
+            .expect("Job status query failed");
+
+        let foreign_status = initiating_status.foreign_job_id.map(|job_id| {
+            let request = construct_url(
+                "http",
+                foreign_url,
+                &vec!("sync".into(), "progress".into()),
+                &vec!(("job_id".into(), format!("{}", job_id).into()))
+            );
+
+            send_request::<SyncStatus>(&request, "")
+                .expect("Foreign job status query failed")
+                .last_update
+        });
+
+        (initiating_status.last_update, foreign_status)
     }
 }

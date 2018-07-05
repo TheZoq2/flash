@@ -8,6 +8,7 @@ use chrono::Utc;
 
 use changelog::ChangeCreationPolicy;
 
+#[allow(dead_code)]
 pub fn fix_timestamps(fdb: &FileDatabase) {
     // Fetch all files
     let files = fdb.search_files(SavedSearchQuery::empty());
@@ -50,7 +51,7 @@ mod timestamp_fix_tests {
         db_test_helpers::run_test(timestamp_fix_test);
     }
 
-    fn timestamp_fix_test(fdb: &mut FileDatabase) {
+    fn timestamp_fix_test(fdb: &FileDatabase) {
         // Copy test-files to storage location
         fs::copy("test/media/DSC_0001.JPG", fdb.get_file_save_path().join("DSC_0001.JPG")).unwrap();
         fs::copy("test/media/512x512.png", fdb.get_file_save_path().join("512x512.png")).unwrap();
