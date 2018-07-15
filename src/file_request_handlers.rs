@@ -16,8 +16,11 @@ use file_database::FileDatabase;
 use file_list::{FileListList, FileLocation};
 use file_list_worker;
 use persistent_file_list;
-use file_util::sanitize_tag_names;
-use file_util::{get_semi_unique_identifier};
+use file_util::{
+    get_semi_unique_identifier,
+    get_file_timestamp,
+    sanitize_tag_names
+};
 use request_helpers::{get_get_variable, setup_db_connection};
 use file_handler::{save_file, FileSavingWorkerResults, ThumbnailStrategy};
 use byte_source::ByteSource;
@@ -253,7 +256,9 @@ fn handle_save_request(
 ) -> Result<FileSaveRequestResult> {
     match *file_location {
         FileLocation::Unsaved(ref path) => {
-            match save_new_file(db, path, tags, change_timestamp) {
+            let file_timestamp = get_file_timestamp(path)?;
+
+            match save_new_file(db, path, tags, file_timestamp, change_timestamp) {
                 Ok((db_entry, save_result_rx)) => {
                     Ok(FileSaveRequestResult::NewDatabaseEntry(
                         FileLocation::Database(db_entry),
@@ -283,6 +288,7 @@ fn save_new_file(
     db: &FileDatabase,
     original_path: &Path,
     tags: &[String],
+    file_timestamp: NaiveDateTime,
     current_time: NaiveDateTime
 ) -> Result<(file_database::File, FileSavingWorkerResults)> {
     let file_identifier = get_semi_unique_identifier();
@@ -303,7 +309,7 @@ fn save_new_file(
         db,
         changelog::ChangeCreationPolicy::Yes(current_time),
         &extension.to_string_lossy(),
-        current_time.timestamp() as u64
+        file_timestamp.timestamp() as u64
     )
 }
 
@@ -388,12 +394,13 @@ mod file_request_tests {
     use super::*;
 
     use search;
+    use date_search;
 
     use file_list::{FileList, FileListSource};
 
     use chrono::NaiveDate;
 
-    use changelog::ChangeCreationPolicy;
+    use changelog::{Change, ChangeType, ChangeCreationPolicy};
 
     fn dummy_database_entry(file_path: &str, thumbnail_path: &str) -> file_database::File {
         file_database::File {
@@ -506,6 +513,7 @@ mod file_request_tests {
                     fdb,
                     &PathBuf::from("test"),
                     &tags,
+                    NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0),
                     NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0)
                 ),
                 Err(Error(ErrorKind::NoFileExtension(_), _))
@@ -520,6 +528,7 @@ mod file_request_tests {
                 &fdb,
                 &src_path,
                 &tags,
+                NaiveDate::from_ymd(2017, 1, 1).and_hms(0,0,0),
                 NaiveDate::from_ymd(2017, 1, 1).and_hms(0,0,0)
             )
             .unwrap();
@@ -658,4 +667,66 @@ mod file_request_tests {
                 false
             );
     }
+
+    db_test!(files_get_correct_timestamps(fdb) {
+        let old_path = PathBuf::from("test/media/10x10.png");
+
+        let change_timestamp = NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0);
+
+        let saved_entry = {
+            let result = handle_save_request(
+                fdb,
+                &FileLocation::Unsaved(old_path),
+                &vec!(),
+                change_timestamp
+            );
+
+            assert_matches!(result, Ok(_));
+            let result = result.unwrap();
+
+            match result {
+                FileSaveRequestResult::NewDatabaseEntry(file_entry, worker_receivers) => {
+                    assert_matches!(worker_receivers.file.recv().unwrap(), Ok(()));
+                    assert_matches!(worker_receivers
+                            .thumbnail
+                            .expect("Thumbnail generator channel not created")
+                            .recv()
+                            .expect("Thumbnail saving failed"), Ok(())
+                        );
+
+                    match file_entry {
+                        FileLocation::Database(result) => {
+                            result
+                        }
+                        _ => panic!("Unreachable branch"),
+                    }
+                }
+                _ => panic!("Unreachable branch"),
+            }
+        };
+
+        let query = search::SavedSearchQuery::with_date_constraints(
+            date_search::DateConstraints::with_intervals(vec!(
+                    date_search::Interval::new(
+                        NaiveDate::from_ymd(2018, 5, 31).and_hms(20, 39, 0),
+                        NaiveDate::from_ymd(2018, 5, 31).and_hms(20, 39, 59)
+                    )))
+        );
+
+        println!("{:#?}", saved_entry.id);
+        //Make sure that the file was actually added to the database
+        assert!(
+                fdb
+                    .search_files(query)
+                    .iter()
+                    .fold(false, |acc, file| { acc || file.id == saved_entry.id })
+            );
+
+        // Make sure a change was added with the correct
+        let changes = fdb.get_all_changes()
+            .expect("Failed to get changes from database ");
+
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0], Change::new(change_timestamp, saved_entry.id, ChangeType::FileAdded));
+    });
 }

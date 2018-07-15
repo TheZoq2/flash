@@ -18,6 +18,7 @@ error_chain! {
         StrUtf8(::std::str::Utf8Error);
         Hyper(::hyper::Error);
         HyperUri(::hyper::error::UriError);
+        SystemTime(::std::time::SystemTimeError);
     }
 
     errors {
