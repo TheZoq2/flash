@@ -149,35 +149,45 @@ pub fn apply_changes(
                 apply_file_update(&fdb, change.affected_file, update_type)?
             }
             ChangeType::FileAdded => {
-                let file_details = foreign_server.get_file_details(change.affected_file)
-                    .chain_err(|| "Failed to get fille details")?;
+                // Check if the file is already in the database if it is, ignore it and print
+                // a warning
+                if fdb.get_file_with_id(change.affected_file) == None {
+                    let file_details = foreign_server.get_file_details(change.affected_file)
+                        .chain_err(|| "Failed to get fille details")?;
 
-                let file = ByteSource::Memory(
-                    foreign_server.get_file(change.affected_file)
-                        .chain_err(|| "Failed to get file")?
-                );
-                let thumbnail = {
-                    let from_server = foreign_server.get_thumbnail(change.affected_file)
-                        .chain_err(|| "Failed to get thumbnail")?;
-                    match from_server {
-                        Some(data) =>
-                            ThumbnailStrategy::FromByteSource(ByteSource::Memory(data)),
-                        None => ThumbnailStrategy::None
-                    }
-                };
+                    let file = ByteSource::Memory(
+                        foreign_server.get_file(change.affected_file)
+                            .chain_err(|| "Failed to get file")?
+                    );
+                    let thumbnail = {
+                        let from_server = foreign_server.get_thumbnail(change.affected_file)
+                            .chain_err(|| "Failed to get thumbnail")?;
+                        match from_server {
+                            Some(data) =>
+                                ThumbnailStrategy::FromByteSource(ByteSource::Memory(data)),
+                            None => ThumbnailStrategy::None
+                        }
+                    };
 
-                let file_timestamp = file_details.timestamp;
+                    let file_timestamp = file_details.timestamp;
 
-                file_handler::save_file(
-                            file,
-                            thumbnail,
-                            change.affected_file,
-                            &[],
-                            &fdb,
-                            ChangeCreationPolicy::No,
-                            &file_details.extension,
-                            file_timestamp.timestamp() as u64
-                        ).chain_err(|| "Failed to save file")?;
+                    file_handler::save_file(
+                                file,
+                                thumbnail,
+                                change.affected_file,
+                                &[],
+                                &fdb,
+                                ChangeCreationPolicy::No,
+                                &file_details.extension,
+                                file_timestamp.timestamp() as u64
+                            ).chain_err(|| "Failed to save file")?;
+                }
+                else {
+                    println!(
+                        "A file with id {} was already in the database. Ignoring",
+                        change.affected_file
+                    );
+                }
             }
             ChangeType::FileRemoved => {
                 file_handler::remove_file(change.affected_file, &fdb, ChangeCreationPolicy::No)?;
@@ -474,6 +484,40 @@ mod sync_tests {
         let file = fdb.get_file_with_id(1).unwrap();
 
         assert_eq!(file.creation_date, new_timestamp);
+    }
+
+    #[test]
+    fn file_already_in_database_does_not_abort() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.reset();
+
+        let timestamp = naive_datetime_from_date("2017-01-01").unwrap();
+        fdb.add_new_file(1,
+                         "yolo.jpg",
+                         Some("t_yolo.jpg"),
+                         &mapvec!(String::from: "things"),
+                         timestamp.timestamp() as u64,
+                         create_change("2017-02-02").unwrap()
+                    );
+
+
+        let changes = vec!(
+                Change::new(
+                    timestamp,
+                    1,
+                    ChangeType::FileAdded
+                ),
+            );
+
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+        assert_matches!(apply_changes(
+            &fdb,
+            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &changes,
+            &vec!(),
+            &(0, tx)
+        ), Ok(_));
     }
 
     #[test]
