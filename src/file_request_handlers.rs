@@ -29,7 +29,7 @@ use changelog::ChangeCreationPolicy;
 
 use file_list_response;
 
-use error::{Result, ErrorKind, Error};
+use error::{Result, ErrorKind, Error, ResultExt};
 
 enum FileAction {
     GetData,
@@ -63,6 +63,7 @@ struct FileData {
     file_path: String,
     thumbnail_path: String,
     tags: Vec<String>,
+    creation_date: NaiveDateTime,
 }
 
 impl FileData {
@@ -71,15 +72,18 @@ impl FileData {
             file_path: source.filename,
             thumbnail_path: source.thumbnail_path.unwrap_or_else(|| String::from("")),
             tags: source.tags,
+            creation_date: source.creation_date,
         }
     }
 
-    fn from_path(source: PathBuf) -> FileData {
-        FileData {
+    fn from_path(source: PathBuf) -> Result<FileData> {
+        Ok(FileData {
             file_path: String::from(source.to_string_lossy()),
             thumbnail_path: String::from(source.to_string_lossy()),
             tags: vec![],
-        }
+            creation_date: get_file_timestamp(&source)
+                .chain_err(|| "Failed to read file timestamp")?
+        })
     }
 }
 
@@ -132,7 +136,7 @@ fn file_request_handler(request: &mut Request, action: &FileAction) -> IronResul
 
     match *action {
         FileAction::GetData => {
-            let file_data = file_data_from_file_location(&file_location);
+            let file_data = file_data_from_file_location(&file_location)?;
             Ok(Response::with(
                 (status::Ok, serde_json::to_string(&file_data).unwrap()),
             ))
@@ -330,12 +334,12 @@ fn update_stored_file_tags(
 /**
   Returns a `FileData` struct for the specified file location
 */
-fn file_data_from_file_location(file: &FileLocation) -> FileData {
+fn file_data_from_file_location(file: &FileLocation) -> Result<FileData> {
     // Lock the file list and try to fetch the file
-    match *file {
-        FileLocation::Unsaved(ref path) => FileData::from_path(path.clone()),
+    Ok(match *file {
+        FileLocation::Unsaved(ref path) => FileData::from_path(path.clone())?,
         FileLocation::Database(ref db_entry) => FileData::from_database(db_entry.clone()),
-    }
+    })
 }
 
 /**
