@@ -210,8 +210,17 @@ port
 The list of changes that should be applied
 
 *Returns*
-An empty string
+A job id: `usize` which can be used to check the status of the sync
 
+## /sync/progress
+
+Get the current status of a sync job as a `sync_progress::SyncStatus` struct
+
+*Params*
+ - `job_id` The id of the sync job to report the status of
+
+*Returns*
+A `sync_progress::SyncStatus` struct
 
 # /subdirectories
 Replies with a list of subdirectories of `$FILE_READ_PATH`

@@ -106,11 +106,26 @@ pub fn sync_with_foreign(
 
     progress_tx.send((*job_id, sp::SyncUpdate::AddingSyncpoint))
             .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
-;
+
+    // Wait for the foreign server to finnish its sync
+    progress_tx.send((*job_id, sp::SyncUpdate::WaitingForForeign))
+            .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
+
+    loop {
+        let status = foreign_server.get_sync_status(foreign_job_id)?;
+        if let sp::SyncUpdate::Done = status.last_update {
+            break;
+        }
+    }
+
+    progress_tx.send((*job_id, sp::SyncUpdate::AddingSyncpoint))
+            .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
+
     fdb.add_syncpoint(&new_syncpoint)?;
 
     progress_tx.send((*job_id, sp::SyncUpdate::Done))
         .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
+
     Ok(())
 }
 
@@ -254,6 +269,8 @@ mod sync_tests {
 
     use std::path::PathBuf;
 
+    use sync_progress::{SyncStatus, SyncUpdate};
+
     use foreign_server::{FileDetails};
 
     use chrono;
@@ -315,6 +332,9 @@ mod sync_tests {
         }
         fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>> {
             Ok(self.file_data[&id].2.clone())
+        }
+        fn get_sync_status(&self, _job_id: usize) -> Result<SyncStatus> {
+            Ok(SyncStatus{last_update: SyncUpdate::Done, foreign_job_id: None})
         }
     }
 
@@ -691,5 +711,75 @@ mod sync_tests {
 
         let foreign_syncpoints = foreign_server.get_syncpoints();
         assert_eq!(foreign_syncpoints.expect("Failed to get syncpoints from foreign").len(), 1);
+    }
+
+    struct TriggeredForeignServer {
+        file_data: HashMap<i32, (FileDetails, Vec<u8>, Option<Vec<u8>>)>,
+        syncpoints: Vec<SyncPoint>,
+        changes: Vec<Change>,
+        is_blocked: bool
+    }
+
+    impl TriggeredForeignServer {
+        pub fn new(
+            files: Vec<(i32, (FileDetails, Vec<u8>, Option<Vec<u8>>))>,
+            syncpoints: Vec<SyncPoint>,
+            changes: Vec<Change>
+        ) -> Self {
+            let mut file_data = HashMap::new();
+            for (id, details) in files {
+                file_data.insert(id, details);
+            }
+            Self {
+                file_data,
+                syncpoints,
+                changes,
+                is_blocked: true
+            }
+        }
+
+        pub fn set_blocked(&mut self, is_blocked: bool) {
+            self.is_blocked = is_blocked;
+        }
+    }
+
+    impl ForeignServer for TriggeredForeignServer {
+        fn get_syncpoints(&self) -> Result<Vec<SyncPoint>>{
+            Ok(self.syncpoints.clone())
+        }
+        fn get_changes(&self, starting_syncpoint: &Option<SyncPoint>) -> Result<Vec<Change>> {
+            match *starting_syncpoint {
+                Some(SyncPoint{last_change}) => {
+                    Ok(self.changes.iter()
+                        .filter(|change| change.timestamp >= last_change)
+                        .map(|change| change.clone())
+                        .collect()
+                    )
+                },
+                None => Ok(self.changes.iter().map(|change| change.clone()).collect())
+            }
+        }
+        fn get_file_details(&self, id: i32) -> Result<FileDetails> {
+            Ok(self.file_data[&id].0.clone())
+        }
+
+        fn send_changes(&mut self, data: &ChangeData, _port: u16) -> Result<usize> {
+            self.syncpoints.push(data.syncpoint.clone());
+            Ok(0)
+        }
+        fn get_file(&self, id: i32) -> Result<Vec<u8>> {
+            Ok(self.file_data[&id].1.clone())
+        }
+        fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>> {
+            Ok(self.file_data[&id].2.clone())
+        }
+        fn get_sync_status(&self, _job_id: usize) -> Result<SyncStatus> {
+            if self.is_blocked == true {
+                Ok(SyncStatus{last_update: SyncUpdate::StartingToApplyChange(0), foreign_job_id: None})
+            }
+            else {
+                Ok(SyncStatus{last_update: SyncUpdate::Done, foreign_job_id: None})
+            }
+        }
     }
 }

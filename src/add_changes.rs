@@ -73,7 +73,7 @@ mod add_change_tests {
             )
         );
 
-        let changes =fdb.get_all_changes().expect("Failed to get all changes");
+        let changes = fdb.get_all_changes().expect("Failed to get all changes");
 
         assert_eq!(changes, expected_changes);
     });

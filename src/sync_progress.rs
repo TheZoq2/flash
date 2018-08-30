@@ -24,6 +24,8 @@ pub enum SyncUpdate {
     RemovingFile(usize),
     /// The new syncpoint is being added to the db
     AddingSyncpoint,
+    /// Local sync is done, waiting for foreign
+    WaitingForForeign,
     /// Changes have been applied
     Done,
     /// An error occured while performing sync
