@@ -673,7 +673,7 @@ mod file_request_tests {
     }
 
     db_test!(files_get_correct_timestamps(fdb) {
-        let old_path = PathBuf::from("test/media/10x10.png");
+        let old_path = PathBuf::from("test/media/10x10_with_timestamp.png");
 
         let change_timestamp = NaiveDate::from_ymd(2017,1,1).and_hms(0,0,0);
 
