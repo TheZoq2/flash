@@ -20,6 +20,8 @@ use tokio_core::reactor::Core;
 
 use std::str::from_utf8;
 
+use sync_progress::SyncStatus;
+
 /**
   Struct of information about a file which can be requested from a `ForeginServer`
 */
@@ -65,6 +67,7 @@ pub trait ForeignServer {
     fn send_changes(&mut self, change: &ChangeData, own_port: u16) -> Result<usize>;
     fn get_file(&self, id: i32) -> Result<Vec<u8>>;
     fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>>;
+    fn get_sync_status(&self, job_id: usize) -> Result<SyncStatus>;
 }
 
 
@@ -225,6 +228,14 @@ impl ForeignServer for HttpForeignServer {
             _ => Ok(Some(content))
         }
     }
+
+    fn get_sync_status(&self, job_id: usize) -> Result<SyncStatus> {
+        let path = vec!(String::from("sync"), String::from("progress"));
+        let query = vec!((String::from("job_id"), format!("{}", job_id)));
+        let url = construct_url(FOREIGN_SCHEME, &self.url, &path, &query);
+
+        send_request(&url, "")
+    }
 }
 
 
@@ -377,7 +388,7 @@ mod sync_integration {
         let mut iterations = 0;
         // We have to wait for the servers to add the new job to the
         // list of jobs. Perhaps this should be done in a more robust way
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(1000));
         loop {
             let (local_update, foreign_update) = check_job_status(url1, job_id, url2);
             if let (&SyncUpdate::Done, &Some(SyncUpdate::Done))
