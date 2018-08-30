@@ -206,7 +206,7 @@ fn handle_change_application(
         });
 
         if let Err(e) = result {
-            progress_tx.send((job_id, sp::SyncUpdate::Error(format!("{}", e))))
+            progress_tx.send((job_id, sp::SyncUpdate::Error(format!("{:?}", e))))
                 .expect("Failed to send error from handle_change_application worker 
                         to sync progress manager. Did it crash?");
         }
