@@ -107,13 +107,13 @@ fn main() {
 
     //Loading or creating the database
 
-    println!("creating changes for existing files");
-    let current_time = chrono::NaiveDateTime::from_timestamp(chrono::offset::Utc::now().timestamp(), 0);
-    add_changes::create_changes_for_files(&FileDatabase::new(
-            &settings.database_url,
-            settings.get_file_storage_path()
-        ).unwrap(), &current_time).expect("Failed to create changes from files");
-    println!("Done");
+    // println!("creating changes for existing files");
+    // let current_time = chrono::NaiveDateTime::from_timestamp(chrono::offset::Utc::now().timestamp(), 0);
+    // add_changes::create_changes_for_files(&FileDatabase::new(
+    //         &settings.database_url,
+    //         settings.get_file_storage_path()
+    //     ).unwrap(), &current_time).expect("Failed to create changes from files");
+    // println!("Done");
 
     //fix_timestamps::fix_timestamps(&db);
 
