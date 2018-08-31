@@ -212,7 +212,11 @@ fn apply_change(
                 );
                 let thumbnail = {
                     let from_server = foreign_server.get_thumbnail(change.affected_file)
-                        .chain_err(|| "Failed to get thumbnail")?;
+                        .unwrap_or_else(|e| {
+                            println!("Failed to get thumbnail, defaulting to None. Error: {:?}", e);
+                            None
+                        });
+
                     match from_server {
                         Some(data) =>
                             ThumbnailStrategy::FromByteSource(ByteSource::Memory(data)),
@@ -728,16 +732,15 @@ mod sync_tests {
         assert_eq!(foreign_syncpoints.expect("Failed to get syncpoints from foreign").len(), 1);
     }
 
-    struct TriggeredForeignServer {
-        file_data: HashMap<i32, (FileDetails, Vec<u8>, Option<Vec<u8>>)>,
+    struct ForeignServerWithThumbnailError {
+        file_data: HashMap<i32, (FileDetails, Vec<u8>)>,
         syncpoints: Vec<SyncPoint>,
         changes: Vec<Change>,
-        is_blocked: bool
     }
 
-    impl TriggeredForeignServer {
+    impl ForeignServerWithThumbnailError {
         pub fn new(
-            files: Vec<(i32, (FileDetails, Vec<u8>, Option<Vec<u8>>))>,
+            files: Vec<(i32, (FileDetails, Vec<u8>))>,
             syncpoints: Vec<SyncPoint>,
             changes: Vec<Change>
         ) -> Self {
@@ -749,16 +752,11 @@ mod sync_tests {
                 file_data,
                 syncpoints,
                 changes,
-                is_blocked: true
             }
-        }
-
-        pub fn set_blocked(&mut self, is_blocked: bool) {
-            self.is_blocked = is_blocked;
         }
     }
 
-    impl ForeignServer for TriggeredForeignServer {
+    impl ForeignServer for ForeignServerWithThumbnailError {
         fn get_syncpoints(&self) -> Result<Vec<SyncPoint>>{
             Ok(self.syncpoints.clone())
         }
@@ -786,15 +784,46 @@ mod sync_tests {
             Ok(self.file_data[&id].1.clone())
         }
         fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>> {
-            Ok(self.file_data[&id].2.clone())
+            Err(ErrorKind::Dummy.into())
         }
         fn get_sync_status(&self, _job_id: usize) -> Result<SyncStatus> {
-            if self.is_blocked == true {
-                Ok(SyncStatus{last_update: SyncUpdate::StartingToApplyChange(0), foreign_job_id: None})
-            }
-            else {
-                Ok(SyncStatus{last_update: SyncUpdate::Done, foreign_job_id: None})
-            }
+            Ok(SyncStatus{last_update: SyncUpdate::Done, foreign_job_id: None})
         }
+    }
+
+    #[test]
+    fn applying_changes_with_thumbnail_error_does_not_crash() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.reset();
+
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+
+        let remote_changes = vec!(
+                Change::new(
+                    NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0),
+                    2,
+                    ChangeType::FileAdded
+                ),
+            );
+
+        let foreign_server = ForeignServerWithThumbnailError::new(
+                vec!(
+                    (2, (FileDetails {
+                        extension: "jpg".into(),
+                        timestamp: NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+                    }, vec!(0))),
+                ),
+                vec!(),
+                remote_changes
+            );
+
+        apply_changes(
+            &fdb,
+            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &vec!(),
+            &vec!(),
+            &(0, tx)
+        ).expect("Expected sync to work despite missing thumbnail");
     }
 }

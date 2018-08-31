@@ -22,6 +22,11 @@ error_chain! {
     }
 
     errors {
+        #[cfg(test)]
+        Dummy {
+            description("Dummy error")
+            display("Dummy error")
+        }
         PersistentFileListLoadError {
             description("persistent file list read failed")
             display("Failed to read persistent file list")
