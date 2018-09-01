@@ -68,7 +68,7 @@ mod foreign_server;
 mod misc_handlers;
 
 mod fix_timestamps;
-mod add_changes;
+mod db_fixes;
 
 #[macro_use]
 extern crate serde_derive;
@@ -107,15 +107,21 @@ fn main() {
 
     //Loading or creating the database
 
-    // println!("creating changes for existing files");
-    // let current_time = chrono::NaiveDateTime::from_timestamp(chrono::offset::Utc::now().timestamp(), 0);
-    // add_changes::create_changes_for_files(&FileDatabase::new(
-    //         &settings.database_url,
-    //         settings.get_file_storage_path()
-    //     ).unwrap(), &current_time).expect("Failed to create changes from files");
-    // println!("Done");
+    // {
+    //     let fdb = FileDatabase::new(
+    //             &settings.database_url,
+    //             settings.get_file_storage_path()
+    //         ).unwrap();
+    //     println!("Deduplicating tags");
+    //     db_fixes::deduplicate_tags(&fdb).expect("Failed to deduplicate tags");
 
-    //fix_timestamps::fix_timestamps(&db);
+    //     println!("creating changes for existing files");
+    //     let current_time = chrono::NaiveDateTime::from_timestamp(chrono::offset::Utc::now().timestamp(), 0);
+    //     db_fixes::create_changes_for_files(&fdb, &current_time).expect("Failed to create changes from files");
+    //     println!("Done");
+    // }
+
+    // fix_timestamps::fix_timestamps(&db);
 
     // Read the persistent file list if it exists
     let file_list_save_path = settings
