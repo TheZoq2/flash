@@ -111,9 +111,9 @@ mod add_change_tests {
 
         // Add changes
         let timestamp = NaiveDate::from_ymd(1970, 1, 1).and_hms(0, 0, 0);
-        fdb.add_change(&Change::new(timestamp, 1, ChangeType::FileAdded));
-        fdb.add_change(&Change::new(timestamp, 1, ChangeType::Update(UpdateType::TagAdded("image1".to_owned()))));
-        fdb.add_change(&Change::new(timestamp, 1, ChangeType::Update(UpdateType::TagAdded("shared".to_owned()))));
+        fdb.add_change(&Change::new(timestamp, 1, ChangeType::FileAdded)).unwrap();
+        fdb.add_change(&Change::new(timestamp, 1, ChangeType::Update(UpdateType::TagAdded("image1".to_owned())))).unwrap();
+        fdb.add_change(&Change::new(timestamp, 1, ChangeType::Update(UpdateType::TagAdded("shared".to_owned())))).unwrap();
 
         assert_eq!(fdb.get_all_changes().unwrap().len(), 3);
 
