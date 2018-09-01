@@ -89,7 +89,6 @@ pub fn sync_with_foreign(
     let foreign_job_id = foreign_server.send_changes(
         &ChangeData{
             changes: local_changes,
-            syncpoint: new_syncpoint.clone(),
             removed_files: removed_files.clone()
         },
         own_port
@@ -117,6 +116,9 @@ pub fn sync_with_foreign(
             break;
         }
     }
+
+    foreign_server.add_syncpoint(&new_syncpoint)
+        .chain_err(|| "Failed to apply syncpoint on foreign")?;
 
     progress_tx.send((*job_id, sp::SyncUpdate::AddingSyncpoint))
             .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
@@ -294,13 +296,17 @@ mod sync_tests {
 
     use chrono;
 
+    use std::sync::Mutex;
+
     fn create_change(date_string: &str) -> chrono::format::ParseResult<ChangeCreationPolicy> {
         Ok(ChangeCreationPolicy::Yes(naive_datetime_from_date(date_string)?))
     }
 
     struct MockForeignServer {
         file_data: HashMap<i32, (FileDetails, Vec<u8>, Option<Vec<u8>>)>,
-        syncpoints: Vec<SyncPoint>,
+        // This is a mutex to allow modification without the compiler getting
+        // pissed because add_syncpoint isn't mut
+        syncpoints: Mutex<Vec<SyncPoint>>,
         changes: Vec<Change>
     }
 
@@ -316,7 +322,7 @@ mod sync_tests {
             }
             Self {
                 file_data,
-                syncpoints,
+                syncpoints: Mutex::new(syncpoints),
                 changes
             }
         }
@@ -324,7 +330,7 @@ mod sync_tests {
 
     impl ForeignServer for MockForeignServer {
         fn get_syncpoints(&self) -> Result<Vec<SyncPoint>>{
-            Ok(self.syncpoints.clone())
+            Ok(self.syncpoints.lock().unwrap().clone())
         }
         fn get_changes(&self, starting_syncpoint: &Option<SyncPoint>) -> Result<Vec<Change>> {
             match *starting_syncpoint {
@@ -342,8 +348,7 @@ mod sync_tests {
             Ok(self.file_data[&id].0.clone())
         }
 
-        fn send_changes(&mut self, data: &ChangeData, _port: u16) -> Result<usize> {
-            self.syncpoints.push(data.syncpoint.clone());
+        fn send_changes(&mut self, _data: &ChangeData, _port: u16) -> Result<usize> {
             Ok(0)
         }
         fn get_file(&self, id: i32) -> Result<Vec<u8>> {
@@ -354,6 +359,10 @@ mod sync_tests {
         }
         fn get_sync_status(&self, _job_id: usize) -> Result<SyncStatus> {
             Ok(SyncStatus{last_update: SyncUpdate::Done, foreign_job_id: None})
+        }
+        fn add_syncpoint(&self, syncpoint: &SyncPoint) -> Result<()> {
+            self.syncpoints.lock().unwrap().push(syncpoint.clone());
+            Ok(())
         }
     }
 
@@ -776,18 +785,20 @@ mod sync_tests {
             Ok(self.file_data[&id].0.clone())
         }
 
-        fn send_changes(&mut self, data: &ChangeData, _port: u16) -> Result<usize> {
-            self.syncpoints.push(data.syncpoint.clone());
+        fn send_changes(&mut self, _data: &ChangeData, _port: u16) -> Result<usize> {
             Ok(0)
         }
         fn get_file(&self, id: i32) -> Result<Vec<u8>> {
             Ok(self.file_data[&id].1.clone())
         }
-        fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>> {
+        fn get_thumbnail(&self, _id: i32) -> Result<Option<Vec<u8>>> {
             Err(ErrorKind::Dummy.into())
         }
         fn get_sync_status(&self, _job_id: usize) -> Result<SyncStatus> {
             Ok(SyncStatus{last_update: SyncUpdate::Done, foreign_job_id: None})
+        }
+        fn add_syncpoint(&self, _syncpoint: &SyncPoint) -> Result<()> {
+            Ok(())
         }
     }
 
@@ -820,7 +831,7 @@ mod sync_tests {
 
         apply_changes(
             &fdb,
-            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &foreign_server,
             &vec!(),
             &vec!(),
             &(0, tx)

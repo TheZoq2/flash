@@ -4,7 +4,7 @@ use persistent;
 use file_database::FileDatabase;
 
 use changelog::{Change, SyncPoint};
-use error::{Result};
+use error::{Result, ResultExt};
 use request_helpers::{
     get_get_i64,
     to_json_with_result,
@@ -90,13 +90,26 @@ pub fn thumbnail_request_handler(request: &mut Request) -> IronResult<Response> 
 }
 
 pub fn file_detail_handler(request: &mut Request) -> IronResult<Response> {
-
     let file_id = get_get_i64(request, "file_id")?;
 
     let fdb = setup_db_connection(request)?;
     let file_details = handle_file_detail_request(&fdb, file_id as i32)?;
 
     Ok(Response::with((status::Ok, to_json_with_result(&file_details)?)))
+}
+
+pub fn syncpoint_add_handler(request: &mut Request) -> IronResult<Response> {
+    let syncpoint_str = get_get_variable(request, "syncpoint")?;
+
+    let syncpoint = from_json_with_result::<SyncPoint>(&syncpoint_str)
+        .chain_err(|| {
+            format!("Failed to decode syncpoint from string: {}", syncpoint_str)
+        })?;
+
+    let fdb = setup_db_connection(request)?;
+    fdb.add_syncpoint(&syncpoint)?;
+
+    Ok(Response::with((status::Ok, "Done")))
 }
 
 pub fn change_application_handler(request: &mut Request, progress_tx: &sp::TxType) -> IronResult<Response> {
