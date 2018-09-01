@@ -1,11 +1,16 @@
 #!/bin/bash
 
+echo "Updating backend"
+git checkout master
 git pull
-git submodule update --recursive
+cargo build --release
 
-cd frontend
-elm-install
+
+echo "Updating frontend"
+cd frontend || exit
+git checkout master
+git pull
+elm-package install
 make
 
-cd ..
-cargo build --release
+
