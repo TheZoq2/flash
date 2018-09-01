@@ -10,7 +10,7 @@ echo "Updating frontend"
 cd frontend || exit
 git checkout master
 git pull
-elm-package install
+elm-install
 make
 
 
