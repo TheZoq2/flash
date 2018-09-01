@@ -264,7 +264,11 @@ fn apply_file_update(fdb: &FileDatabase, affected_file: i32, file_update: &Updat
     };
 
     match *file_update {
-        UpdateType::TagAdded(ref tag) => file.tags.push(tag.clone()),
+        UpdateType::TagAdded(ref tag) => {
+            if !file.tags.contains(&tag) {
+                file.tags.push(tag.clone())
+            }
+        },
         UpdateType::TagRemoved(ref tag) => {
             file.tags = file.tags.into_iter().filter(|t| t != tag).collect()
         }
@@ -566,6 +570,47 @@ mod sync_tests {
             &vec!(),
             &(0, tx)
         ), Ok(_));
+    }
+
+    #[test]
+    fn duplicate_tag_changes_do_not_duplicate_tag() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.reset();
+
+        fdb.add_new_file(
+            1,
+            "yolo.jpg",
+            None,
+            &vec!("yolo".to_string(), "swag".to_string()),
+            0,
+            create_change("2017-02-02").unwrap()
+        );
+
+        let changes = vec!(
+                Change::new(
+                    naive_datetime_from_date("2017-01-01").unwrap(),
+                    1,
+                    ChangeType::Update(UpdateType::TagAdded("yolo".into()))
+                ),
+                Change::new(
+                    naive_datetime_from_date("2017-01-01").unwrap(),
+                    1,
+                    ChangeType::Update(UpdateType::TagAdded("yolo".into()))
+                ),
+            );
+
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+        apply_changes(
+            &fdb,
+            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &changes,
+            &vec!(),
+            &(0, tx)
+        ).unwrap();
+
+        let file = fdb.get_file_with_id(1).unwrap();
+        assert_eq!(file.tags, vec!("yolo".to_string(), "swag".to_string()));
     }
 
     #[test]
