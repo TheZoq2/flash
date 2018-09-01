@@ -17,6 +17,8 @@ use sync_progress as sp;
 
 use chrono::prelude::*;
 
+use std::thread;
+
 
 
 pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
@@ -110,11 +112,27 @@ pub fn sync_with_foreign(
     progress_tx.send((*job_id, sp::SyncUpdate::WaitingForForeign))
             .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
+    // We will retry this a couple of times because it is possible
+    // for things to happen before the other side adds the job to its
+    // list
+    let mut error_amount = 0;
     loop {
-        let status = foreign_server.get_sync_status(foreign_job_id)?;
-        if let sp::SyncUpdate::Done = status.last_update {
-            break;
+        let status = foreign_server.get_sync_status(foreign_job_id);
+        match status {
+            Ok(status) => if let sp::SyncUpdate::Done = status.last_update {
+                break;
+            },
+            Err(e) => {
+                if error_amount > 5 {
+                    return Err(e)
+                }
+                else {
+                    error_amount += 1
+                }
+            }
         }
+
+        thread::sleep(::std::time::Duration::from_secs(1));
     }
 
     foreign_server.add_syncpoint(&new_syncpoint)
