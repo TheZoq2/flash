@@ -53,7 +53,6 @@ impl<'a> From<&'a ::file_database::File> for FileDetails {
 #[derive(Serialize, Deserialize)]
 pub struct ChangeData {
     pub changes: Vec<Change>,
-    pub syncpoint: SyncPoint,
     pub removed_files: Vec<i32>
 }
 
@@ -68,6 +67,7 @@ pub trait ForeignServer {
     fn get_file(&self, id: i32) -> Result<Vec<u8>>;
     fn get_thumbnail(&self, id: i32) -> Result<Option<Vec<u8>>>;
     fn get_sync_status(&self, job_id: usize) -> Result<SyncStatus>;
+    fn add_syncpoint(&self, syncpoint: &SyncPoint) -> Result<()>;
 }
 
 
@@ -236,6 +236,24 @@ impl ForeignServer for HttpForeignServer {
 
         send_request(&url, "")
     }
+
+    fn add_syncpoint(&self, syncpoint: &SyncPoint) -> Result<()>{
+        let path = vec!(
+            String::from("sync"),
+            String::from("syncpoints"),
+            String::from("add")
+        );
+        let encoded = serde_json::to_string(syncpoint)
+            .chain_err(|| "Failed to encode syncpoint")?;
+
+        let query = vec!((String::from("syncpoint"), encoded));
+        let url = construct_url(FOREIGN_SCHEME, &self.url, &path, &query);
+
+        send_request_for_bytes(&url, "")
+            .chain_err(|| "Foreign failed to apply syncpoint")?;
+
+        Ok(())
+    }
 }
 
 
@@ -395,8 +413,14 @@ mod sync_integration {
                 = (&local_update, &foreign_update) {
                 break;
             }
+            else if let &SyncUpdate::Error(ref e) = &local_update{
+                assert!(false, "Local sync update error: {}", e);
+            }
+            else if let &Some(SyncUpdate::Error(ref e)) = &foreign_update {
+                assert!(false, "Foreign sync update error: {}", e)
+            }
 
-            if iterations > 10 {
+            if iterations > 20 {
                 assert!(
                     false,
                     "Still waiting on sync jobs ({:?} {:?})",
@@ -411,6 +435,10 @@ mod sync_integration {
         // Ensure that all files have been synced
         assert_eq!(file_list_request(url1, "of+from2").length, 2);
         assert_eq!(file_list_request(url2, "of+from1").length, 2);
+
+        // Ensure that syncpoints are created on both servers
+        assert_eq!(get_syncpoints(url1).expect("Failed to get syncpoints").len(), 1);
+        assert_eq!(get_syncpoints(url2).expect("Failed to get syncpoints").len(), 1);
     }
 
     fn save_file(url: &str, list_id: usize, file_index: u32, tags: Vec<String>) {
@@ -469,6 +497,17 @@ mod sync_integration {
         println!("{}", request_url);
 
         send_request::<usize>(&request_url, "").expect("Sync failed")
+    }
+
+    fn get_syncpoints(url: &str) -> Result<Vec<SyncPoint>> {
+        let request_url = construct_url(
+            "http",
+            url,
+            &vec!("sync".into(), "syncpoints".into()),
+            &vec!()
+        );
+
+        send_request(&request_url, "")
     }
 
     fn check_job_status(initiating_url: &str, initiating_job_id: usize, foreign_url: &str)

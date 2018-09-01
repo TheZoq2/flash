@@ -149,6 +149,7 @@ fn main() {
     mount.mount("/search", search_handler::handle_file_search);
     mount.mount("sync/sync", sync_handler);
     mount.mount("sync/syncpoints", sync_handlers::syncpoint_request_handler);
+    mount.mount("sync/syncpoints/add", sync_handlers::syncpoint_add_handler);
     mount.mount("sync/file_details", sync_handlers::file_detail_handler);
     mount.mount("sync/file", sync_handlers::file_request_handler);
     mount.mount("sync/thumbnail", sync_handlers::thumbnail_request_handler);
