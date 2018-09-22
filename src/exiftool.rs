@@ -35,7 +35,7 @@ pub struct ExifData {
     tags: HashMap<String, String>,
 }
 
-const DATE_FORMAT: &'static str = "%Y:%m:%d %H:%M:%S.%e";
+const DATE_FORMAT: &str = "%Y:%m:%d %H:%M:%S.%e";
 
 impl ExifData {
     pub fn from_exiftool_string(data: &str) -> Result<ExifData> {

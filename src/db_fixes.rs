@@ -71,7 +71,7 @@ mod add_change_tests {
             None,
             &mapvec!(String::from: "image1", "shared"),
             100,
-            ChangeCreationPolicy::No
+            &ChangeCreationPolicy::No
         );
         fdb.add_new_file(
             2,
@@ -79,7 +79,7 @@ mod add_change_tests {
             None,
             &mapvec!(String::from: "image2", "shared"),
             150,
-            ChangeCreationPolicy::No
+            &ChangeCreationPolicy::No
         );
 
         // Ensure that no changes were created
@@ -115,7 +115,7 @@ mod add_change_tests {
             None,
             &mapvec!(String::from: "image1", "shared"),
             100,
-            ChangeCreationPolicy::No
+            &ChangeCreationPolicy::No
         );
         fdb.add_new_file(
             2,
@@ -123,7 +123,7 @@ mod add_change_tests {
             None,
             &mapvec!(String::from: "image2", "shared"),
             150,
-            ChangeCreationPolicy::No
+            &ChangeCreationPolicy::No
         );
 
         // Add changes
@@ -161,7 +161,7 @@ mod add_change_tests {
             None,
             &mapvec!(String::from: "image1", "shared", "image1", "image1"),
             100,
-            ChangeCreationPolicy::No
+            &ChangeCreationPolicy::No
         );
 
         deduplicate_tags(fdb).unwrap();

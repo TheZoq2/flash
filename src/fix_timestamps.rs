@@ -23,7 +23,7 @@ pub fn fix_timestamps(fdb: &FileDatabase) {
             Ok(Some(actual_creation_date)) => fdb.set_file_timestamp(
                 &file,
                 actual_creation_date,
-                change_policy.clone()
+                &change_policy
             ).unwrap(),
             Ok(None) => {},
             Err(e) => {
@@ -57,9 +57,9 @@ mod timestamp_fix_tests {
         fs::copy("test/media/512x512.png", fdb.get_file_save_path().join("512x512.png")).unwrap();
         fs::copy("test/media/IMG_20171024_180300.jpg", fdb.get_file_save_path().join("IMG_20171024_180300.jpg")).unwrap();
 
-        let first_file_id = fdb.add_new_file(0, "DSC_0001.JPG", Some("yolo"), &vec!(), 500, ChangeCreationPolicy::No).id;
-        let second_file_id = fdb.add_new_file(1, "512x512.png", Some("yolo"), &vec!(), 500, ChangeCreationPolicy::No).id;
-        let third_file_id = fdb.add_new_file(2, "IMG_20171024_180300.jpg", Some("yolo"), &vec!(), 500, ChangeCreationPolicy::No).id;
+        let first_file_id = fdb.add_new_file(0, "DSC_0001.JPG", Some("yolo"), &vec!(), 500, &ChangeCreationPolicy::No).id;
+        let second_file_id = fdb.add_new_file(1, "512x512.png", Some("yolo"), &vec!(), 500, &ChangeCreationPolicy::No).id;
+        let third_file_id = fdb.add_new_file(2, "IMG_20171024_180300.jpg", Some("yolo"), &vec!(), 500, &ChangeCreationPolicy::No).id;
 
         fix_timestamps(fdb);
 

@@ -102,7 +102,7 @@ pub fn sync_with_foreign(
         .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
     // Apply changes locally
-    apply_changes(fdb.clone(), foreign_server, &remote_changes, &removed_files, progress_reporter)
+    apply_changes(fdb, foreign_server, &remote_changes, &removed_files, progress_reporter)
         .chain_err(|| "Failed to apply changes")?;
 
     progress_tx.send((*job_id, sp::SyncUpdate::AddingSyncpoint))
@@ -203,7 +203,7 @@ pub fn apply_changes(
             .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
         if fdb.get_file_with_id(*id) != None {
-            remove_file(*id, &fdb, ChangeCreationPolicy::No)?;
+            remove_file(*id, &fdb, &ChangeCreationPolicy::No)?;
         }
     }
 
@@ -252,7 +252,7 @@ fn apply_change(
                             change.affected_file,
                             &[],
                             &fdb,
-                            ChangeCreationPolicy::No,
+                            &ChangeCreationPolicy::No,
                             &file_details.extension,
                             file_timestamp.timestamp() as u64
                         ).chain_err(|| "Failed to save file")?;
@@ -265,7 +265,7 @@ fn apply_change(
             }
         }
         ChangeType::FileRemoved => {
-            file_handler::remove_file(change.affected_file, &fdb, ChangeCreationPolicy::No)?;
+            file_handler::remove_file(change.affected_file, &fdb, &ChangeCreationPolicy::No)?;
         }
     }
 
@@ -394,8 +394,8 @@ mod sync_tests {
         let fdb = fdb.lock().unwrap();
         fdb.reset();
 
-        fdb.add_new_file(1, "yolo.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
-        fdb.add_new_file(2, "swag.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
+        fdb.add_new_file(1, "yolo.jpg", None, &vec!(), 0, &create_change("2017-02-02").unwrap());
+        fdb.add_new_file(2, "swag.jpg", None, &vec!(), 0, &create_change("2017-02-02").unwrap());
 
         let changes = vec!(
                 Change::new(
@@ -429,8 +429,8 @@ mod sync_tests {
         let fdb = fdb.lock().unwrap();
         fdb.reset();
 
-        fdb.add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
-        fdb.add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
+        fdb.add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0, &create_change("2017-02-02").unwrap());
+        fdb.add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0, &create_change("2017-02-02").unwrap());
 
         let changes = vec!(
                 Change::new(
@@ -470,7 +470,7 @@ mod sync_tests {
             None,
             &mapvec!(String::from: "things"),
             0,
-            create_change("2017-02-02").unwrap()
+            &create_change("2017-02-02").unwrap()
         );
         fdb.add_new_file(
             2,
@@ -478,7 +478,7 @@ mod sync_tests {
             None,
             &vec!(),
             0,
-            create_change("2017-02-02").unwrap()
+            &create_change("2017-02-02").unwrap()
         );
 
         let changes = vec!(
@@ -530,7 +530,7 @@ mod sync_tests {
                          Some("t_yolo.jpg"),
                          &mapvec!(String::from: "things"),
                          original_timestamp.timestamp() as u64,
-                         create_change("2017-02-02").unwrap()
+                         &create_change("2017-02-02").unwrap()
                     );
 
 
@@ -568,7 +568,7 @@ mod sync_tests {
                          Some("t_yolo.jpg"),
                          &mapvec!(String::from: "things"),
                          timestamp.timestamp() as u64,
-                         create_change("2017-02-02").unwrap()
+                         &create_change("2017-02-02").unwrap()
                     );
 
 
@@ -602,7 +602,7 @@ mod sync_tests {
             None,
             &vec!("yolo".to_string(), "swag".to_string()),
             0,
-            create_change("2017-02-02").unwrap()
+            &create_change("2017-02-02").unwrap()
         );
 
         let changes = vec!(
@@ -647,7 +647,7 @@ mod sync_tests {
             1,
             &mapvec!(String::from: "things"),
             &fdb,
-            create_change("2017-02-02").unwrap(),
+            &create_change("2017-02-02").unwrap(),
             "jpg",
             original_timestamp.timestamp() as u64
         ).expect("Failed to save initial file");

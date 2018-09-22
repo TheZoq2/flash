@@ -54,7 +54,7 @@ impl FileList {
             .collect();
 
         FileList {
-            files: files,
+            files,
             source: FileListSource::Folder(path),
         }
     }
@@ -120,10 +120,10 @@ impl FileListList {
         self.lists.len() - 1
     }
 
-    pub fn get_id_with_source(&self, source: FileListSource) -> Option<usize> {
+    pub fn get_id_with_source(&self, source: &FileListSource) -> Option<usize> {
         //self.lists.iter().fold(None, |acc, elem| { acc || elem.source == source })
         for i in 0..self.lists.len() {
-            if self.lists[i].source == source {
+            if self.lists[i].source == *source {
                 return Some(i);
             }
         }

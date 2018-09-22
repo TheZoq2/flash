@@ -131,7 +131,7 @@ pub fn change_application_handler(request: &mut Request, progress_tx: &sp::TxTyp
         }
     }
 
-    let job_id = handle_change_application(body, (*settings).clone(), foreign_server, progress_tx)?;
+    let job_id = handle_change_application(&body, (*settings).clone(), foreign_server, progress_tx)?;
     Ok(Response::with((status::Ok, to_json_with_result(job_id)?)))
 }
 
@@ -188,12 +188,12 @@ fn handle_file_detail_request(fdb: &FileDatabase, id: i32) -> Result<FileDetails
 
 
 fn handle_change_application(
-    body: String,
+    body: &str,
     settings: Settings,
     foreign: HttpForeignServer,
     progress_tx: &sp::TxType
 ) -> Result<usize> {
-    let change_data = from_json_with_result::<ChangeData>(&body)?;
+    let change_data = from_json_with_result::<ChangeData>(body)?;
 
 
     let job_id = rand::random::<usize>();

@@ -36,7 +36,7 @@ impl<'a> From<&'a ::file_database::File> for FileDetails {
         let extension = ::std::path::PathBuf::from(file.filename.clone())
             .extension()
             .map(|e| e.to_string_lossy().to_string())
-            .unwrap_or("".to_string());
+            .unwrap_or_else(|| "".to_string());
 
         FileDetails {
             extension,
@@ -76,7 +76,7 @@ pub trait ForeignServer {
 //                      Http implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-const FOREIGN_SCHEME: &'static str = "http";
+const FOREIGN_SCHEME: &str = "http";
 
 fn construct_url(scheme: &str, dns: &str, path: &[String], query: &[(String, String)]) -> String {
     let mut result = String::new();
@@ -86,7 +86,7 @@ fn construct_url(scheme: &str, dns: &str, path: &[String], query: &[(String, Str
     result += "/";
 
     let path_str = path.iter()
-        .map(|s| s.clone())
+        .cloned()
         .intersperse("/".to_string())
         .collect::<String>();
 
@@ -105,7 +105,7 @@ fn construct_url(scheme: &str, dns: &str, path: &[String], query: &[(String, Str
 /**
   Sends a request to the foreign server and parses the result as json for `T`
 */
-fn send_request<'a, T: serde::de::DeserializeOwned>(full_url: &str, body: &str) -> Result<T> {
+fn send_request<T: serde::de::DeserializeOwned>(full_url: &str, body: &str) -> Result<T> {
     let bytes = send_request_for_bytes(full_url, body)?;
 
     Ok(serde_json::from_str::<T>(from_utf8(&bytes)?)?)
@@ -114,7 +114,7 @@ fn send_request<'a, T: serde::de::DeserializeOwned>(full_url: &str, body: &str) 
 fn send_request_for_bytes(full_url: &str, body: &str) -> Result<Vec<u8>> {
     // Parse the url into a hyper uri
     let uri = full_url.parse().chain_err(
-        || ErrorKind::ForeignHttpError(full_url.clone().to_string())
+        || ErrorKind::ForeignHttpError(full_url.to_string())
     )?;
 
     // Create a tokio core to exectue the request
@@ -141,7 +141,7 @@ fn send_request_for_bytes(full_url: &str, body: &str) -> Result<Vec<u8>> {
                 }
                 code => {
                     let body = String::from_utf8(body.to_vec())
-                        .unwrap_or("Invalid UTF8".to_string());
+                        .unwrap_or_else(|_| "Invalid UTF8".to_string());
                     Err(ErrorKind::WrongHttpStatusCode(code, body.to_string()).into())
                 }
             }
