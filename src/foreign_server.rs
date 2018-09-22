@@ -215,13 +215,12 @@ impl ForeignServer for HttpForeignServer {
             String::from("syncpoints"),
             String::from("add")
         );
+
+        let url = construct_url(FOREIGN_SCHEME, &self.url, &path, &vec!());
+
         let encoded = serde_json::to_string(syncpoint)
             .chain_err(|| "Failed to encode syncpoint")?;
-
-        let query = vec!((String::from("syncpoint"), encoded));
-        let url = construct_url(FOREIGN_SCHEME, &self.url, &path, &query);
-
-        send_request_for_bytes(&url, "")
+        send_request_for_bytes(&url, &encoded)
             .chain_err(|| "Foreign failed to apply syncpoint")?;
 
         Ok(())
