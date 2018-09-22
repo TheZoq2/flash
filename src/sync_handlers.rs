@@ -99,7 +99,17 @@ pub fn file_detail_handler(request: &mut Request) -> IronResult<Response> {
 }
 
 pub fn syncpoint_add_handler(request: &mut Request) -> IronResult<Response> {
-    let syncpoint_str = get_get_variable(request, "syncpoint")?;
+    let mut syncpoint_str  = String::new();
+    // TODO Unduplicate this. Same code in change_application_handler
+    match request.body.read_to_string(&mut syncpoint_str) {
+        Ok(_) => {},
+        Err(e) => {
+            return Ok(Response::with((
+                status::PreconditionFailed,
+                format!("Failed to read body {:?}", e)
+            )));
+        }
+    }
 
     let syncpoint = from_json_with_result::<SyncPoint>(&syncpoint_str)
         .chain_err(|| {

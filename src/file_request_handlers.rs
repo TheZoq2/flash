@@ -719,12 +719,9 @@ mod file_request_tests {
 
         println!("{:#?}", saved_entry.id);
         //Make sure that the file was actually added to the database
-        assert!(
-                fdb
-                    .search_files(query)
-                    .iter()
-                    .fold(false, |acc, file| { acc || file.id == saved_entry.id })
-            );
+        for file in fdb.search_files(query) {
+            assert_eq!(file.id, saved_entry.id)
+        }
 
         // Make sure a change was added with the correct
         let changes = fdb.get_all_changes()
