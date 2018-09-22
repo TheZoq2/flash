@@ -15,10 +15,8 @@ extern crate regex;
 extern crate error_chain;
 extern crate itertools;
 extern crate rand;
+extern crate reqwest;
 
-extern crate futures;
-extern crate hyper;
-extern crate tokio_core;
 
 #[macro_use]
 extern crate diesel;

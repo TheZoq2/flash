@@ -7,16 +7,7 @@ use itertools::Itertools;
 use serde_json;
 use serde;
 
-use futures::{Future, Stream, future};
-use hyper::{
-    self,
-    Client,
-    StatusCode,
-    Request,
-    Method,
-    header,
-};
-use tokio_core::reactor::Core;
+use reqwest;
 
 use std::str::from_utf8;
 
@@ -112,43 +103,24 @@ fn send_request<T: serde::de::DeserializeOwned>(full_url: &str, body: &str) -> R
 }
 
 fn send_request_for_bytes(full_url: &str, body: &str) -> Result<Vec<u8>> {
-    // Parse the url into a hyper uri
-    let uri = full_url.parse().chain_err(
-        || ErrorKind::ForeignHttpError(full_url.to_string())
-    )?;
+    let client = reqwest::Client::new();
 
-    // Create a tokio core to exectue the request
-    let mut core = Core::new()?;
+    let mut response_body = vec!();
+    let mut response = client.get(full_url)
+        .body(body.to_string())
+        .send()?;
 
-    //Set up a hyper client client
-    let client = Client::new(&core.handle());
+    response.copy_to(&mut response_body)?;
 
-    let mut request: Request<hyper::Body> = Request::new(Method::Get, uri);
-    request.set_body(body.to_string());
-    request.headers_mut().set(header::ContentLength(body.len() as u64));
+    let status = response.status();
+    if status != reqwest::StatusCode::OK {
+        return Err(ErrorKind::WrongHttpStatusCode(
+            status,
+            String::from_utf8_lossy(&response_body).into()
+        ).into())
+    }
 
-    // Create the future
-    let work = client.request(request)
-        .and_then(|res| {
-            // Parse the chunks
-            let status = res.status();
-            (res.body().concat2(), future::ok(status))
-        })
-        .map(|(body, status)| -> Result<Vec<u8>> {
-            match status {
-                StatusCode::Ok => {
-                    Ok(body.to_vec())
-                }
-                code => {
-                    let body = String::from_utf8(body.to_vec())
-                        .unwrap_or_else(|_| "Invalid UTF8".to_string());
-                    Err(ErrorKind::WrongHttpStatusCode(code, body.to_string()).into())
-                }
-            }
-        });
-
-    // Execute the future
-    Ok(core.run(work)??)
+    Ok(response_body)
 }
 
 pub struct HttpForeignServer {
