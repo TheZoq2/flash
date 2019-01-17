@@ -88,6 +88,7 @@ use diesel::pg::PgConnection;
 
 use dotenv::dotenv;
 use std::env;
+use std::io;
 
 //Establish a connection to the postgres database
 pub fn establish_connection() -> PgConnection {
@@ -100,26 +101,38 @@ pub fn establish_connection() -> PgConnection {
 }
 
 
+fn perform_database_fixes(settings: &settings::Settings) {
+    dotenv().ok();
+
+    if env::var("FLASH_RUN_DB_FIXES").is_err() {
+        println!("Database fixes are compiled but not enabled. run with FLASH_RUN_DB_FIXES=1 to enable");
+        return;
+    }
+    else {
+        println!("Running db fixes");
+    }
+
+    let fdb = FileDatabase::new(
+            &settings.database_url,
+            settings.get_file_storage_path()
+        ).unwrap();
+    println!("Deduplicating tags");
+    db_fixes::deduplicate_tags(&fdb).expect("Failed to deduplicate tags");
+
+    println!("creating changes for existing files");
+    let current_time = chrono::NaiveDateTime::from_timestamp(chrono::offset::Utc::now().timestamp(), 0);
+    db_fixes::create_changes_for_files(&fdb, &current_time).expect("Failed to create changes from files");
+    println!("Done");
+}
+
+
 fn main() {
     let settings = settings::Settings::from_env();
 
+    perform_database_fixes(&settings);
+
     //Loading or creating the database
 
-    // {
-    //     let fdb = FileDatabase::new(
-    //             &settings.database_url,
-    //             settings.get_file_storage_path()
-    //         ).unwrap();
-    //     println!("Deduplicating tags");
-    //     db_fixes::deduplicate_tags(&fdb).expect("Failed to deduplicate tags");
-
-    //     println!("creating changes for existing files");
-    //     let current_time = chrono::NaiveDateTime::from_timestamp(chrono::offset::Utc::now().timestamp(), 0);
-    //     db_fixes::create_changes_for_files(&fdb, &current_time).expect("Failed to create changes from files");
-    //     println!("Done");
-    // }
-
-    // fix_timestamps::fix_timestamps(&db);
 
     // Read the persistent file list if it exists
     let file_list_save_path = settings

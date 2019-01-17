@@ -37,6 +37,7 @@ pub fn create_changes_for_files(fdb: &FileDatabase, timestamp: &NaiveDateTime) -
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn deduplicate_tags(fdb: &FileDatabase) -> Result<()> {
     for mut file in fdb.search_files(::search::SavedSearchQuery::empty()) {
         let mut unique_tags = vec!();
