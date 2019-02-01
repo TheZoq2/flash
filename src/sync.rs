@@ -370,7 +370,9 @@ mod sync_tests {
             Ok(self.file_data[&id].0.clone())
         }
 
-        fn send_changes(&mut self, _data: &ChangeData, _port: u16) -> Result<usize> {
+        fn send_changes(&mut self, data: &ChangeData, _port: u16) -> Result<usize> {
+            let mut changes = data.changes.clone();
+            self.changes.append(&mut changes);
             Ok(0)
         }
         fn get_file(&self, id: i32) -> Result<Vec<u8>> {
@@ -802,6 +804,90 @@ mod sync_tests {
 
         let foreign_syncpoints = foreign_server.get_syncpoints();
         assert_eq!(foreign_syncpoints.expect("Failed to get syncpoints from foreign").len(), 1);
+    }
+
+    #[test]
+    fn last_common_syncpoint_works() {
+        let side1 = vec!(
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-03").unwrap()},
+        );
+        let side2 = vec!(
+            SyncPoint{last_change: naive_datetime_from_date("2018-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-02-03").unwrap()},
+        );
+
+        assert_eq!(
+            last_common_syncpoint(&side1, &side2).unwrap(),
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()}
+        );
+    }
+
+    #[test]
+    fn only_changes_after_last_common_syncpoint_are_applied() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        let common_syncpoint =
+            SyncPoint{last_change: NaiveDate::from_ymd(2017, 1, 1).and_hms(1,1,1)};
+
+        fdb.reset();
+        fdb.add_syncpoint(
+            &common_syncpoint
+        ).unwrap();
+        fdb.add_new_file(
+            1,
+            "",
+            None,
+            &vec!(),
+            0,
+            &create_change("2017-02-02").unwrap()
+        );
+        fdb.add_change(
+            &Change::new(
+                NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0),
+                1,
+                ChangeType::FileAdded
+            )
+        );
+
+        let foreign_files = vec!(
+            (2, (FileDetails {
+                extension: "jpg".into(),
+                timestamp: NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+            }, vec!(), None)),
+            (3, (FileDetails {
+                extension: "jpg".into(),
+                timestamp: NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+            }, vec!(), None)),
+        );
+        let foreign_syncpoints = vec!(common_syncpoint);
+        let foreign_changes = vec!(
+            Change::new(
+                NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0),
+                2,
+                ChangeType::FileAdded
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2018, 1, 1).and_hms(0,0,0),
+                3,
+                ChangeType::FileAdded
+            )
+        );
+
+        let mut server = MockForeignServer::new(
+                foreign_files,
+                foreign_syncpoints,
+                foreign_changes
+            );
+
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+        sync_with_foreign(&fdb, &mut server, 0, &(0, tx)).unwrap();
+
+        assert!(fdb.get_file_with_id(2).is_none());
+        assert!(fdb.get_file_with_id(3).is_some());
+        assert_eq!(server.changes.len(), 3);
     }
 
     struct ForeignServerWithThumbnailError {
