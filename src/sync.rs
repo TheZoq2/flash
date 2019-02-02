@@ -24,15 +24,27 @@ use std::thread;
 pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
     -> Option<SyncPoint>
 {
-    local.iter().zip(remote.iter())
-        .fold(None, |acc, (l, r)| {
-            if l == r {
-                Some(l.clone())
-            }
-            else {
-                acc
-            }
-        })
+    let mut local = local.iter().collect::<Vec<_>>();
+    let mut remote = remote.iter().collect::<Vec<_>>();
+    local.sort();
+    remote.sort();
+
+    let mut local_last = local.pop()?;
+    let mut remote_last = remote.pop()?;
+    loop {
+        if local_last > remote_last {
+            local_last = local.pop().unwrap();
+        }
+        else if local_last == remote_last {
+            return Some(local_last.clone())
+        }
+        else {
+            remote_last = remote.pop().unwrap();
+        }
+        if local.is_empty() || remote.is_empty() {
+            return None;
+        }
+    }
 }
 
 fn get_removed_files(changes: &[Change]) -> Vec<i32> {
@@ -888,6 +900,38 @@ mod sync_tests {
         assert!(fdb.get_file_with_id(2).is_none());
         assert!(fdb.get_file_with_id(3).is_some());
         assert_eq!(server.changes.len(), 3);
+    }
+
+
+    #[test]
+    fn common_syncpoints_are_returned_for_failing_syncpoints() {
+        let remote = vec!{
+            SyncPoint{
+                last_change: NaiveDateTime::from_timestamp(1549049860, 0)
+            },
+            SyncPoint{
+                last_change: NaiveDateTime::from_timestamp(1549049909, 0)
+            },
+            SyncPoint {
+                last_change: NaiveDateTime::from_timestamp(1549123955, 0)
+            },
+            SyncPoint {
+                last_change: NaiveDateTime::from_timestamp(1549124145, 0)
+            },
+        };
+        let local = vec!{
+            SyncPoint {
+                last_change: NaiveDateTime::from_timestamp(1549123955, 0)
+            },
+            SyncPoint {
+                last_change: NaiveDateTime::from_timestamp(1549124145, 0)
+            },
+        };
+        let last_common = SyncPoint {
+            last_change: NaiveDateTime::from_timestamp(1549124145, 0)
+        };
+
+        assert_eq!(last_common_syncpoint(&local, &remote), Some(last_common));
     }
 
     struct ForeignServerWithThumbnailError {
