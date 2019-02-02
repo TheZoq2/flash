@@ -98,7 +98,7 @@ pub fn global_list_action_handler(request: &mut Request, action: &GlobalAction) 
     let file_list_list = request.get::<Write<FileListList>>().unwrap();
 
     match *action {
-        GlobalAction::AllLists => reply_to_list_listing_request(file_list_list)
+        GlobalAction::AllLists => reply_to_list_listing_request(&file_list_list)
     }
 }
 
@@ -107,7 +107,7 @@ pub fn global_list_action_handler(request: &mut Request, action: &GlobalAction) 
 //                      Public request responders
 ////////////////////////////////////////////////////////////////////////////////
 
-pub fn reply_to_list_listing_request(file_list_list: Arc<Mutex<FileListList>>) -> IronResult<Response> {
+pub fn reply_to_list_listing_request(file_list_list: &Arc<Mutex<FileListList>>) -> IronResult<Response> {
     let file_list_list = file_list_list.lock().unwrap();
 
     let lists: Vec<ListResponse> = file_list_list.lists_with_ids().iter()
@@ -140,7 +140,7 @@ pub fn read_request_list_id(request: &mut Request) -> Result<usize> {
 
 
 pub fn list_info_request_handler(
-    file_list_list: Arc<Mutex<FileListList>>,
+    file_list_list: &Arc<Mutex<FileListList>>,
     id: usize,
 ) -> IronResult<Response> {
     let file_list_list = file_list_list.lock().unwrap();

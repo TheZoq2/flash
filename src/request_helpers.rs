@@ -67,7 +67,7 @@ pub fn to_json_with_result<T: Serialize>(data: T) -> Result<String> {
   Runs serde_json::from_str and converts the result to error::Result instead of
   `serde_json::Result`
 */
-pub fn from_json_with_result<'a, T: DeserializeOwned>(data: &str) -> Result<T> {
+pub fn from_json_with_result<T: DeserializeOwned>(data: &str) -> Result<T> {
     Ok(serde_json::from_str(data)?)
 }
 

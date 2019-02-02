@@ -17,20 +17,34 @@ use sync_progress as sp;
 
 use chrono::prelude::*;
 
+use std::thread;
+
 
 
 pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
     -> Option<SyncPoint>
 {
-    local.iter().zip(remote.iter())
-        .fold(None, |acc, (l, r)| {
-            if l == r {
-                Some(l.clone())
-            }
-            else {
-                acc
-            }
-        })
+    let mut local = local.iter().collect::<Vec<_>>();
+    let mut remote = remote.iter().collect::<Vec<_>>();
+    local.sort();
+    remote.sort();
+
+    let mut local_last = local.pop()?;
+    let mut remote_last = remote.pop()?;
+    loop {
+        if local_last > remote_last {
+            local_last = local.pop().unwrap();
+        }
+        else if local_last == remote_last {
+            return Some(local_last.clone())
+        }
+        else {
+            remote_last = remote.pop().unwrap();
+        }
+        if local.is_empty() || remote.is_empty() {
+            return None;
+        }
+    }
 }
 
 fn get_removed_files(changes: &[Change]) -> Vec<i32> {
@@ -100,7 +114,7 @@ pub fn sync_with_foreign(
         .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
     // Apply changes locally
-    apply_changes(fdb.clone(), foreign_server, &remote_changes, &removed_files, progress_reporter)
+    apply_changes(fdb, foreign_server, &remote_changes, &removed_files, progress_reporter)
         .chain_err(|| "Failed to apply changes")?;
 
     progress_tx.send((*job_id, sp::SyncUpdate::AddingSyncpoint))
@@ -110,11 +124,27 @@ pub fn sync_with_foreign(
     progress_tx.send((*job_id, sp::SyncUpdate::WaitingForForeign))
             .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
+    // We will retry this a couple of times because it is possible
+    // for things to happen before the other side adds the job to its
+    // list
+    let mut error_amount = 0;
     loop {
-        let status = foreign_server.get_sync_status(foreign_job_id)?;
-        if let sp::SyncUpdate::Done = status.last_update {
-            break;
+        let status = foreign_server.get_sync_status(foreign_job_id);
+        match status {
+            Ok(status) => if let sp::SyncUpdate::Done = status.last_update {
+                break;
+            },
+            Err(e) => {
+                if error_amount > 5 {
+                    return Err(e)
+                }
+                else {
+                    error_amount += 1
+                }
+            }
         }
+
+        thread::sleep(::std::time::Duration::from_secs(1));
     }
 
     foreign_server.add_syncpoint(&new_syncpoint)
@@ -185,7 +215,7 @@ pub fn apply_changes(
             .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
         if fdb.get_file_with_id(*id) != None {
-            remove_file(*id, &fdb, ChangeCreationPolicy::No)?;
+            remove_file(*id, &fdb, &ChangeCreationPolicy::No)?;
         }
     }
 
@@ -234,7 +264,7 @@ fn apply_change(
                             change.affected_file,
                             &[],
                             &fdb,
-                            ChangeCreationPolicy::No,
+                            &ChangeCreationPolicy::No,
                             &file_details.extension,
                             file_timestamp.timestamp() as u64
                         ).chain_err(|| "Failed to save file")?;
@@ -247,7 +277,7 @@ fn apply_change(
             }
         }
         ChangeType::FileRemoved => {
-            file_handler::remove_file(change.affected_file, &fdb, ChangeCreationPolicy::No)?;
+            file_handler::remove_file(change.affected_file, &fdb, &ChangeCreationPolicy::No)?;
         }
     }
 
@@ -264,7 +294,11 @@ fn apply_file_update(fdb: &FileDatabase, affected_file: i32, file_update: &Updat
     };
 
     match *file_update {
-        UpdateType::TagAdded(ref tag) => file.tags.push(tag.clone()),
+        UpdateType::TagAdded(ref tag) => {
+            if !file.tags.contains(&tag) {
+                file.tags.push(tag.clone())
+            }
+        },
         UpdateType::TagRemoved(ref tag) => {
             file.tags = file.tags.into_iter().filter(|t| t != tag).collect()
         }
@@ -348,7 +382,9 @@ mod sync_tests {
             Ok(self.file_data[&id].0.clone())
         }
 
-        fn send_changes(&mut self, _data: &ChangeData, _port: u16) -> Result<usize> {
+        fn send_changes(&mut self, data: &ChangeData, _port: u16) -> Result<usize> {
+            let mut changes = data.changes.clone();
+            self.changes.append(&mut changes);
             Ok(0)
         }
         fn get_file(&self, id: i32) -> Result<Vec<u8>> {
@@ -372,8 +408,8 @@ mod sync_tests {
         let fdb = fdb.lock().unwrap();
         fdb.reset();
 
-        fdb.add_new_file(1, "yolo.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
-        fdb.add_new_file(2, "swag.jpg", None, &vec!(), 0, create_change("2017-02-02").unwrap());
+        fdb.add_new_file(1, "yolo.jpg", None, &vec!(), 0, &create_change("2017-02-02").unwrap());
+        fdb.add_new_file(2, "swag.jpg", None, &vec!(), 0, &create_change("2017-02-02").unwrap());
 
         let changes = vec!(
                 Change::new(
@@ -407,8 +443,8 @@ mod sync_tests {
         let fdb = fdb.lock().unwrap();
         fdb.reset();
 
-        fdb.add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
-        fdb.add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0, create_change("2017-02-02").unwrap());
+        fdb.add_new_file(1, "yolo.jpg", None, &mapvec!(String::from: "things"), 0, &create_change("2017-02-02").unwrap());
+        fdb.add_new_file(2, "swag.jpg", None, &mapvec!(String::from: "things"), 0, &create_change("2017-02-02").unwrap());
 
         let changes = vec!(
                 Change::new(
@@ -448,7 +484,7 @@ mod sync_tests {
             None,
             &mapvec!(String::from: "things"),
             0,
-            create_change("2017-02-02").unwrap()
+            &create_change("2017-02-02").unwrap()
         );
         fdb.add_new_file(
             2,
@@ -456,7 +492,7 @@ mod sync_tests {
             None,
             &vec!(),
             0,
-            create_change("2017-02-02").unwrap()
+            &create_change("2017-02-02").unwrap()
         );
 
         let changes = vec!(
@@ -508,7 +544,7 @@ mod sync_tests {
                          Some("t_yolo.jpg"),
                          &mapvec!(String::from: "things"),
                          original_timestamp.timestamp() as u64,
-                         create_change("2017-02-02").unwrap()
+                         &create_change("2017-02-02").unwrap()
                     );
 
 
@@ -546,7 +582,7 @@ mod sync_tests {
                          Some("t_yolo.jpg"),
                          &mapvec!(String::from: "things"),
                          timestamp.timestamp() as u64,
-                         create_change("2017-02-02").unwrap()
+                         &create_change("2017-02-02").unwrap()
                     );
 
 
@@ -569,6 +605,47 @@ mod sync_tests {
     }
 
     #[test]
+    fn duplicate_tag_changes_do_not_duplicate_tag() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.reset();
+
+        fdb.add_new_file(
+            1,
+            "yolo.jpg",
+            None,
+            &vec!("yolo".to_string(), "swag".to_string()),
+            0,
+            &create_change("2017-02-02").unwrap()
+        );
+
+        let changes = vec!(
+                Change::new(
+                    naive_datetime_from_date("2017-01-01").unwrap(),
+                    1,
+                    ChangeType::Update(UpdateType::TagAdded("yolo".into()))
+                ),
+                Change::new(
+                    naive_datetime_from_date("2017-01-01").unwrap(),
+                    1,
+                    ChangeType::Update(UpdateType::TagAdded("yolo".into()))
+                ),
+            );
+
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+        apply_changes(
+            &fdb,
+            &MockForeignServer::new(vec!(), vec!(), vec!()),
+            &changes,
+            &vec!(),
+            &(0, tx)
+        ).unwrap();
+
+        let file = fdb.get_file_with_id(1).unwrap();
+        assert_eq!(file.tags, vec!("yolo".to_string(), "swag".to_string()));
+    }
+
+    #[test]
     fn file_system_changes_work() {
         let fdb = db_test_helpers::get_database();
         let fdb = fdb.lock().unwrap();
@@ -584,7 +661,7 @@ mod sync_tests {
             1,
             &mapvec!(String::from: "things"),
             &fdb,
-            create_change("2017-02-02").unwrap(),
+            &create_change("2017-02-02").unwrap(),
             "jpg",
             original_timestamp.timestamp() as u64
         ).expect("Failed to save initial file");
@@ -739,6 +816,122 @@ mod sync_tests {
 
         let foreign_syncpoints = foreign_server.get_syncpoints();
         assert_eq!(foreign_syncpoints.expect("Failed to get syncpoints from foreign").len(), 1);
+    }
+
+    #[test]
+    fn last_common_syncpoint_works() {
+        let side1 = vec!(
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-03").unwrap()},
+        );
+        let side2 = vec!(
+            SyncPoint{last_change: naive_datetime_from_date("2018-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-02-03").unwrap()},
+        );
+
+        assert_eq!(
+            last_common_syncpoint(&side1, &side2).unwrap(),
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()}
+        );
+    }
+
+    #[test]
+    fn only_changes_after_last_common_syncpoint_are_applied() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        let common_syncpoint =
+            SyncPoint{last_change: NaiveDate::from_ymd(2017, 1, 1).and_hms(1,1,1)};
+
+        fdb.reset();
+        fdb.add_syncpoint(
+            &common_syncpoint
+        ).unwrap();
+        fdb.add_new_file(
+            1,
+            "",
+            None,
+            &vec!(),
+            0,
+            &create_change("2017-02-02").unwrap()
+        );
+        fdb.add_change(
+            &Change::new(
+                NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0),
+                1,
+                ChangeType::FileAdded
+            )
+        );
+
+        let foreign_files = vec!(
+            (2, (FileDetails {
+                extension: "jpg".into(),
+                timestamp: NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+            }, vec!(), None)),
+            (3, (FileDetails {
+                extension: "jpg".into(),
+                timestamp: NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+            }, vec!(), None)),
+        );
+        let foreign_syncpoints = vec!(common_syncpoint);
+        let foreign_changes = vec!(
+            Change::new(
+                NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0),
+                2,
+                ChangeType::FileAdded
+            ),
+            Change::new(
+                NaiveDate::from_ymd(2018, 1, 1).and_hms(0,0,0),
+                3,
+                ChangeType::FileAdded
+            )
+        );
+
+        let mut server = MockForeignServer::new(
+                foreign_files,
+                foreign_syncpoints,
+                foreign_changes
+            );
+
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+        sync_with_foreign(&fdb, &mut server, 0, &(0, tx)).unwrap();
+
+        assert!(fdb.get_file_with_id(2).is_none());
+        assert!(fdb.get_file_with_id(3).is_some());
+        assert_eq!(server.changes.len(), 3);
+    }
+
+
+    #[test]
+    fn common_syncpoints_are_returned_for_failing_syncpoints() {
+        let remote = vec!{
+            SyncPoint{
+                last_change: NaiveDateTime::from_timestamp(1549049860, 0)
+            },
+            SyncPoint{
+                last_change: NaiveDateTime::from_timestamp(1549049909, 0)
+            },
+            SyncPoint {
+                last_change: NaiveDateTime::from_timestamp(1549123955, 0)
+            },
+            SyncPoint {
+                last_change: NaiveDateTime::from_timestamp(1549124145, 0)
+            },
+        };
+        let local = vec!{
+            SyncPoint {
+                last_change: NaiveDateTime::from_timestamp(1549123955, 0)
+            },
+            SyncPoint {
+                last_change: NaiveDateTime::from_timestamp(1549124145, 0)
+            },
+        };
+        let last_common = SyncPoint {
+            last_change: NaiveDateTime::from_timestamp(1549124145, 0)
+        };
+
+        assert_eq!(last_common_syncpoint(&local, &remote), Some(last_common));
     }
 
     struct ForeignServerWithThumbnailError {

@@ -76,7 +76,7 @@ impl FileData {
         }
     }
 
-    fn from_path(source: PathBuf) -> Result<FileData> {
+    fn from_path(source: &Path) -> Result<FileData> {
         Ok(FileData {
             file_path: String::from(source.to_string_lossy()),
             thumbnail_path: String::from(source.to_string_lossy()),
@@ -301,7 +301,7 @@ fn save_new_file(
 
     let extension = match original_path.extension() {
         Some(val) => Ok(val),
-        None => Err(ErrorKind::NoFileExtension(original_path.to_owned().into()))
+        None => Err(ErrorKind::NoFileExtension(original_path.to_owned()))
     }?;
 
 
@@ -311,7 +311,7 @@ fn save_new_file(
         file_identifier,
         tags,
         db,
-        changelog::ChangeCreationPolicy::Yes(current_time),
+        &changelog::ChangeCreationPolicy::Yes(current_time),
         &extension.to_string_lossy(),
         file_timestamp.timestamp() as u64
     )
@@ -327,7 +327,7 @@ fn update_stored_file_tags(
     tags: &[String],
     change_timestamp: NaiveDateTime
 ) -> Result<file_database::File> {
-    db.change_file_tags(old_entry, tags, ChangeCreationPolicy::Yes(change_timestamp))
+    db.change_file_tags(old_entry, tags, &ChangeCreationPolicy::Yes(change_timestamp))
 }
 
 
@@ -337,7 +337,7 @@ fn update_stored_file_tags(
 fn file_data_from_file_location(file: &FileLocation) -> Result<FileData> {
     // Lock the file list and try to fetch the file
     Ok(match *file {
-        FileLocation::Unsaved(ref path) => FileData::from_path(path.clone())?,
+        FileLocation::Unsaved(ref path) => FileData::from_path(path)?,
         FileLocation::Database(ref db_entry) => FileData::from_database(db_entry.clone()),
     })
 }
@@ -349,7 +349,7 @@ fn get_file_location_path(storage_folder: &Path, file: &FileLocation) -> PathBuf
     match *file {
         FileLocation::Unsaved(ref path) => path.clone(),
         FileLocation::Database(ref db_entry) => {
-            PathBuf::from(storage_folder.join(db_entry.filename.clone()))
+            storage_folder.join(db_entry.filename.clone())
         }
     }
 }
@@ -361,9 +361,9 @@ fn get_file_list_thumbnail(storage_folder: &Path, file: &FileLocation) -> PathBu
     match *file {
         FileLocation::Unsaved(ref path) => path.clone(),
         FileLocation::Database(ref db_entry) => {
-            PathBuf::from(storage_folder.join(
-                    db_entry.thumbnail_path.clone().unwrap_or_else(|| String::from(""))
-                ))
+            storage_folder.join(
+                db_entry.thumbnail_path.clone().unwrap_or_else(|| String::from(""))
+            )
         }
     }
 }
@@ -617,7 +617,7 @@ mod file_request_tests {
                 Some("thumb"),
                 &old_tags,
                 0,
-                ChangeCreationPolicy::No
+                &ChangeCreationPolicy::No
             )
         };
 
@@ -719,12 +719,9 @@ mod file_request_tests {
 
         println!("{:#?}", saved_entry.id);
         //Make sure that the file was actually added to the database
-        assert!(
-                fdb
-                    .search_files(query)
-                    .iter()
-                    .fold(false, |acc, file| { acc || file.id == saved_entry.id })
-            );
+        for file in fdb.search_files(query) {
+            assert_eq!(file.id, saved_entry.id)
+        }
 
         // Make sure a change was added with the correct
         let changes = fdb.get_all_changes()

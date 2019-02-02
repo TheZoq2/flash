@@ -16,8 +16,7 @@ error_chain! {
         ImageError(::image::ImageError);
         Utf8(::std::string::FromUtf8Error);
         StrUtf8(::std::str::Utf8Error);
-        Hyper(::hyper::Error);
-        HyperUri(::hyper::error::UriError);
+        Reqwest(::reqwest::Error);
         SystemTime(::std::time::SystemTimeError);
     }
 
@@ -100,7 +99,7 @@ error_chain! {
             display("Foreign server communication failed. Url: {}", url)
         }
 
-        WrongHttpStatusCode(code: ::hyper::StatusCode, body: String) {
+        WrongHttpStatusCode(code: ::reqwest::StatusCode, body: String) {
             description("Got an unexpected HTTP statuscode")
             display("HTTP request returned status {}. Response: {}", code.as_u16(), body)
         }

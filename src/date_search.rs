@@ -27,7 +27,7 @@ impl Interval {
     }
 
     pub fn contains(&self, time: &NaiveDateTime) -> bool {
-        time >= &self.start && time < &self.end
+        *time >= self.start && *time < self.end
     }
 }
 

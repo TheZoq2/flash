@@ -47,7 +47,7 @@ fn handle_search_for_saved_files(
         ))
     };
 
-    list_info_request_handler(file_list_list, file_list_id)
+    list_info_request_handler(&file_list_list, file_list_id)
 }
 
 fn handle_directory_search(request: &mut Request, path_str: &str) -> IronResult<Response> {
@@ -65,11 +65,11 @@ fn handle_directory_search(request: &mut Request, path_str: &str) -> IronResult<
     let file_list_id = {
         let mut file_list_list = file_list_list.lock().unwrap();
 
-        match file_list_list.get_id_with_source(FileListSource::Folder(path.clone())) {
+        match file_list_list.get_id_with_source(&FileListSource::Folder(path.clone())) {
             Some(id) => id,
             None => file_list_list.add(FileList::from_directory(path, &file_read_path)),
         }
     };
 
-    list_info_request_handler(file_list_list, file_list_id)
+    list_info_request_handler(&file_list_list, file_list_id)
 }

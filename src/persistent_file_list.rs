@@ -108,7 +108,8 @@ pub fn save_file_list_list(list: &[SaveableFileList], destination: &Path) -> Res
 
     let as_json = serde_json::to_string(&list)?;
 
-    Ok(file.write_all(&as_json.into_bytes())?)
+    file.write_all(&as_json.into_bytes())?;
+    Ok(())
 }
 
 /**
@@ -155,7 +156,7 @@ mod file_list_persistence_tests {
                     Some("thumbname"),
                     &vec![],
                     0,
-                    ChangeCreationPolicy::No
+                    &ChangeCreationPolicy::No
                 )),
                 FileLocation::Database(db.add_new_file(
                     2,
@@ -163,7 +164,7 @@ mod file_list_persistence_tests {
                     Some("thumbname"),
                     &vec![],
                     0,
-                    ChangeCreationPolicy::No
+                    &ChangeCreationPolicy::No
                 )),
                 FileLocation::Unsaved(PathBuf::from("path")),
             ],

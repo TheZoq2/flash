@@ -99,7 +99,17 @@ pub fn file_detail_handler(request: &mut Request) -> IronResult<Response> {
 }
 
 pub fn syncpoint_add_handler(request: &mut Request) -> IronResult<Response> {
-    let syncpoint_str = get_get_variable(request, "syncpoint")?;
+    let mut syncpoint_str  = String::new();
+    // TODO Unduplicate this. Same code in change_application_handler
+    match request.body.read_to_string(&mut syncpoint_str) {
+        Ok(_) => {},
+        Err(e) => {
+            return Ok(Response::with((
+                status::PreconditionFailed,
+                format!("Failed to read body {:?}", e)
+            )));
+        }
+    }
 
     let syncpoint = from_json_with_result::<SyncPoint>(&syncpoint_str)
         .chain_err(|| {
@@ -131,7 +141,7 @@ pub fn change_application_handler(request: &mut Request, progress_tx: &sp::TxTyp
         }
     }
 
-    let job_id = handle_change_application(body, (*settings).clone(), foreign_server, progress_tx)?;
+    let job_id = handle_change_application(&body, (*settings).clone(), foreign_server, progress_tx)?;
     Ok(Response::with((status::Ok, to_json_with_result(job_id)?)))
 }
 
@@ -188,12 +198,12 @@ fn handle_file_detail_request(fdb: &FileDatabase, id: i32) -> Result<FileDetails
 
 
 fn handle_change_application(
-    body: String,
+    body: &str,
     settings: Settings,
     foreign: HttpForeignServer,
     progress_tx: &sp::TxType
 ) -> Result<usize> {
-    let change_data = from_json_with_result::<ChangeData>(&body)?;
+    let change_data = from_json_with_result::<ChangeData>(body)?;
 
 
     let job_id = rand::random::<usize>();

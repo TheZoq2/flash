@@ -116,7 +116,7 @@ impl<'a> From<&'a ChangeDbEntry> for InsertableChange<'a> {
 }
 
 
-#[derive(Queryable, Insertable, Serialize, Deserialize, PartialEq, Clone, Debug)]
+#[derive(Queryable, Insertable, Serialize, Deserialize, PartialEq, Clone, Debug, PartialOrd, Ord, Eq)]
 #[table_name="syncpoints"]
 pub struct SyncPoint {
     pub last_change: NaiveDateTime

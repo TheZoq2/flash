@@ -161,7 +161,7 @@ fn clean_tag_list_string(list_str: &str) -> Cow<str> {
 fn get_tags_from_list_string(list_string: &str) -> Vec<Cow<str>> {
     lazy_static! {
         static ref TAG_RE: Regex =
-            Regex::new(r"[[:blank:]]*(?P<tag>\w[\w[:blank:]]*\w)[,[:blank:]]*")
+            Regex::new(r"[[:blank:]]*(?P<tag>\w[\w\-[:blank:]]*\w)[,[:blank:]]*")
             .unwrap();
     };
 
@@ -231,6 +231,11 @@ mod public_query_tests {
         assert_eq!(
             get_tags_from_query("of things, stuff and items"),
             (mapvec!(String::from: "things", "stuff", "items"), vec![])
+        );
+        // Test for #47
+        assert_eq!(
+            get_tags_from_query("of kick-in, stuff and items"),
+            (mapvec!(String::from: "kick-in", "stuff", "items"), vec![])
         );
     }
 

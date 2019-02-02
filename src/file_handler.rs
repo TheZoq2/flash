@@ -32,13 +32,14 @@ pub enum ThumbnailStrategy {
     FromByteSource(ByteSource)
 }
 
+#[allow(too_many_arguments)] //TODO
 pub fn save_file(
         source_content: ByteSource,
         thumbnail_strategy: ThumbnailStrategy,
         id: i32,
         tags: &[String],
         fdb: &FileDatabase,
-        change_policy: ChangeCreationPolicy,
+        change_policy: &ChangeCreationPolicy,
         file_extension: &str,
         file_timestamp: u64,
     )
@@ -84,7 +85,7 @@ pub fn save_file(
             thumbnail_filename.as_ref().map(|x| &**x),
             tags,
             file_timestamp,
-            change_policy
+            &change_policy
         )
     };
 
@@ -118,7 +119,8 @@ pub fn save_file(
 fn save_file_to_disk(destination_path: &Path, content: ByteSource) -> Result<()>  {
     let mut file = fs::File::create(destination_path)?;
 
-    Ok(file.write_all(&vec_from_byte_source(content)?)?)
+    file.write_all(&vec_from_byte_source(content)?)?;
+    Ok(())
 }
 
 
@@ -127,13 +129,13 @@ fn save_file_to_disk(destination_path: &Path, content: ByteSource) -> Result<()>
 
   Creates a change if the `change_policy` says to do so
 */
-pub fn remove_file(file_id: i32, fdb: &FileDatabase, change_policy: ChangeCreationPolicy) -> Result<()> {
+pub fn remove_file(file_id: i32, fdb: &FileDatabase, change_policy: &ChangeCreationPolicy) -> Result<()> {
     // Fetch the file details from the database
     let file = fdb.get_file_with_id_result(file_id)
         .chain_err(|| ErrorKind::FileDatabaseRemovalFailed(file_id))?;
 
     // Drop the file from the database
-    fdb.drop_file(file_id, change_policy)?;
+    fdb.drop_file(file_id, &change_policy)?;
 
     let full_path = fdb.get_file_save_path().join(file.filename);
     let full_thumb_path = file.thumbnail_path.map( |filename| {
