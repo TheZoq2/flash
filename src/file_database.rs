@@ -17,7 +17,7 @@ use chrono::NaiveDateTime;
 use std::path::PathBuf;
 
 use search;
-use error::{Result};
+use error::{Result, ErrorKind};
 use changelog::{
     Change,
     ChangeDbEntry,
@@ -207,11 +207,30 @@ impl FileDatabase {
     }
 
     pub fn add_change(&self, change: &Change) -> Result<()> {
-        diesel::insert(&InsertableChange::from(&ChangeDbEntry::from(change)))
-            .into(changes::table)
-            .execute(&self.connection)?;
+        let insert_result =
+            diesel::insert(&InsertableChange::from(&ChangeDbEntry::from(change)))
+                .into(changes::table)
+                .execute(&self.connection);
 
-        Ok(())
+        // If we get a collision, check if this is a hash collision or a actually
+        // a collision.
+        match insert_result {
+            Ok(_) => Ok(()),
+            Err(diesel::result::Error::DatabaseError(
+                diesel::result::DatabaseErrorKind::UniqueViolation,
+                _
+            )) => {
+                // Find the old item in the database
+                let in_db = self.get_change_with_id(change.id)?;
+                if in_db != *change {
+                    Err(ErrorKind::ChangeIDCollision(change.id).into())
+                }
+                else {
+                    Ok(())
+                }
+            }
+            Err(e) => Err(ErrorKind::Diesel(e).into())
+        }
     }
 
     pub fn set_file_timestamp(
@@ -317,6 +336,11 @@ impl FileDatabase {
             &changes::table
                 .get_results(&self.connection)?
         )?)
+    }
+
+    pub fn get_change_with_id(&self, id: i32) -> Result<Change> {
+        let entry = changes::table.find(id).get_result(&self.connection)?;
+        Ok(Change::from_db_entry(&entry)?)
     }
 
     fn changes_from_db_entries(db_entries: &[ChangeDbEntry]) -> Result<Vec<Change>> {
@@ -856,7 +880,7 @@ mod db_tests {
 }
 
 #[cfg(test)]
-mod chage_tests {
+mod change_tests {
     use super::*;
 
     use changelog::ChangeCreationPolicy;

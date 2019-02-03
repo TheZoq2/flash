@@ -92,6 +92,13 @@ error_chain! {
             description("The database did not contain a file with the specified id")
             display("The database did not contain a file with id {}", file_id)
         }
+        ChangeIDCollision(change_id: i32) {
+            description("An ID collision occured when insertin change")
+            display(
+                "An ID collision occured when inserting a change with id id {}",
+                change_id
+            )
+        }
 
         // Foreign server errors
         ForeignHttpError(url: String) {

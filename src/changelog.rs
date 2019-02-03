@@ -1,15 +1,19 @@
 use chrono::NaiveDateTime;
 
+use std::hash::{Hasher, Hash};
+use std::collections::hash_map::DefaultHasher;
 use std::convert::From;
 use serde_json;
 
 use schema::{changes, syncpoints};
+use file_util::get_semi_unique_identifier;
 
 use error::Result;
 
 use std::cmp::Ordering;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Hash)]
 pub enum UpdateType {
     TagAdded(String),
     TagRemoved(String),
@@ -17,15 +21,16 @@ pub enum UpdateType {
 }
 
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Hash)]
 pub enum ChangeType {
     FileAdded,
     FileRemoved,
     Update(UpdateType)
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Hash)]
 pub struct Change {
+    pub id: i32,
     pub change_type: ChangeType,
     pub affected_file: i32,
     pub timestamp: NaiveDateTime
@@ -33,7 +38,13 @@ pub struct Change {
 
 impl Change {
     pub fn new(timestamp: NaiveDateTime, affected_file: i32, change_type: ChangeType) -> Change {
+        let mut hasher = DefaultHasher::default();
+        timestamp.hash(&mut hasher);
+        affected_file.hash(&mut hasher);
+        change_type.hash(&mut hasher);
+        let id = hasher.finish() as i32;
         Change {
+            id: id,
             timestamp,
             affected_file,
             change_type
@@ -42,6 +53,7 @@ impl Change {
 
     pub fn from_db_entry(db_entry: &ChangeDbEntry) -> Result<Self> {
         Ok(Self {
+            id: db_entry.id,
             affected_file: db_entry.affected_file,
             timestamp: db_entry.timestamp,
             change_type: serde_json::from_str(&db_entry.json_data)?
@@ -80,7 +92,7 @@ pub fn sorted_changes(changes: &[Change]) -> Vec<Change> {
 
 #[derive(Queryable)]
 pub struct ChangeDbEntry {
-    _id: i32,
+    id: i32,
     timestamp: NaiveDateTime,
     json_data: String,
     affected_file: i32,
@@ -89,7 +101,7 @@ pub struct ChangeDbEntry {
 impl<'a> From<&'a Change> for ChangeDbEntry {
     fn from(other: &Change) -> Self {
         Self {
-            _id: 0,
+            id: other.id,
             json_data: serde_json::to_string(&other.change_type).unwrap(),
             affected_file: other.affected_file,
             timestamp: other.timestamp
@@ -100,6 +112,7 @@ impl<'a> From<&'a Change> for ChangeDbEntry {
 #[derive(Insertable)]
 #[table_name="changes"]
 pub struct InsertableChange<'a> {
+    id: i32,
     json_data: &'a str,
     affected_file: i32,
     timestamp: NaiveDateTime
@@ -108,6 +121,7 @@ pub struct InsertableChange<'a> {
 impl<'a> From<&'a ChangeDbEntry> for InsertableChange<'a> {
     fn from(other: &'a ChangeDbEntry) -> Self {
         Self {
+            id: other.id,
             json_data: &other.json_data,
             affected_file: other.affected_file,
             timestamp: other.timestamp
@@ -137,70 +151,42 @@ mod changelog_tests {
 
     #[test]
     fn change_sorting() {
+        let change_20160401 = Change::new(
+            NaiveDate::from_ymd(2016,04,01).and_hms(0,0,0),
+            0,
+            ChangeType::FileAdded,
+        );
+        let change_20160101 = Change::new(
+            NaiveDate::from_ymd(2016,01,01).and_hms(0,0,0),
+            0,
+            ChangeType::FileAdded,
+        );
+        let change_20160301 = Change::new(
+            NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
+            0,
+            ChangeType::FileRemoved,
+        );
+        let change_20160201 = Change::new(
+            NaiveDate::from_ymd(2016,02,01).and_hms(0,0,0),
+            0,
+            ChangeType::FileAdded,
+        );
         let changes = vec!(
-            Change::new(
-                NaiveDate::from_ymd(2016,04,01).and_hms(0,0,0),
-                0,
-                ChangeType::FileAdded,
-            ),
-            Change::new(
-                NaiveDate::from_ymd(2016,01,01).and_hms(0,0,0),
-                0,
-                ChangeType::FileAdded,
-            ),
-            Change::new(
-                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
-                0,
-                ChangeType::Update(UpdateType::TagAdded("yolo".into())),
-            ),
-            Change::new(
-                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
-                0,
-                ChangeType::FileAdded,
-            ),
-            Change::new(
-                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
-                0,
-                ChangeType::FileRemoved,
-            ),
-            Change::new(
-                NaiveDate::from_ymd(2016,02,01).and_hms(0,0,0),
-                0,
-                ChangeType::FileAdded,
-            ),
+            change_20160401.clone(),
+            change_20160101.clone(),
+            change_20160301.clone(),
+            change_20160301.clone(),
+            change_20160201.clone(),
+            change_20160201.clone(),
         );
 
         let expected_order = vec!(
-            Change::new(
-                NaiveDate::from_ymd(2016,01,01).and_hms(0,0,0),
-                0,
-                ChangeType::FileAdded,
-            ),
-            Change::new(
-                NaiveDate::from_ymd(2016,02,01).and_hms(0,0,0),
-                0,
-                ChangeType::FileAdded,
-            ),
-            Change::new(
-                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
-                0,
-                ChangeType::FileAdded,
-            ),
-            Change::new(
-                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
-                0,
-                ChangeType::Update(UpdateType::TagAdded("yolo".into())),
-            ),
-            Change::new(
-                NaiveDate::from_ymd(2016,03,01).and_hms(0,0,0),
-                0,
-                ChangeType::FileRemoved,
-            ),
-            Change::new(
-                NaiveDate::from_ymd(2016,04,01).and_hms(0,0,0),
-                0,
-                ChangeType::FileAdded,
-            )
+            change_20160101.clone(),
+            change_20160201.clone(),
+            change_20160201.clone(),
+            change_20160301.clone(),
+            change_20160301.clone(),
+            change_20160401.clone(),
         );
 
         assert_eq!(sorted_changes(&changes), expected_order);
