@@ -810,7 +810,7 @@ mod sync_tests {
     #[test]
     fn last_common_syncpoint_works() {
         let side1 = vec!(
-            SyncPoint{last_change: naive_datetime_from_date("2019-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2018-01-01").unwrap()},
             SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()},
             SyncPoint{last_change: naive_datetime_from_date("2019-01-03").unwrap()},
         );
