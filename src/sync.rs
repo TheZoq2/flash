@@ -842,7 +842,11 @@ mod sync_tests {
         let fdb = db_test_helpers::get_database();
         let fdb = fdb.lock().unwrap();
         let common_syncpoint =
-            SyncPoint{last_change: NaiveDate::from_ymd(2017, 1, 1).and_hms(1,1,1)};
+            SyncPoint{last_change: NaiveDate::from_ymd(2017,1,1).and_hms(1,1,1)};
+        let extra_local_syncpoint =
+            SyncPoint{last_change: NaiveDate::from_ymd(2016,1,1).and_hms(1,1,1)};
+        let extra_remote_syncpoint =
+            SyncPoint{last_change: NaiveDate::from_ymd(2016, 2, 1).and_hms(1,1,1)};
 
         fdb.reset();
         fdb.add_syncpoint(
