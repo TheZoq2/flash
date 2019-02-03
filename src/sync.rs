@@ -24,27 +24,16 @@ use std::thread;
 pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
     -> Option<SyncPoint>
 {
-    let mut local = local.iter().collect::<Vec<_>>();
-    let mut remote = remote.iter().collect::<Vec<_>>();
-    local.sort();
-    remote.sort();
-
-    let mut local_last = local.pop()?;
-    let mut remote_last = remote.pop()?;
-    loop {
-        if local_last > remote_last {
-            local_last = local.pop().unwrap();
-        }
-        else if local_last == remote_last {
-            return Some(local_last.clone())
+    let mut last_common = None;
+    for (r, l) in local.iter().zip(remote.iter()) {
+        if r == l {
+            last_common = Some(r.clone());
         }
         else {
-            remote_last = remote.pop().unwrap();
-        }
-        if local.is_empty() || remote.is_empty() {
-            return None;
+            break;
         }
     }
+    last_common
 }
 
 fn get_removed_files(changes: &[Change]) -> Vec<i32> {
@@ -862,7 +851,7 @@ mod sync_tests {
                 1,
                 ChangeType::FileAdded
             )
-        );
+        ).expect("Failed to add change to databse");
 
         let foreign_files = vec!(
             (2, (FileDetails {
@@ -902,37 +891,29 @@ mod sync_tests {
         assert_eq!(server.changes.len(), 3);
     }
 
-
     #[test]
-    fn common_syncpoints_are_returned_for_failing_syncpoints() {
-        let remote = vec!{
-            SyncPoint{
-                last_change: NaiveDateTime::from_timestamp(1549049860, 0)
-            },
-            SyncPoint{
-                last_change: NaiveDateTime::from_timestamp(1549049909, 0)
-            },
-            SyncPoint {
-                last_change: NaiveDateTime::from_timestamp(1549123955, 0)
-            },
-            SyncPoint {
-                last_change: NaiveDateTime::from_timestamp(1549124145, 0)
-            },
-        };
-        let local = vec!{
-            SyncPoint {
-                last_change: NaiveDateTime::from_timestamp(1549123955, 0)
-            },
-            SyncPoint {
-                last_change: NaiveDateTime::from_timestamp(1549124145, 0)
-            },
-        };
-        let last_common = SyncPoint {
-            last_change: NaiveDateTime::from_timestamp(1549124145, 0)
-        };
+    fn last_common_syncpoint_considers_gaps() {
+        let side1 = vec!(
+            SyncPoint{last_change: naive_datetime_from_date("2017-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2018-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2018-02-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-03").unwrap()},
+        );
+        let side2 = vec!(
+            SyncPoint{last_change: naive_datetime_from_date("2017-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2018-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-02-03").unwrap()},
+        );
 
-        assert_eq!(last_common_syncpoint(&local, &remote), Some(last_common));
+        assert_eq!(
+            last_common_syncpoint(&side1, &side2).unwrap(),
+            SyncPoint{last_change: naive_datetime_from_date("2018-01-01").unwrap()}
+        );
     }
+
+
 
     struct ForeignServerWithThumbnailError {
         file_data: HashMap<i32, (FileDetails, Vec<u8>)>,
