@@ -18,6 +18,7 @@ extern crate rand;
 extern crate reqwest;
 
 
+
 #[macro_use]
 extern crate diesel;
 extern crate dotenv;
@@ -88,7 +89,6 @@ use diesel::pg::PgConnection;
 
 use dotenv::dotenv;
 use std::env;
-use std::io;
 
 //Establish a connection to the postgres database
 pub fn establish_connection() -> PgConnection {

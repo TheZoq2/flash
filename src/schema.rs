@@ -25,3 +25,4 @@ table! {
         last_change -> Timestamp,
     }
 }
+

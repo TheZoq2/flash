@@ -25,26 +25,19 @@ pub fn last_common_syncpoint(local: &[SyncPoint], remote: &[SyncPoint])
     -> Option<SyncPoint>
 {
     let mut local = local.iter().collect::<Vec<_>>();
-    let mut remote = remote.iter().collect::<Vec<_>>();
     local.sort();
+    let mut remote = remote.iter().collect::<Vec<_>>();
     remote.sort();
-
-    let mut local_last = local.pop()?;
-    let mut remote_last = remote.pop()?;
-    loop {
-        if local_last > remote_last {
-            local_last = local.pop().unwrap();
-        }
-        else if local_last == remote_last {
-            return Some(local_last.clone())
+    let mut last_common = None;
+    for (r, l) in local.iter().zip(remote.iter()) {
+        if r == l {
+            last_common = Some(r.clone());
         }
         else {
-            remote_last = remote.pop().unwrap();
-        }
-        if local.is_empty() || remote.is_empty() {
-            return None;
+            break;
         }
     }
+    last_common.cloned()
 }
 
 fn get_removed_files(changes: &[Change]) -> Vec<i32> {
@@ -64,7 +57,13 @@ pub fn sync_with_foreign(
 ) -> Result<()> {
     let (job_id, progress_tx) = progress_reporter;
 
-    let (local_changes, new_syncpoint, removed_files, remote_changes) = {
+    let (
+        local_changes,
+        new_local_syncpoints,
+        new_remote_syncpoints,
+        removed_files,
+        remote_changes
+    ) = {
         // Get the syncpoints from the local and remote servers
         let local_syncpoints = fdb.get_syncpoints()
             .chain_err(|| "Failed to get local syncpoints")?;
@@ -88,15 +87,25 @@ pub fn sync_with_foreign(
         removed_files.extend_from_slice(&get_removed_files(&local_changes));
         removed_files.extend_from_slice(&get_removed_files(&remote_changes));
 
+        let mut new_local_syncpoints = remote_syncpoints.clone().into_iter()
+                    .filter(|p| !local_syncpoints.contains(p))
+                    .collect::<Vec<_>>();
+        let mut new_remote_syncpoints = local_syncpoints.clone().into_iter()
+                    .filter(|p| !remote_syncpoints.contains(p))
+                    .collect::<Vec<_>>();
+
         // Create a new syncpoint
         let new_syncpoint = SyncPoint{
                 last_change: NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)
             };
 
+        new_local_syncpoints.push(new_syncpoint.clone());
+        new_remote_syncpoints.push(new_syncpoint.clone());
+
         progress_tx.send((*job_id, sp::SyncUpdate::GatheredData))
             .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
-        (local_changes, new_syncpoint, removed_files, remote_changes)
+        (local_changes, new_local_syncpoints, new_remote_syncpoints, removed_files, remote_changes)
     };
 
     // Send the changes to the remote server to apply
@@ -109,7 +118,6 @@ pub fn sync_with_foreign(
     )
         .chain_err(|| "Failed to send changes")?;
 
-    // TODO: Report a job ID back to listener
     progress_tx.send((*job_id, sp::SyncUpdate::SentToForeign(foreign_job_id)))
         .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
@@ -147,13 +155,17 @@ pub fn sync_with_foreign(
         thread::sleep(::std::time::Duration::from_secs(1));
     }
 
-    foreign_server.add_syncpoint(&new_syncpoint)
-        .chain_err(|| "Failed to apply syncpoint on foreign")?;
+    for point in new_remote_syncpoints {
+        foreign_server.add_syncpoint(&point)
+            .chain_err(|| "Failed to apply syncpoint on foreign")?;
+    }
 
     progress_tx.send((*job_id, sp::SyncUpdate::AddingSyncpoint))
             .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
 
-    fdb.add_syncpoint(&new_syncpoint)?;
+    for point in new_local_syncpoints {
+        fdb.add_syncpoint(&point)?;
+    }
 
     progress_tx.send((*job_id, sp::SyncUpdate::Done))
         .unwrap_or_else(|_e| println!("Warning: Sync progress listener crashed"));
@@ -821,7 +833,7 @@ mod sync_tests {
     #[test]
     fn last_common_syncpoint_works() {
         let side1 = vec!(
-            SyncPoint{last_change: naive_datetime_from_date("2019-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2018-01-01").unwrap()},
             SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()},
             SyncPoint{last_change: naive_datetime_from_date("2019-01-03").unwrap()},
         );
@@ -862,7 +874,7 @@ mod sync_tests {
                 1,
                 ChangeType::FileAdded
             )
-        );
+        ).expect("Failed to add change to databse");
 
         let foreign_files = vec!(
             (2, (FileDetails {
@@ -902,37 +914,212 @@ mod sync_tests {
         assert_eq!(server.changes.len(), 3);
     }
 
+    #[test]
+    fn last_common_syncpoint_considers_gaps() {
+        let side1 = vec!(
+            SyncPoint{last_change: naive_datetime_from_date("2017-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2018-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2018-02-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-03").unwrap()},
+        );
+        let side2 = vec!(
+            SyncPoint{last_change: naive_datetime_from_date("2017-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2018-01-01").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-01-02").unwrap()},
+            SyncPoint{last_change: naive_datetime_from_date("2019-02-03").unwrap()},
+        );
+
+        assert_eq!(
+            last_common_syncpoint(&side1, &side2).unwrap(),
+            SyncPoint{last_change: naive_datetime_from_date("2018-01-01").unwrap()}
+        );
+    }
 
     #[test]
-    fn common_syncpoints_are_returned_for_failing_syncpoints() {
-        let remote = vec!{
-            SyncPoint{
-                last_change: NaiveDateTime::from_timestamp(1549049860, 0)
-            },
-            SyncPoint{
-                last_change: NaiveDateTime::from_timestamp(1549049909, 0)
-            },
-            SyncPoint {
-                last_change: NaiveDateTime::from_timestamp(1549123955, 0)
-            },
-            SyncPoint {
-                last_change: NaiveDateTime::from_timestamp(1549124145, 0)
-            },
+    fn all_syncpoints_are_synced() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.reset();
+
+        let common_syncpoint = SyncPoint{
+            last_change: NaiveDate::from_ymd(2016,1,1).and_hms(0,0,0)
         };
-        let local = vec!{
-            SyncPoint {
-                last_change: NaiveDateTime::from_timestamp(1549123955, 0)
-            },
-            SyncPoint {
-                last_change: NaiveDateTime::from_timestamp(1549124145, 0)
-            },
+        let local_only_syncpoint = SyncPoint{
+            last_change: NaiveDate::from_ymd(2017, 1, 1).and_hms(0,0,0)
         };
-        let last_common = SyncPoint {
-            last_change: NaiveDateTime::from_timestamp(1549124145, 0)
+        let remote_only_syncpoint = SyncPoint{
+            last_change: NaiveDate::from_ymd(2017, 2, 1).and_hms(0,0,0)
+        };
+        fdb.add_syncpoint(&common_syncpoint).expect("failed to add syncpoint");
+        fdb.add_syncpoint(&local_only_syncpoint).expect("failed to add syncpoint");
+
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+        let mut server = MockForeignServer::new(
+                vec!(),
+                vec!(common_syncpoint.clone(), remote_only_syncpoint.clone()),
+                vec!()
+            );
+        sync_with_foreign(
+            &fdb,
+            &mut server,
+            0,
+            &(0, tx)
+        ).expect("Failed to sync with foreign");
+
+        let expected_syncpoints = vec!(
+            common_syncpoint,
+            local_only_syncpoint,
+            remote_only_syncpoint
+        );
+
+        // Since we are adding a new syncpoint at the end, we expect it to be there
+        // as well but we can't compare with it
+        let mut local = fdb.get_syncpoints().expect("Failed to get syncpoints");
+        local.pop();
+        local.sort();
+        assert_eq!(
+            local,
+            expected_syncpoints
+        );
+
+        let mut remote = server.syncpoints.lock().unwrap();
+        remote.pop();
+        remote.sort();
+        assert_eq!(*remote, expected_syncpoints);
+    }
+
+    #[test]
+    fn all_syncpoints_are_synced_if_none_are_common() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.reset();
+
+        let local_only_syncpoint = SyncPoint{
+            last_change: NaiveDate::from_ymd(2017, 1, 1).and_hms(0,0,0)
+        };
+        let remote_only_syncpoint = SyncPoint{
+            last_change: NaiveDate::from_ymd(2017, 2, 1).and_hms(0,0,0)
+        };
+        fdb.add_syncpoint(&local_only_syncpoint).expect("failed to add syncpoint");
+
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+        let mut server = MockForeignServer::new(
+                vec!(),
+                vec!(remote_only_syncpoint.clone()),
+                vec!()
+            );
+        sync_with_foreign(
+            &fdb,
+            &mut server,
+            0,
+            &(0, tx)
+        ).expect("Failed to sync with foreign");
+
+        let expected_syncpoints = vec!(
+            local_only_syncpoint,
+            remote_only_syncpoint
+        );
+
+        // Since we are adding a new syncpoint at the end, we expect it to be there
+        // as well but we can't compare with it
+        let mut local = fdb.get_syncpoints().expect("Failed to get syncpoints");
+        local.pop();
+        local.sort();
+        assert_eq!(
+            local,
+            expected_syncpoints
+        );
+
+        let mut remote = server.syncpoints.lock().unwrap();
+        remote.pop();
+        remote.sort();
+        assert_eq!(*remote, expected_syncpoints);
+    }
+
+    #[test]
+    fn common_syncpoint_detection_works_if_unsorted() {
+        let sp1 = SyncPoint{
+            last_change: NaiveDate::from_ymd(2017, 1, 1).and_hms(0,0,0)
+        };
+        let sp2 = SyncPoint{
+            last_change: NaiveDate::from_ymd(2017, 2, 1).and_hms(0,0,0)
+        };
+        let sp3 = SyncPoint{
+            last_change: NaiveDate::from_ymd(2018, 2, 1).and_hms(0,0,0)
         };
 
-        assert_eq!(last_common_syncpoint(&local, &remote), Some(last_common));
+        let local = vec!(sp1.clone(), sp3.clone(), sp2.clone());
+        let remote = vec!(sp3.clone(), sp2, sp1);
+
+        let common = last_common_syncpoint(&local, &remote);
+
+        assert_eq!(common, Some(sp3));
     }
+
+    #[test]
+    fn intermediate_duplicated_syncpoints_are_not_duplicated() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.reset();
+
+        let common_syncpoint = SyncPoint{
+            last_change: NaiveDate::from_ymd(2016,1,1).and_hms(0,0,0)
+        };
+        let local_only_syncpoint = SyncPoint{
+            last_change: NaiveDate::from_ymd(2017, 1, 1).and_hms(0,0,0)
+        };
+        let remote_only_syncpoint = SyncPoint{
+            last_change: NaiveDate::from_ymd(2017, 2, 1).and_hms(0,0,0)
+        };
+        let second_common_syncpoint = SyncPoint{
+            last_change: NaiveDate::from_ymd(2018,1,1).and_hms(0,0,0)
+        };
+        fdb.add_syncpoint(&common_syncpoint).expect("failed to add syncpoint");
+        fdb.add_syncpoint(&local_only_syncpoint).expect("failed to add syncpoint");
+        fdb.add_syncpoint(&second_common_syncpoint).expect("failed to add syncpoint");
+
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+        let mut server = MockForeignServer::new(
+                vec!(),
+                vec!(
+                    common_syncpoint.clone(),
+                    remote_only_syncpoint.clone(),
+                    second_common_syncpoint.clone()
+                ),
+                vec!()
+            );
+        sync_with_foreign(
+            &fdb,
+            &mut server,
+            0,
+            &(0, tx)
+        ).expect("Failed to sync with foreign");
+
+        let expected_syncpoints = vec!(
+            common_syncpoint,
+            local_only_syncpoint,
+            remote_only_syncpoint,
+            second_common_syncpoint
+        );
+
+        // Since we are adding a new syncpoint at the end, we expect it to be there
+        // as well but we can't compare with it
+        let mut local = fdb.get_syncpoints().expect("Failed to get syncpoints");
+        local.pop();
+        local.sort();
+        assert_eq!(
+            local,
+            expected_syncpoints
+        );
+
+        let mut remote = server.syncpoints.lock().unwrap();
+        remote.pop();
+        remote.sort();
+        assert_eq!(*remote, expected_syncpoints);
+    }
+
+
 
     struct ForeignServerWithThumbnailError {
         file_data: HashMap<i32, (FileDetails, Vec<u8>)>,
