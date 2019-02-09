@@ -287,7 +287,7 @@ mod util_tests {
     fn filesystem_timestamp_test() {
         let path = PathBuf::from("test/media/10x10.png");
 
-        let timestamp = get_file_timestamp(&path).unwrap();
+        let _timestamp = get_file_timestamp(&path).unwrap();
 
         // assert_eq!(timestamp, NaiveDate::from_ymd(2018, 5, 31).and_hms(20, 39, 56));
     }

@@ -6,7 +6,6 @@ use std::convert::From;
 use serde_json;
 
 use schema::{changes, syncpoints};
-use file_util::get_semi_unique_identifier;
 
 use error::Result;
 

@@ -514,6 +514,9 @@ mod db_tests {
 
     use std::sync::Arc;
 
+    // This DateLike import is required but the compiler doesn't seem to understand
+    // that
+    #[allow(unused_imports)]
     use chrono::{NaiveDate, Datelike};
 
     use date_search;
