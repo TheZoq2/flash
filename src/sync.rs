@@ -250,10 +250,22 @@ fn apply_change(
                 let file_details = foreign_server.get_file_details(change.affected_file)
                     .chain_err(|| "Failed to get fille details")?;
 
-                let file = ByteSource::Memory(
-                    foreign_server.get_file(change.affected_file)
-                        .chain_err(|| "Failed to get file")?
-                );
+                let mut retries = 0;
+                let file = loop {
+                    let file_bytes = foreign_server.get_file(change.affected_file);
+                    match file_bytes {
+                        Ok(bytes) => {break ByteSource::Memory(bytes)}
+                        Err(e) => {
+                            if retries == 0 {
+                                println!("Warning: failed to fetch file, retrying");
+                                continue;
+                            }
+                            else {
+                                return Err(e);
+                            }
+                        }
+                    }
+                };
                 let thumbnail = {
                     let from_server = foreign_server.get_thumbnail(change.affected_file)
                         .unwrap_or_else(|e| {
@@ -1216,5 +1228,105 @@ mod sync_tests {
             &vec!(),
             &(0, tx)
         ).expect("Expected sync to work despite missing thumbnail");
+    }
+
+    struct UnstableForeignServer {
+        file_data: HashMap<i32, (FileDetails, Vec<u8>, Mutex<bool>)>,
+        syncpoints: Vec<SyncPoint>,
+        changes: Vec<Change>,
+    }
+
+    impl UnstableForeignServer {
+        pub fn new(
+            files: Vec<(i32, (FileDetails, Vec<u8>))>,
+            syncpoints: Vec<SyncPoint>,
+            changes: Vec<Change>
+        ) -> Self {
+            let mut file_data = HashMap::new();
+            for (id, (details, bytes)) in files {
+                file_data.insert(id, (details, bytes, Mutex::new(false)));
+            }
+            Self {
+                file_data,
+                syncpoints,
+                changes,
+            }
+        }
+    }
+
+    impl ForeignServer for UnstableForeignServer {
+        fn get_syncpoints(&self) -> Result<Vec<SyncPoint>>{
+            Ok(self.syncpoints.clone())
+        }
+        fn get_changes(&self, starting_syncpoint: &Option<SyncPoint>) -> Result<Vec<Change>> {
+            match *starting_syncpoint {
+                Some(SyncPoint{last_change}) => {
+                    Ok(self.changes.iter()
+                        .filter(|change| change.timestamp >= last_change)
+                        .map(|change| change.clone())
+                        .collect()
+                    )
+                },
+                None => Ok(self.changes.iter().map(|change| change.clone()).collect())
+            }
+        }
+        fn get_file_details(&self, id: i32) -> Result<FileDetails> {
+            Ok(self.file_data[&id].0.clone())
+        }
+
+        fn send_changes(&mut self, _data: &ChangeData, _port: u16) -> Result<usize> {
+            Ok(0)
+        }
+        fn get_file(&self, id: i32) -> Result<Vec<u8>> {
+            let mut has_errored = self.file_data[&id].2.lock().unwrap();
+            if *has_errored == true {
+                Ok(self.file_data[&id].1.clone())
+            }
+            else {
+                *has_errored = true;
+                Err(ErrorKind::Dummy.into())
+            }
+        }
+        fn get_thumbnail(&self, _id: i32) -> Result<Option<Vec<u8>>> {
+            Ok(None)
+        }
+        fn get_sync_status(&self, _job_id: usize) -> Result<SyncStatus> {
+            Ok(SyncStatus{last_update: SyncUpdate::Done, foreign_job_id: None})
+        }
+        fn add_syncpoint(&self, _syncpoint: &SyncPoint) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn apply_changes_retries_failed_file_fetches() {
+        let fdb = db_test_helpers::get_database();
+        let fdb = fdb.lock().unwrap();
+        fdb.reset();
+
+        let changes = vec!(
+                Change::new(
+                    naive_datetime_from_date("2017-01-01").unwrap(),
+                    1,
+                    ChangeType::FileAdded
+                ),
+            );
+
+        let foreign_files = vec!((
+            1,
+            (FileDetails {
+                extension: "jpg".into(),
+                timestamp: NaiveDate::from_ymd(2016, 1, 1).and_hms(0,0,0)
+            }, vec!(1,2,3))
+        ));
+
+        let (tx, _rx, _) = sp::setup_progress_datastructures();
+        assert!(apply_changes(
+            &fdb,
+            &UnstableForeignServer::new(foreign_files, vec!(), vec!()),
+            &changes,
+            &vec!(),
+            &(0, tx)
+        ).is_ok());
     }
 }
