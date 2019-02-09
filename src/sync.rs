@@ -234,6 +234,22 @@ pub fn apply_changes(
     Ok(())
 }
 
+fn fetch_with_retries(server: &ForeignServer, file_id: i32, max_retries: usize) -> Result<Vec<u8>> {
+    let mut last_err = None;
+    for _ in 0..max_retries+1 {
+        let file_bytes = server.get_file(file_id);
+        match file_bytes {
+            Ok(bytes) => {return Ok(bytes)}
+            Err(e) => {
+                println!("Warning: failed to fetch file, retrying");
+                println!("{}", e);
+                last_err = Some(e)
+            }
+        }
+    }
+    return Err(last_err.unwrap())
+}
+
 fn apply_change(
     fdb: &FileDatabase,
     change: &Change,
@@ -250,22 +266,10 @@ fn apply_change(
                 let file_details = foreign_server.get_file_details(change.affected_file)
                     .chain_err(|| "Failed to get fille details")?;
 
-                let mut retries = 0;
-                let file = loop {
-                    let file_bytes = foreign_server.get_file(change.affected_file);
-                    match file_bytes {
-                        Ok(bytes) => {break ByteSource::Memory(bytes)}
-                        Err(e) => {
-                            if retries == 0 {
-                                println!("Warning: failed to fetch file, retrying");
-                                continue;
-                            }
-                            else {
-                                return Err(e);
-                            }
-                        }
-                    }
-                };
+                let file = ByteSource::Memory(
+                    fetch_with_retries(foreign_server, change.affected_file, 1)?
+                );
+
                 let thumbnail = {
                     let from_server = foreign_server.get_thumbnail(change.affected_file)
                         .unwrap_or_else(|e| {
